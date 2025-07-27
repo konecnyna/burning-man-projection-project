@@ -1476,6 +1476,14 @@
         // Scene configurations
         this.scenes = [
           {
+            id: 'wireframe_geometry',
+            name: 'Wireframe Geometry',
+            description: 'Interactive morphing wireframe geometry with hand-triggered pulses',
+            duration: this.defaultDuration,
+            html_file: 'scenes/wireframe-geometry/index.html',
+            background_color: '#000000'
+          },
+          {
             id: 'fluidsim',
             name: 'Fluid Simulation',
             description: 'WebGL fluid simulation controlled by hand movements',
@@ -1514,7 +1522,7 @@
             duration: this.defaultDuration,
             html_file: 'scenes/tie-dye/index.html',
             background_color: '#000000'
-          }
+          },          
         ];
 
 
@@ -1699,7 +1707,7 @@
           const container = document.getElementById('scene-container');
 
           // Handle iframe scenes
-          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'idle'].includes(scene.id)) {
+          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'idle'].includes(scene.id)) {
             container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
 
             setTimeout(() => {
@@ -2507,6 +2515,42 @@
             });
 
             console.log('Welcome scene cleaned up');
+          }
+        };
+
+        // Wireframe Geometry scene handler
+        this.sceneHandlers.wireframe_geometry = {
+          onInit: function () {
+            console.log('[SceneHandler] Wireframe Geometry scene initialized');
+          },
+          onHandDetected: function (hands) {
+            console.log('[SceneHandler] Hand detected in wireframe geometry scene, forwarding to iframe');
+            // Forward to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_detected',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandMove: function (hands) {
+            // Forward hand movements to iframe
+            if (sceneManager.currentSceneIframe && hands && hands.length > 0) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_move',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandLost: function () {
+            console.log('[SceneHandler] Hand lost in wireframe geometry scene, forwarding to iframe');
+            // Forward to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_lost',
+                data: {}
+              }, '*');
+            }
           }
         };
       }

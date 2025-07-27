@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Wireframe Geometry with Morphing</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #000;
+      color: #fff;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    .glass-panel {
+      position: absolute;
+      z-index: 10;
+      padding: 12px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+    }
+
+    #controls-panel {
+      top: 20px;
+      right: 20px;
+      padding: 15px;
+      cursor: move;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #instructions-container {
+      bottom: 20px;
+      top: auto;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      text-align: center;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    #theme-selector-title {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 12px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      justify-items: center;
+    }
+
+    .theme-button {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, .3);
+      cursor: pointer;
+      transition: transform .2s, border-color .2s, box-shadow .2s;
+      outline: none;
+      overflow: hidden;
+    }
+
+    .theme-button:hover,
+    .theme-button:focus {
+      transform: scale(1.1);
+      border-color: rgba(255, 255, 255, .7);
+    }
+
+    .theme-button.active {
+      transform: scale(1.1);
+      border-color: rgba(255, 255, 255, 1);
+      box-shadow: 0 0 12px rgba(255, 255, 255, .5);
+    }
+
+    #theme-1 {
+      background: linear-gradient(45deg, #4F46E5, #7C3AED, #C026D3, #DB2777);
+    }
+
+    #theme-2 {
+      background: linear-gradient(45deg, #F59E0B, #F97316, #DC2626, #7F1D1D);
+    }
+
+    #theme-4 {
+      background: linear-gradient(45deg, #10B981, #A3E635, #FACC15, #FB923C);
+    }
+
+    #shape-toggle-container {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      padding: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .toggle-option {
+      padding: 8px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.7);
+      transition: color 0.4s;
+      user-select: none;
+      z-index: 2;
+    }
+
+    #shape-toggle-highlighter {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      width: calc(50% - 5px);
+      height: calc(100% - 10px);
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+      transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+      z-index: 1;
+    }
+
+    #shape-toggle-input {
+      display: none;
+    }
+
+    #shape-toggle-input:checked~#shape-toggle-highlighter {
+      transform: translateX(100%);
+    }
+
+    /* Hand tracking visual indicator */
+    .hand-indicator {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #00ff88;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 100;
+      box-shadow: 0 0 20px #00ff88;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .hand-indicator.visible {
+      opacity: 1;
+    }
+
+    @media (max-width: 640px) {
+      #controls-panel {
+        width: auto;
+        left: 50%;
+        top: auto;
+        bottom: 20px;
+        transform: translateX(-50%);
+        cursor: default;
+      }
+
+      #instructions-container {
+        font-size: 13px;
+        padding: 8px 15px;
+        bottom: 115px;
+        top: auto;
+      }
+
+      #shape-toggle-container {
+        top: 15px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <label id="shape-toggle-container" for="shape-toggle-input">
+    <input type="checkbox" id="shape-toggle-input">
+    <span class="toggle-option">Sphere</span>
+    <span class="toggle-option">Star</span>
+    <div id="shape-toggle-highlighter"></div>
+  </label>
+
+  <div id="controls-panel" class="glass-panel">
+    <div id="theme-selector-title">Theme</div>
+    <div class="theme-grid">
+      <button class="theme-button" id="theme-1" data-theme="0" aria-label="Theme 1"></button>
+      <button class="theme-button" id="theme-2" data-theme="1" aria-label="Theme 2"></button>
+      <button class="theme-button" id="theme-4" data-theme="2" aria-label="Theme 3"></button>
+    </div>
+  </div>
+
+  <canvas id="main-canvas"></canvas>
+  <div class="hand-indicator" id="handIndicator"></div>
+
+  <script src="/static/socket.io.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three.module.js",
+        "three/addons/": "./lib/addons/"
+      }
+    }
+    </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { FilmPass } from 'three/addons/postprocessing/FilmPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+    // WebSocket connection for hand tracking (fluidsim pattern)
+    let isHandDetected = false;
+    let currentHandPosition = { x: 0, y: 0 };
+    const handIndicator = document.getElementById('handIndicator');
+
+    // Setup WebSocket connection
+    const socket = io();
+
+    // Subscribe to hand tracking events
+    socket.on('connect', () => {
+      console.log('[WireframeGeometry] Connected to server');
+      // Subscribe to hand tracking events
+      socket.emit('subscribe', {
+        events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
+      });
+    });
+
+    // Handle hand tracking events
+    socket.on('event', (eventData) => {
+      handleHandTrackingEvent(eventData);
+    });
+
+    function handleHandTrackingEvent(eventData) {
+      // Helper function to get hands data from either structure
+      function getHandsData(data) {
+        if (data && data.hands) {
+          return data.hands;
+        } else if (data && data.landmarks) {
+          return data.landmarks;
+        }
+        return null;
+      }
+
+      switch (eventData.type) {
+        case 'hand_detected':
+          console.log('[WireframeGeometry] Hand detected (mousedown)');
+          isHandDetected = true;
+          handIndicator.classList.add('visible');
+          console.log("hand_detected eventData.data:", eventData.data);
+          
+          // Trigger pulse on hand detection (mousedown)
+          const handsDetected = getHandsData(eventData.data);
+          if (handsDetected && handsDetected.length > 0) {
+            const hand = handsDetected[0];
+            if (hand && hand.length > 0) {
+              console.log("Processing hand with", hand.length, "landmarks");
+              const indexTip = hand[8];
+              if (indexTip) {
+                const screenX = (1 - indexTip.x) * window.innerWidth;
+                const screenY = indexTip.y * window.innerHeight;
+                currentHandPosition = { x: screenX, y: screenY };
+                
+                handIndicator.style.left = `${screenX - 10}px`;
+                handIndicator.style.top = `${screenY - 10}px`;
+                console.log("Triggering pulse at:", screenX, screenY);
+                triggerPulse(screenX, screenY);
+              }
+            }
+          }
+          break;
+
+        case 'hand_lost':
+          console.log('[WireframeGeometry] Hand lost (mouseup)');
+          isHandDetected = false;
+          handIndicator.classList.remove('visible');
+          
+          // Trigger pulse on hand lost (mouseup) - using last known position
+          if (currentHandPosition.x > 0 && currentHandPosition.y > 0) {
+            triggerPulse(currentHandPosition.x, currentHandPosition.y);
+          }
+          break;
+
+        case 'hand_moved':
+          console.log('[WireframeGeometry] hand_moved - isHandDetected:', isHandDetected);
+          console.log('[WireframeGeometry] hand_moved eventData.data:', eventData.data);
+          
+          // Process hand movement (works regardless of isHandDetected state for responsiveness)
+          const handsMoved = getHandsData(eventData.data);
+          console.log('[WireframeGeometry] handsMoved:', handsMoved);
+          
+          if (handsMoved && handsMoved.length > 0) {
+            const hand = handsMoved[0];
+            console.log('[WireframeGeometry] First hand object:', hand, 'type:', typeof hand, 'length:', hand?.length);
+            
+            // Check if hand has landmarks property or is directly an array
+            let landmarks = null;
+            if (hand && hand.landmarks) {
+              landmarks = hand.landmarks;
+              console.log('[WireframeGeometry] Using hand.landmarks:', landmarks.length, 'points');
+            } else if (hand && Array.isArray(hand) && hand.length > 8) {
+              landmarks = hand;
+              console.log('[WireframeGeometry] Using hand as landmarks array:', landmarks.length, 'points');
+            }
+            
+            if (landmarks && landmarks.length > 8) {
+              const indexTip = landmarks[8];
+              console.log('[WireframeGeometry] IndexTip:', indexTip);
+              
+              if (indexTip && indexTip.x !== undefined && indexTip.y !== undefined) {
+                const screenX = (1 - indexTip.x) * window.innerWidth;
+                const screenY = indexTip.y * window.innerHeight;
+
+                currentHandPosition = { x: screenX, y: screenY };
+                console.log('[WireframeGeometry] Moving cursor to:', screenX, screenY);
+
+                // Update hand indicator position and make visible if needed
+                handIndicator.style.left = `${screenX - 10}px`;
+                handIndicator.style.top = `${screenY - 10}px`;
+                
+                // Auto-sync state if we're getting movement data
+                if (!isHandDetected) {
+                  isHandDetected = true;
+                  handIndicator.classList.add('visible');
+                }
+              } else {
+                console.log('[WireframeGeometry] Invalid indexTip format:', indexTip);
+              }
+            } else {
+              console.log('[WireframeGeometry] No valid landmarks found, expected >8 points, got:', landmarks?.length);
+            }
+          } else {
+            console.log('[WireframeGeometry] No hands data in hand_moved');
+          }
+          break;
+      }
+    }
+
+    const config = {
+      activePaletteIndex: 1,
+      isMorphed: false,
+      morphProgress: 0,
+    };
+
+    const colorPalettes = [
+      [new THREE.Color(0x4F46E5), new THREE.Color(0x7C3AED), new THREE.Color(0xC026D3), new THREE.Color(0xDB2777)],
+      [new THREE.Color(0xF59E0B), new THREE.Color(0xF97316), new THREE.Color(0xDC2626), new THREE.Color(0x7F1D1D)],
+      [new THREE.Color(0x10B981), new THREE.Color(0xA3E635), new THREE.Color(0xFACC15), new THREE.Color(0xFB923C)]
+    ];
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000000, 0.002);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1200);
+    camera.position.set(0, 0, 30);
+    const canvasElement = document.getElementById('main-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const starField = new THREE.Points(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(Array.from({ length: 5000 * 3 }, () => THREE.MathUtils.randFloatSpread(200)), 3)),
+      new THREE.PointsMaterial({ color: 0xffffff, size: 0.15, sizeAttenuation: true, depthWrite: false, opacity: 0.8, transparent: true })
+    );
+    scene.add(starField);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    Object.assign(controls, { enableDamping: true, dampingFactor: 0.05, rotateSpeed: 0.5, minDistance: 10, maxDistance: 100, autoRotate: true, autoRotateSpeed: 0.1, enablePan: false });
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.3, 0.3, 0.7);
+    composer.addPass(bloomPass);
+    composer.addPass(new FilmPass(0.25, 0.5, 2048, false));
+    composer.addPass(new OutputPass());
+
+    const pulseUniforms = {
+      uTime: { value: 0.0 },
+      uPulsePositions: { value: [new THREE.Vector3(1e3, 1e3, 1e3), new THREE.Vector3(1e3, 1e3, 1e3), new THREE.Vector3(1e3, 1e3, 1e3)] },
+      uPulseTimes: { value: [-1e3, -1e3, -1e3] },
+      uPulseSpeed: { value: 15.0 },
+    };
+
+    const sharedShaderCode = `
+            uniform float uTime;
+            uniform vec3 uPulsePositions[3];
+            uniform float uPulseTimes[3];
+            uniform float uPulseSpeed;
+            float getPulseIntensity(vec3 worldPos) {
+                float totalIntensity = 0.0;
+                for (int i = 0; i < 3; i++) {
+                    if (uPulseTimes[i] < 0.0) continue;
+                    float timeSinceClick = uTime - uPulseTimes[i];
+                    if (timeSinceClick < 0.0 || timeSinceClick > 3.5) continue;
+                    float pulseRadius = timeSinceClick * uPulseSpeed;
+                    float distToClick = distance(worldPos, uPulsePositions[i]);
+                    float pulseThickness = 4.0;
+                    float waveProximity = abs(distToClick - pulseRadius);
+                    totalIntensity += smoothstep(pulseThickness, 0.0, waveProximity) * smoothstep(3.5, 0.0, timeSinceClick);
+                }
+                return min(totalIntensity, 1.0);
+            }`;
+
+    const nodeShader = {
+      vertexShader: `
+                ${sharedShaderCode}
+                attribute vec3 color;
+                varying vec3 vColor;
+                varying float vPulseIntensity;
+                #include <morphtarget_pars_vertex>
+                void main() {
+                    vColor = color;
+                    vec3 transformed = vec3(position);
+                    #include <morphtarget_vertex>
+                    vec3 worldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                    vPulseIntensity = getPulseIntensity(worldPos);
+                    float pointSize = 1.0 + vPulseIntensity * 5.0;
+                    vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+                    gl_PointSize = pointSize * (200.0 / -mvPosition.z);
+                    gl_Position = projectionMatrix * mvPosition;
+                }`,
+      fragmentShader: `
+                varying vec3 vColor;
+                varying float vPulseIntensity;
+                void main() {
+                    float dist = length(gl_PointCoord - vec2(0.5));
+                    if (dist > 0.5) discard;
+                    vec3 finalColor = vColor;
+                    if (vPulseIntensity > 0.0) {
+                        finalColor = mix(vColor, vec3(1.0), vPulseIntensity);
+                        finalColor *= (1.0 + vPulseIntensity * 0.5);
+                    }
+                    float alpha = (1.0 - dist * 2.0) * (1.0 + vPulseIntensity);
+                    gl_FragColor = vec4(finalColor, alpha);
+                }`
+    };
+
+    const connectionShader = {
+      vertexShader: `
+                ${sharedShaderCode}
+                attribute vec3 color;
+                varying vec3 vColor;
+                varying float vPulseIntensity;
+                #include <morphtarget_pars_vertex>
+                void main() {
+                    vColor = color;
+                    vec3 transformed = vec3(position);
+                    #include <morphtarget_vertex>
+                    vec3 worldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                    vPulseIntensity = getPulseIntensity(worldPos);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+                }`,
+      fragmentShader: `
+                varying vec3 vColor;
+                varying float vPulseIntensity;
+                void main() {
+                    vec3 finalColor = vColor;
+                    if (vPulseIntensity > 0.0) {
+                        finalColor = mix(vColor, vec3(1.0), vPulseIntensity);
+                        finalColor *= (1.0 + vPulseIntensity * 0.5);
+                    }
+                    gl_FragColor = vec4(finalColor, 0.3 + vPulseIntensity * 0.7);
+                }`
+    };
+
+    let morphableGeometries;
+
+    function createMorphableGeometries() {
+      const scale = 15;
+      const baseGeometry = new THREE.IcosahedronGeometry(scale, 5);
+      const sphereVertices = [];
+      const spherePositions = baseGeometry.attributes.position.array;
+
+      const uniqueVerticesMap = new Map();
+      for (let i = 0; i < spherePositions.length; i += 3) {
+        const key = `${spherePositions[i].toFixed(3)},${spherePositions[i + 1].toFixed(3)},${spherePositions[i + 2].toFixed(3)}`;
+        if (!uniqueVerticesMap.has(key)) {
+          const vertex = new THREE.Vector3(spherePositions[i], spherePositions[i + 1], spherePositions[i + 2]);
+          uniqueVerticesMap.set(key, vertex);
+          sphereVertices.push(vertex);
+        }
+      }
+
+      const starVertices = sphereVertices.map(v => {
+        const v_clone = v.clone();
+        const spherical = new THREE.Spherical().setFromVector3(v_clone);
+        const spikeFactor = 0.4 * Math.sin(spherical.phi * 6) * Math.sin(spherical.theta * 6);
+        spherical.radius *= 1 + spikeFactor;
+        return new THREE.Vector3().setFromSpherical(spherical);
+      });
+
+      const edgeGeometry = new THREE.EdgesGeometry(baseGeometry, 1);
+      const sphereConnectionPositions = edgeGeometry.attributes.position.array;
+      const starConnectionPositions = new Float32Array(sphereConnectionPositions.length);
+
+      const tempVec = new THREE.Vector3();
+      for (let i = 0; i < sphereConnectionPositions.length; i += 3) {
+        tempVec.set(sphereConnectionPositions[i], sphereConnectionPositions[i + 1], sphereConnectionPositions[i + 2]);
+        const spherical = new THREE.Spherical().setFromVector3(tempVec);
+        const spikeFactor = 0.4 * Math.sin(spherical.phi * 6) * Math.sin(spherical.theta * 6);
+        spherical.radius *= 1 + spikeFactor;
+        tempVec.setFromSpherical(spherical);
+        starConnectionPositions[i] = tempVec.x;
+        starConnectionPositions[i + 1] = tempVec.y;
+        starConnectionPositions[i + 2] = tempVec.z;
+      }
+
+      morphableGeometries = {
+        sphereNodePositions: sphereVertices.flatMap(v => [v.x, v.y, v.z]),
+        starNodePositions: starVertices.flatMap(v => [v.x, v.y, v.z]),
+        sphereConnectionPositions,
+        starConnectionPositions
+      };
+    }
+
+    let nodesMesh, connectionsMesh;
+
+    function createVisualization() {
+      if (nodesMesh) scene.remove(nodesMesh);
+      if (connectionsMesh) scene.remove(connectionsMesh);
+
+      const palette = colorPalettes[config.activePaletteIndex];
+
+      const nodeGeometry = new THREE.BufferGeometry();
+      nodeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(morphableGeometries.sphereNodePositions, 3));
+      nodeGeometry.morphAttributes.position = [new THREE.Float32BufferAttribute(morphableGeometries.starNodePositions, 3)];
+
+      const nodeColors = new Float32Array(morphableGeometries.sphereNodePositions.length);
+      for (let i = 0; i < morphableGeometries.sphereNodePositions.length / 3; i++) {
+        const color = palette[Math.floor(Math.random() * palette.length)];
+        nodeColors[i * 3] = color.r;
+        nodeColors[i * 3 + 1] = color.g;
+        nodeColors[i * 3 + 2] = color.b;
+      }
+      nodeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(nodeColors, 3));
+
+      const nodeMaterial = new THREE.ShaderMaterial({
+        uniforms: pulseUniforms,
+        vertexShader: nodeShader.vertexShader,
+        fragmentShader: nodeShader.fragmentShader,
+        transparent: true, 
+        depthWrite: false, 
+        blending: THREE.AdditiveBlending,
+        defines: {
+          USE_MORPHTARGETS: ''
+        }
+      });
+      nodesMesh = new THREE.Points(nodeGeometry, nodeMaterial);
+      nodesMesh.morphTargetInfluences = [0];
+      scene.add(nodesMesh);
+
+      const connectionGeometry = new THREE.BufferGeometry();
+      connectionGeometry.setAttribute('position', new THREE.Float32BufferAttribute(morphableGeometries.sphereConnectionPositions, 3));
+      connectionGeometry.morphAttributes.position = [new THREE.Float32BufferAttribute(morphableGeometries.starConnectionPositions, 3)];
+
+      const connectionColors = [];
+      for (let i = 0; i < morphableGeometries.sphereConnectionPositions.length / 6; i++) {
+        const color = palette[Math.floor(Math.random() * palette.length)];
+        connectionColors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+      }
+      connectionGeometry.setAttribute('color', new THREE.Float32BufferAttribute(connectionColors, 3));
+
+      const connectionMaterial = new THREE.ShaderMaterial({
+        uniforms: pulseUniforms,
+        vertexShader: connectionShader.vertexShader,
+        fragmentShader: connectionShader.fragmentShader,
+        transparent: true, 
+        depthWrite: false, 
+        blending: THREE.AdditiveBlending,
+        defines: {
+          USE_MORPHTARGETS: ''
+        }
+      });
+      connectionsMesh = new THREE.LineSegments(connectionGeometry, connectionMaterial);
+      connectionsMesh.morphTargetInfluences = [0];
+      scene.add(connectionsMesh);
+    }
+
+    function updateTheme(paletteIndex) {
+      config.activePaletteIndex = paletteIndex;
+      const palette = colorPalettes[config.activePaletteIndex];
+      const nodeColors = nodesMesh.geometry.attributes.color.array;
+      for (let i = 0; i < nodeColors.length / 3; i++) {
+        const color = palette[Math.floor(Math.random() * palette.length)];
+        nodeColors[i * 3] = color.r;
+        nodeColors[i * 3 + 1] = color.g;
+        nodeColors[i * 3 + 2] = color.b;
+      }
+      nodesMesh.geometry.attributes.color.needsUpdate = true;
+
+      const connectionColors = connectionsMesh.geometry.attributes.color.array;
+      for (let i = 0; i < connectionColors.length / 6; i++) {
+        const color = palette[Math.floor(Math.random() * palette.length)];
+        connectionColors[i * 6] = connectionColors[i * 6 + 3] = color.r;
+        connectionColors[i * 6 + 1] = connectionColors[i * 6 + 4] = color.g;
+        connectionColors[i * 6 + 2] = connectionColors[i * 6 + 5] = color.b;
+      }
+      connectionsMesh.geometry.attributes.color.needsUpdate = true;
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let lastPulseIndex = 0;
+    function triggerPulse(clientX, clientY) {
+      pointer.x = (clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+
+      const sphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 15);
+      const intersectionPoint = new THREE.Vector3();
+      if (raycaster.ray.intersectSphere(sphere, intersectionPoint)) {
+        const time = clock.getElapsedTime();
+        lastPulseIndex = (lastPulseIndex + 1) % 3;
+        pulseUniforms.uPulsePositions.value[lastPulseIndex].copy(intersectionPoint);
+        pulseUniforms.uPulseTimes.value[lastPulseIndex] = time;
+      }
+    }
+
+    const controlsPanel = document.getElementById('controls-panel');
+    let isDragging = false;
+    let offset = { x: 0, y: 0 };
+    controlsPanel.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'BUTTON' || window.innerWidth <= 640) return;
+      isDragging = true;
+      offset.x = e.clientX - controlsPanel.offsetLeft;
+      offset.y = e.clientY - controlsPanel.offsetTop;
+      controlsPanel.style.opacity = '0.9';
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      controlsPanel.style.left = `${e.clientX - offset.x}px`;
+      controlsPanel.style.top = `${e.clientY - offset.y}px`;
+    });
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        controlsPanel.style.opacity = '1';
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Keep original mouse/touch events as fallback
+    renderer.domElement.addEventListener('click', (e) => {
+      if (e.target.closest('#shape-toggle-container') || e.target.closest('#controls-panel')) return;
+      triggerPulse(e.clientX, e.clientY);
+    });
+    renderer.domElement.addEventListener('touchstart', (e) => {
+      if (e.target.closest('#shape-toggle-container') || e.target.closest('#controls-panel')) return;
+      e.preventDefault();
+      if (e.touches.length > 0) {
+        triggerPulse(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    document.querySelectorAll('.theme-button').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        updateTheme(parseInt(btn.dataset.theme, 10));
+        document.querySelectorAll('.theme-button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    document.getElementById('shape-toggle-input').addEventListener('change', (e) => {
+      config.isMorphed = e.target.checked;
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      pulseUniforms.uTime.value = t;
+
+      const morphTarget = config.isMorphed ? 1 : 0;
+      config.morphProgress = THREE.MathUtils.lerp(config.morphProgress, morphTarget, 0.05);
+
+      if (nodesMesh && connectionsMesh) {
+        nodesMesh.morphTargetInfluences[0] = config.morphProgress;
+        connectionsMesh.morphTargetInfluences[0] = config.morphProgress;
+      }
+
+      starField.rotation.y += 0.0001;
+      controls.update();
+      composer.render();
+    }
+
+    function init() {
+      createMorphableGeometries();
+      createVisualization();
+
+      document.querySelectorAll('.theme-button').forEach(b => b.classList.remove('active'));
+      document.querySelector(`.theme-button[data-theme="${config.activePaletteIndex}"]`).classList.add('active');
+
+      animate();
+    }
+    init();
+
+    // Make triggerPulse available for iframe communication
+    window.triggerPulse = triggerPulse;
+    window.updateTheme = updateTheme;
+    window.setMorphState = (isMorphed) => {
+      config.isMorphed = isMorphed;
+      document.getElementById('shape-toggle-input').checked = isMorphed;
+    };
+  </script>
+</body>
+
+</html>
