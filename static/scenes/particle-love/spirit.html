@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Spirit - Hand Tracking</title>
+    <style>
+        @import url('../../fonts/fonts.css');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: #343434;
+            overflow: hidden;
+            font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
+            color: white;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #canvas {
+            display: block;
+            cursor: none;
+        }
+        
+        .hand-cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #d95151;
+            border-radius: 50%;
+            box-shadow: 0 0 20px #d95151;
+            pointer-events: none;
+            z-index: 10;
+            transition: all 0.1s ease;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+        }
+        
+        .hand-cursor.active {
+            opacity: 1;
+        }
+        
+        .instruction {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: rgba(0, 255, 65, 0.8);
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 2s ease;
+            text-shadow: 0 0 10px #00ff41;
+        }
+        
+        .instruction.hidden {
+            opacity: 0;
+        }
+        
+        .mobile {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .mobile {
+                display: block;
+                padding: 20px;
+                text-align: center;
+                color: #00ff41;
+                font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
+            }
+            
+            #container {
+                display: none;
+            }
+        }
+        
+        .controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #001100;
+            border: 2px solid #00ff41;
+            border-radius: 5px;
+            padding: 15px;
+            font-size: 12px;
+            z-index: 100;
+            font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
+            box-shadow: 
+                0 0 20px rgba(0, 255, 65, 0.3),
+                inset 0 0 10px rgba(0, 255, 65, 0.1);
+            min-width: 200px;
+        }
+        
+        .controls h3 {
+            margin: 0 0 10px 0;
+            color: #00ff41;
+            text-shadow: 0 0 5px #00ff41;
+            font-size: 14px;
+            text-align: center;
+            border-bottom: 1px solid #00ff41;
+            padding-bottom: 5px;
+        }
+        
+        .controls .param {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #00dd33;
+        }
+        
+        .controls .param label {
+            color: #00ff41;
+            font-size: 11px;
+        }
+        
+        .controls .param span {
+            color: #00ff41;
+            font-weight: bold;
+            text-shadow: 0 0 3px #00ff41;
+            font-size: 11px;
+        }
+        
+        .controls .param::before {
+            content: '> ';
+            color: #00ff41;
+            font-weight: bold;
+        }
+        
+        .system-status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: #001100;
+            border: 2px solid #00ff41;
+            border-radius: 5px;
+            padding: 15px;
+            font-size: 12px;
+            z-index: 100;
+            font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
+            box-shadow: 
+                0 0 20px rgba(0, 255, 65, 0.3),
+                inset 0 0 10px rgba(0, 255, 65, 0.1);
+            min-width: 180px;
+        }
+        
+        .system-status h3 {
+            margin: 0 0 10px 0;
+            color: #00ff41;
+            text-shadow: 0 0 5px #00ff41;
+            font-size: 14px;
+            text-align: center;
+            border-bottom: 1px solid #00ff41;
+            padding-bottom: 5px;
+        }
+        
+        .status-line {
+            margin: 8px 0;
+            color: #00dd33;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-line::before {
+            content: '> ';
+            color: #00ff41;
+            font-weight: bold;
+        }
+        
+        .status-indicator {
+            color: #00ff41;
+            font-weight: bold;
+            text-shadow: 0 0 3px #00ff41;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        .status-ready {
+            color: #00ff41;
+            font-weight: bold;
+            text-shadow: 0 0 5px #00ff41;
+        }
+        
+        .status-offline {
+            color: #ff4444;
+            font-weight: bold;
+            text-shadow: 0 0 5px #ff4444;
+        }
+        
+        /* Screen effects */
+        .scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                transparent 50%, 
+                rgba(0, 255, 65, 0.02) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .screen-flicker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 255, 65, 0.01);
+            pointer-events: none;
+            z-index: 999;
+            animation: flicker 0.15s infinite linear alternate;
+        }
+        
+        /* Animations */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        @keyframes flicker {
+            0% { opacity: 0.98; }
+            100% { opacity: 1; }
+        }
+    </style>
+    <script src="/static/socket.io.js"></script>
+    <script src="three.r74.min.js"></script>
+</head>
+<body>
+    <div class="mobile">
+        <p>Sorry, this experiment is not designed for mobile devices.</p>
+        <p>Please use a desktop or laptop computer to experience "The Spirit" particle system.</p>
+    </div>
+    
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div class="hand-cursor" id="handCursor"></div>
+        <div class="instruction" id="instruction">
+            Move your hand to control the particle flow
+        </div>
+        
+        <div class="system-status">
+            <h3>SYSTEM STATUS</h3>
+            <div class="status-line">
+                TRACKING: <span class="status-indicator" id="trackingStatus">OFFLINE</span>
+            </div>
+            <div class="status-line">
+                HANDS: <span class="status-indicator" id="handCount">0</span>
+            </div>
+            <div class="status-line">
+                PARTICLES: <span class="status-ready" id="particleStatus">READY</span>
+            </div>
+            <div class="status-line">
+                ENGINE: <span class="status-ready" id="engineStatus">ONLINE</span>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <h3>THE SPIRIT</h3>
+            <div class="param">
+                <label>PARTICLES:</label>
+                <span id="particleCount">65k</span>
+            </div>
+            <div class="param">
+                <label>SPEED:</label>
+                <span id="speed">2.0</span>
+            </div>
+            <div class="param">
+                <label>ATTRACTION:</label>
+                <span id="attraction">0.5</span>
+            </div>
+            <div class="param">
+                <label>CURL:</label>
+                <span id="curl">0.03</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="scanlines"></div>
+    <div class="screen-flicker"></div>
+
+    <script>
+        // WebSocket connection for hand tracking
+        const socket = io();
+        const handCursor = document.getElementById('handCursor');
+        const instruction = document.getElementById('instruction');
+        
+        // Three.js scene setup
+        let scene, camera, renderer, particles, geometry, material;
+        let mouseX = 0, mouseY = 0;
+        let handDetected = false;
+        let time = 0;
+        
+        // Particle system parameters
+        const PARTICLE_COUNT = 65536;
+        const SPEED = 2.0;
+        const ATTRACTION = 0.5;
+        const CURL_SIZE = 0.03;
+        const RADIUS = 0.005;
+        
+        // Colors matching The Spirit theme
+        const BASE_COLOR = new THREE.Color(0xd95151);  // Red
+        const FADE_COLOR = new THREE.Color(0x4d61c0);  // Blue
+        const BG_COLOR = new THREE.Color(0x343434);    // Dark gray
+        
+        function init() {
+            const container = document.getElementById('container');
+            const canvas = document.getElementById('canvas');
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = BG_COLOR;
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 1;
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            // Create particle system
+            createParticles();
+            
+            // Start animation loop
+            animate();
+            
+            // Hide instruction after 5 seconds
+            setTimeout(() => {
+                instruction.classList.add('hidden');
+            }, 5000);
+            
+            // Update system status
+            updateSystemStatus();
+        }
+        
+        function createParticles() {
+            geometry = new THREE.BufferGeometry();
+            
+            // Create particle positions
+            const positions = new Float32Array(PARTICLE_COUNT * 3);
+            const velocities = new Float32Array(PARTICLE_COUNT * 3);
+            const colors = new Float32Array(PARTICLE_COUNT * 3);
+            const sizes = new Float32Array(PARTICLE_COUNT);
+            
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+                
+                // Random initial positions
+                positions[i3] = (Math.random() - 0.5) * 2;
+                positions[i3 + 1] = (Math.random() - 0.5) * 2;
+                positions[i3 + 2] = (Math.random() - 0.5) * 0.1;
+                
+                // Random initial velocities
+                velocities[i3] = (Math.random() - 0.5) * 0.01;
+                velocities[i3 + 1] = (Math.random() - 0.5) * 0.01;
+                velocities[i3 + 2] = (Math.random() - 0.5) * 0.01;
+                
+                // Initial colors (interpolate between base and fade)
+                const t = Math.random();
+                const color = new THREE.Color().lerpColors(BASE_COLOR, FADE_COLOR, t);
+                colors[i3] = color.r;
+                colors[i3 + 1] = color.g;
+                colors[i3 + 2] = color.b;
+                
+                // Random sizes
+                sizes[i] = Math.random() * 2 + 1;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            
+            // Create material
+            material = new THREE.PointsMaterial({
+                size: 3,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            // Create particle system
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+        
+        function updateParticles() {
+            const positions = geometry.attributes.position.array;
+            const velocities = geometry.attributes.velocity.array;
+            const colors = geometry.attributes.color.array;
+            
+            // Convert mouse position to world coordinates
+            const mouseWorldX = (mouseX / window.innerWidth) * 2 - 1;
+            const mouseWorldY = -(mouseY / window.innerHeight) * 2 + 1;
+            
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+                
+                // Current position
+                const x = positions[i3];
+                const y = positions[i3 + 1];
+                const z = positions[i3 + 2];
+                
+                // Calculate distance to mouse/hand
+                const dx = mouseWorldX - x;
+                const dy = mouseWorldY - y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Apply attraction/repulsion based on hand detection
+                if (handDetected && distance < 0.3) {
+                    const force = (0.3 - distance) * ATTRACTION;
+                    const angle = Math.atan2(dy, dx);
+                    
+                    velocities[i3] += Math.cos(angle) * force * 0.001;
+                    velocities[i3 + 1] += Math.sin(angle) * force * 0.001;
+                }
+                
+                // Add curl/turbulence
+                const curl = Math.sin(time * 0.001 + x * 10) * CURL_SIZE;
+                velocities[i3] += curl * 0.0001;
+                velocities[i3 + 1] += Math.cos(time * 0.001 + y * 10) * CURL_SIZE * 0.0001;
+                
+                // Apply damping
+                velocities[i3] *= 0.99;
+                velocities[i3 + 1] *= 0.99;
+                velocities[i3 + 2] *= 0.99;
+                
+                // Update position
+                positions[i3] += velocities[i3] * SPEED;
+                positions[i3 + 1] += velocities[i3 + 1] * SPEED;
+                positions[i3 + 2] += velocities[i3 + 2] * SPEED;
+                
+                // Wrap around boundaries
+                if (positions[i3] > 1) positions[i3] = -1;
+                if (positions[i3] < -1) positions[i3] = 1;
+                if (positions[i3 + 1] > 1) positions[i3 + 1] = -1;
+                if (positions[i3 + 1] < -1) positions[i3 + 1] = 1;
+                
+                // Update color based on velocity
+                const speed = Math.sqrt(velocities[i3] * velocities[i3] + velocities[i3 + 1] * velocities[i3 + 1]);
+                const t = Math.min(speed * 100, 1);
+                const color = new THREE.Color().lerpColors(BASE_COLOR, FADE_COLOR, t);
+                colors[i3] = color.r;
+                colors[i3 + 1] = color.g;
+                colors[i3 + 2] = color.b;
+            }
+            
+            geometry.attributes.position.needsUpdate = true;
+            geometry.attributes.velocity.needsUpdate = true;
+            geometry.attributes.color.needsUpdate = true;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            time += 16; // ~60fps
+            
+            updateParticles();
+            
+            renderer.render(scene, camera);
+        }
+        
+        function updateSystemStatus() {
+            const trackingStatus = document.getElementById('trackingStatus');
+            const handCount = document.getElementById('handCount');
+            const particleStatus = document.getElementById('particleStatus');
+            const engineStatus = document.getElementById('engineStatus');
+            
+            // Update tracking status
+            if (handDetected) {
+                trackingStatus.textContent = 'ACTIVE';
+                trackingStatus.className = 'status-ready';
+            } else {
+                trackingStatus.textContent = 'STANDBY';
+                trackingStatus.className = 'status-indicator';
+            }
+            
+            // Update particle status
+            particleStatus.textContent = 'ACTIVE';
+            engineStatus.textContent = 'ONLINE';
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Mouse fallback for testing
+        window.addEventListener('mousemove', (event) => {
+            mouseX = event.clientX;
+            mouseY = event.clientY;
+        });
+        
+        // WebSocket event handlers
+        socket.on('connect', () => {
+            console.log('The Spirit scene connected to server');
+            socket.emit('subscribe', {
+                events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
+            });
+        });
+        
+        socket.on('event', (event) => {
+            if ((event.type === 'hand_moved' || event.type === 'hand_detected' || event.type === 'frame_processed') && event.data.hands && event.data.hands.length > 0) {
+                try {
+                    const hand = event.data.hands[0];
+                    if (hand.palm_center) {
+                        // Convert normalized coordinates to screen coordinates
+                        mouseX = hand.palm_center.x * window.innerWidth;
+                        mouseY = hand.palm_center.y * window.innerHeight;
+                        
+                        // Update hand cursor
+                        handCursor.style.left = mouseX + 'px';
+                        handCursor.style.top = mouseY + 'px';
+                        handCursor.classList.add('active');
+                        
+                        handDetected = true;
+                        document.getElementById('handCount').textContent = event.data.hands.length;
+                        updateSystemStatus();
+                    }
+                } catch (e) {
+                    console.error('Hand tracking error:', e);
+                }
+            } else if (event.type === 'hand_lost') {
+                handDetected = false;
+                handCursor.classList.remove('active');
+                document.getElementById('handCount').textContent = '0';
+                updateSystemStatus();
+            }
+        });
+        
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
