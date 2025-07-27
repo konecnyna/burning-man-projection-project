@@ -268,6 +268,10 @@
       handleHandTrackingEvent(eventData);
     });
 
+    // Hand tracking state for camera rotation (similar to mouse drag)
+    let isHandDragging = false;
+    let lastHandPosition = { x: 0, y: 0 };
+
     function handleHandTrackingEvent(eventData) {
       // Helper function to get hands data from either structure
       function getHandsData(data) {
@@ -279,95 +283,144 @@
         return null;
       }
 
+      // Helper function to extract hand position
+      function getHandPosition(eventData) {
+        const hands = getHandsData(eventData.data);
+        if (hands && hands.length > 0) {
+          const hand = hands[0];
+          
+          let landmarks = null;
+          if (hand && hand.landmarks) {
+            landmarks = hand.landmarks;
+          } else if (hand && Array.isArray(hand) && hand.length > 8) {
+            landmarks = hand;
+          }
+          
+          if (landmarks && landmarks.length > 8) {
+            const indexTip = landmarks[8];
+            if (indexTip && indexTip.x !== undefined && indexTip.y !== undefined) {
+              return {
+                x: (1 - indexTip.x) * window.innerWidth,
+                y: indexTip.y * window.innerHeight
+              };
+            }
+          }
+        }
+        return null;
+      }
+
       switch (eventData.type) {
         case 'hand_detected':
-          console.log('[WireframeGeometry] Hand detected (mousedown)');
+          console.log('[WireframeGeometry] Hand detected (mousedown - start camera rotation)');
           isHandDetected = true;
           handIndicator.classList.add('visible');
-          console.log("hand_detected eventData.data:", eventData.data);
           
-          // Trigger pulse on hand detection (mousedown)
-          const handsDetected = getHandsData(eventData.data);
-          if (handsDetected && handsDetected.length > 0) {
-            const hand = handsDetected[0];
-            if (hand && hand.length > 0) {
-              console.log("Processing hand with", hand.length, "landmarks");
-              const indexTip = hand[8];
-              if (indexTip) {
-                const screenX = (1 - indexTip.x) * window.innerWidth;
-                const screenY = indexTip.y * window.innerHeight;
-                currentHandPosition = { x: screenX, y: screenY };
-                
-                handIndicator.style.left = `${screenX - 10}px`;
-                handIndicator.style.top = `${screenY - 10}px`;
-                console.log("Triggering pulse at:", screenX, screenY);
-                triggerPulse(screenX, screenY);
-              }
-            }
+          // Get hand position for starting camera rotation
+          const detectedPos = getHandPosition(eventData);
+          if (detectedPos) {
+            currentHandPosition = detectedPos;
+            lastHandPosition = { x: detectedPos.x, y: detectedPos.y };
+            
+            // Update hand indicator position
+            handIndicator.style.left = `${detectedPos.x - 10}px`;
+            handIndicator.style.top = `${detectedPos.y - 10}px`;
+            
+            // Start camera rotation (like mousedown on canvas)
+            console.log('[WireframeGeometry] Starting camera rotation at:', detectedPos.x, detectedPos.y);
+            isHandDragging = true;
+            
+            // Disable auto-rotation while hand is controlling
+            controls.autoRotate = false;
+            console.log('[WireframeGeometry] Disabled auto-rotation for hand control');
+            
+            // Trigger pulse effect too
+            triggerPulse(detectedPos.x, detectedPos.y);
           }
           break;
 
         case 'hand_lost':
-          console.log('[WireframeGeometry] Hand lost (mouseup)');
+          console.log('[WireframeGeometry] Hand lost (mouseup - end camera rotation)');
           isHandDetected = false;
           handIndicator.classList.remove('visible');
           
-          // Trigger pulse on hand lost (mouseup) - using last known position
+          // End camera rotation
+          if (isHandDragging) {
+            console.log('[WireframeGeometry] Ending camera rotation');
+            isHandDragging = false;
+            
+            // Re-enable auto-rotation
+            controls.autoRotate = true;
+            console.log('[WireframeGeometry] Re-enabled auto-rotation');
+          }
+          
+          // Trigger pulse on mouseup
           if (currentHandPosition.x > 0 && currentHandPosition.y > 0) {
+            console.log('[WireframeGeometry] Hand mouseup - triggering pulse');
             triggerPulse(currentHandPosition.x, currentHandPosition.y);
           }
           break;
 
         case 'hand_moved':
-          console.log('[WireframeGeometry] hand_moved - isHandDetected:', isHandDetected);
-          console.log('[WireframeGeometry] hand_moved eventData.data:', eventData.data);
-          
-          // Process hand movement (works regardless of isHandDetected state for responsiveness)
-          const handsMoved = getHandsData(eventData.data);
-          console.log('[WireframeGeometry] handsMoved:', handsMoved);
-          
-          if (handsMoved && handsMoved.length > 0) {
-            const hand = handsMoved[0];
-            console.log('[WireframeGeometry] First hand object:', hand, 'type:', typeof hand, 'length:', hand?.length);
+          const movedPos = getHandPosition(eventData);
+          if (movedPos) {
+            currentHandPosition = movedPos;
             
-            // Check if hand has landmarks property or is directly an array
-            let landmarks = null;
-            if (hand && hand.landmarks) {
-              landmarks = hand.landmarks;
-              console.log('[WireframeGeometry] Using hand.landmarks:', landmarks.length, 'points');
-            } else if (hand && Array.isArray(hand) && hand.length > 8) {
-              landmarks = hand;
-              console.log('[WireframeGeometry] Using hand as landmarks array:', landmarks.length, 'points');
+            // Update hand indicator position
+            handIndicator.style.left = `${movedPos.x - 10}px`;
+            handIndicator.style.top = `${movedPos.y - 10}px`;
+            
+            // Make hand indicator visible if getting movement data
+            if (!isHandDetected) {
+              isHandDetected = true;
+              handIndicator.classList.add('visible');
             }
             
-            if (landmarks && landmarks.length > 8) {
-              const indexTip = landmarks[8];
-              console.log('[WireframeGeometry] IndexTip:', indexTip);
+            // Handle camera rotation (like mouse drag)
+            if (isHandDragging) {
+              // Calculate movement delta
+              const deltaX = movedPos.x - lastHandPosition.x;
+              const deltaY = movedPos.y - lastHandPosition.y;
               
-              if (indexTip && indexTip.x !== undefined && indexTip.y !== undefined) {
-                const screenX = (1 - indexTip.x) * window.innerWidth;
-                const screenY = indexTip.y * window.innerHeight;
-
-                currentHandPosition = { x: screenX, y: screenY };
-                console.log('[WireframeGeometry] Moving cursor to:', screenX, screenY);
-
-                // Update hand indicator position and make visible if needed
-                handIndicator.style.left = `${screenX - 10}px`;
-                handIndicator.style.top = `${screenY - 10}px`;
-                
-                // Auto-sync state if we're getting movement data
-                if (!isHandDetected) {
-                  isHandDetected = true;
-                  handIndicator.classList.add('visible');
-                }
-              } else {
-                console.log('[WireframeGeometry] Invalid indexTip format:', indexTip);
-              }
-            } else {
-              console.log('[WireframeGeometry] No valid landmarks found, expected >8 points, got:', landmarks?.length);
+              console.log('[WireframeGeometry] Hand dragging camera - delta:', deltaX, deltaY);
+              
+              // Temporarily disable auto-rotation while hand dragging
+              const wasAutoRotating = controls.autoRotate;
+              controls.autoRotate = false;
+              
+              // Directly manipulate the camera using OrbitControls' spherical coordinate system
+              const rotateSpeed = 0.003; // Adjust sensitivity
+              
+              // Get current spherical coordinates
+              const spherical = new THREE.Spherical();
+              const offset = new THREE.Vector3();
+              
+              // Calculate offset from target to camera
+              offset.copy(camera.position).sub(controls.target);
+              spherical.setFromVector3(offset);
+              
+              // Apply rotation based on hand movement
+              spherical.theta -= deltaX * rotateSpeed; // Horizontal rotation (azimuth)
+              spherical.phi += deltaY * rotateSpeed;   // Vertical rotation (polar)
+              
+              // Restrict phi to be between desired limits (prevent flipping)
+              const minPolarAngle = 0.1;
+              const maxPolarAngle = Math.PI - 0.1;
+              spherical.phi = Math.max(minPolarAngle, Math.min(maxPolarAngle, spherical.phi));
+              
+              // Convert back to cartesian coordinates
+              offset.setFromSpherical(spherical);
+              
+              // Position camera relative to target
+              camera.position.copy(controls.target).add(offset);
+              
+              // Make camera look at target
+              camera.lookAt(controls.target);
+              
+              console.log('[WireframeGeometry] Camera rotated - theta:', spherical.theta, 'phi:', spherical.phi);
+              
+              // Update last position for next frame
+              lastHandPosition = { x: movedPos.x, y: movedPos.y };
             }
-          } else {
-            console.log('[WireframeGeometry] No hands data in hand_moved');
           }
           break;
       }
@@ -575,8 +628,8 @@
         uniforms: pulseUniforms,
         vertexShader: nodeShader.vertexShader,
         fragmentShader: nodeShader.fragmentShader,
-        transparent: true, 
-        depthWrite: false, 
+        transparent: true,
+        depthWrite: false,
         blending: THREE.AdditiveBlending,
         defines: {
           USE_MORPHTARGETS: ''
@@ -601,8 +654,8 @@
         uniforms: pulseUniforms,
         vertexShader: connectionShader.vertexShader,
         fragmentShader: connectionShader.fragmentShader,
-        transparent: true, 
-        depthWrite: false, 
+        transparent: true,
+        depthWrite: false,
         blending: THREE.AdditiveBlending,
         defines: {
           USE_MORPHTARGETS: ''
@@ -661,11 +714,14 @@
       isDragging = true;
       offset.x = e.clientX - controlsPanel.offsetLeft;
       offset.y = e.clientY - controlsPanel.offsetTop;
+      
       controlsPanel.style.opacity = '0.9';
     });
     document.addEventListener('mousemove', (e) => {
+      console.log("000000000000000>",isDragging)
       if (!isDragging) return;
       e.preventDefault();
+      
       controlsPanel.style.left = `${e.clientX - offset.x}px`;
       controlsPanel.style.top = `${e.clientY - offset.y}px`;
     });

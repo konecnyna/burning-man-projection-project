@@ -1484,6 +1484,14 @@
             background_color: '#000000'
           },
           {
+            id: 'pong',
+            name: 'Hand Tracking Pong',
+            description: 'Classic Pong game controlled by hand Y-axis movement',
+            duration: this.defaultDuration,
+            html_file: 'scenes/pong/index.html',
+            background_color: '#000000'
+          },
+          {
             id: 'fluidsim',
             name: 'Fluid Simulation',
             description: 'WebGL fluid simulation controlled by hand movements',
@@ -1707,7 +1715,7 @@
           const container = document.getElementById('scene-container');
 
           // Handle iframe scenes
-          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'idle'].includes(scene.id)) {
+          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'idle'].includes(scene.id)) {
             container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
 
             setTimeout(() => {
@@ -2543,7 +2551,44 @@
             }
           },
           onHandLost: function () {
-            console.log('[SceneHandler] Hand lost in wireframe geometry scene, forwarding to iframe');
+            // Forward hand lost to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_lost'
+              }, '*');
+            }
+          },
+          onCleanup: function () {
+            console.log('Wireframe Geometry scene cleaned up');
+          }
+        };
+
+        // Pong scene handler
+        this.sceneHandlers.pong = {
+          onInit: function () {
+            console.log('[SceneHandler] Pong scene initialized');
+          },
+          onHandDetected: function (hands) {
+            console.log('[SceneHandler] Hand detected in pong scene, forwarding to iframe');
+            // Forward to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_detected',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandMove: function (hands) {
+            // Forward hand movements to iframe
+            if (sceneManager.currentSceneIframe && hands && hands.length > 0) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_move',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandLost: function () {
+            console.log('[SceneHandler] Hand lost in pong scene, forwarding to iframe');
             // Forward to iframe
             if (sceneManager.currentSceneIframe) {
               sceneManager.currentSceneIframe.postMessage({
@@ -2551,6 +2596,9 @@
                 data: {}
               }, '*');
             }
+          },
+          onCleanup: function () {
+            console.log('Pong scene cleaned up');
           }
         };
       }

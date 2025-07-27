@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking Pong</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+        }
+
+        /* Scoreboard Display */
+        .scoreboard {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3em;
+            font-weight: bold;
+            color: #00ffff;
+            text-align: center;
+            z-index: 100;
+            display: flex;
+            gap: 50px;
+        }
+
+        #player-score, #opponent-score {
+            min-width: 50px;
+        }
+
+        /* Winner Message Display */
+        #winner-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4em;
+            font-weight: bold;
+            text-align: center;
+            z-index: 100;
+            display: none;
+        }
+
+        /* Hand tracking indicator */
+        .hand-indicator {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #00ff88;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 100;
+            box-shadow: 0 0 20px #00ff88;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .hand-indicator.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <!-- Scoreboard Display -->
+    <div class="scoreboard">
+        <div id="player-score">0</div>
+        <div id="opponent-score">0</div>
+    </div>
+
+    <!-- Winner Message Display -->
+    <div id="winner-message"></div>
+
+    <!-- Hand tracking indicator -->
+    <div class="hand-indicator" id="handIndicator"></div>
+
+    <!-- Socket.IO for hand tracking -->
+    <script src="/static/socket.io.js"></script>
+    
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Game Logic -->
+    <script>
+        // --- SCENE SETUP ---
+        let scene, camera, renderer;
+        
+        // --- GAME OBJECTS ---
+        let playerPaddle, opponentPaddle, ball, arenaLines;
+        let playerScore = 0;
+        let opponentScore = 0;
+        const winningScore = 5;
+        let gameIsOver = false;
+
+        // --- BALL PHYSICS ---
+        let ballVelocity = new THREE.Vector3(0.1, 0.02, 0); // Initial speed and direction
+        const arenaHeight = 6;
+        const arenaWidth = 10;
+        const paddleWidth = 0.8; // As defined in custom shape
+
+        // --- HAND TRACKING SETUP ---
+        let isHandDetected = false;
+        let handY = 0; // Normalized Y position from hand tracking
+        const handIndicator = document.getElementById('handIndicator');
+
+        // Setup WebSocket connection (same pattern as cosmic-symbolism)
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('[Pong] Connected to server');
+            socket.emit('subscribe', {
+                events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
+            });
+        });
+
+        socket.on('event', (data) => {
+            try {
+                if (data.type === 'hand_moved' && data.data.hands) {
+                    handleHandTracking(data.data.hands);
+                }
+                
+                // Also handle frame_processed events which contain hand data
+                if (data.type === 'frame_processed' && data.data.hands) {
+                    handleHandTracking(data.data.hands);
+                }
+                
+                // Handle hand detection/loss events
+                if (data.type === 'hand_detected') {
+                    console.log('[Pong] Hand detected');
+                    isHandDetected = true;
+                    handIndicator.classList.add('visible');
+                }
+                
+                if (data.type === 'hand_lost') {
+                    console.log('[Pong] Hand lost');
+                    isHandDetected = false;
+                    handIndicator.classList.remove('visible');
+                }
+                
+            } catch (e) {
+                console.error('Error processing hand tracking event:', e, data);
+            }
+        });
+
+        function handleHandTracking(hands) {
+            if (!hands || hands.length === 0) return;
+            
+            // Use the first hand for paddle control
+            const hand = hands[0];
+            if (hand.palm_center) {
+                // Get Y coordinate (0 = top, 1 = bottom)
+                handY = hand.palm_center.y;
+                console.log('[Pong] Hand Y position:', handY);
+                
+                // Update hand indicator position
+                const screenY = handY * window.innerHeight;
+                handIndicator.style.top = `${screenY - 10}px`;
+                handIndicator.style.left = '50px';
+                
+                // Make sure hand indicator is visible
+                if (!isHandDetected) {
+                    isHandDetected = true;
+                    handIndicator.classList.add('visible');
+                }
+            }
+        }
+
+        // --- INITIALIZE THE SCENE ---
+        function init() {
+            // Create a new scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+
+            // Create a camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 7;
+
+            // Create a renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 3);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            directionalLight.position.set(0, 10, 5);
+            scene.add(directionalLight);
+
+            // Create game elements
+            createGameElements();
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize, false);
+
+            // Start the animation loop
+            animate();
+        }
+
+        // --- CREATE GAME ELEMENTS ---
+        function createGameElements() {
+            // The Arena
+            const arenaGeometry = new THREE.BoxGeometry(arenaWidth, arenaHeight, arenaWidth);
+            const arenaEdges = new THREE.EdgesGeometry(arenaGeometry);
+            arenaLines = new THREE.LineSegments(arenaEdges, new THREE.LineBasicMaterial({ color: 0xef00ff }));
+            scene.add(arenaLines);
+
+            // The Paddles (Custom Shape)
+            const paddleShape = new THREE.Shape();
+            paddleShape.moveTo(0, 0);
+            paddleShape.lineTo(0, 1); // Paddle height
+            paddleShape.lineTo(0.2, 1);
+            paddleShape.lineTo(0.2, 0);
+            paddleShape.lineTo(0, 0);
+            const extrudeSettings = { depth: 0.4, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 2 };
+            const paddleGeometry = new THREE.ExtrudeGeometry(paddleShape, extrudeSettings);
+            
+            // Player Paddle
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffff, metalness: 0.8, roughness: 0.2 });
+            playerPaddle = new THREE.Mesh(paddleGeometry, playerMaterial);
+            playerPaddle.position.set(-(arenaWidth / 2) + 0.5, -0.5, 0);
+            playerPaddle.rotation.y = Math.PI / 2;
+            scene.add(playerPaddle);
+            
+            // Opponent Paddle
+            const opponentMaterial = new THREE.MeshStandardMaterial({ color: 0xef00ff, metalness: 0.8, roughness: 0.2 });
+            opponentPaddle = new THREE.Mesh(paddleGeometry, opponentMaterial);
+            opponentPaddle.position.set((arenaWidth / 2) - 0.5, -0.5, 0);
+            opponentPaddle.rotation.y = -Math.PI / 2;
+            scene.add(opponentPaddle);
+
+            // The Ball
+            const ballGeometry = new THREE.SphereGeometry(0.15, 32, 16);
+            const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.1, emissive: 0x222222 });
+            ball = new THREE.Mesh(ballGeometry, ballMaterial);
+            scene.add(ball);
+        }
+
+        // --- UPDATE LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!gameIsOver) {
+                // Update game logic
+                updateBallPosition();
+                updateOpponentPosition();
+                updatePlayerPosition(); // Hand tracking control
+            }
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        // --- PLAYER CONTROL WITH HAND TRACKING ---
+        function updatePlayerPosition() {
+            if (isHandDetected) {
+                // Convert hand Y (0-1) to paddle position
+                // handY: 0 = top of screen = top of arena
+                // handY: 1 = bottom of screen = bottom of arena
+                const paddleHalfHeight = 0.5;
+                const targetY = (1 - handY) * (arenaHeight - 1) - (arenaHeight / 2) + paddleHalfHeight;
+                
+                // Smoothly move the paddle for better feel
+                playerPaddle.position.y += (targetY - playerPaddle.position.y) * 0.2;
+                
+                // Clamp paddle position
+                playerPaddle.position.y = Math.max(-(arenaHeight/2) + paddleHalfHeight, Math.min((arenaHeight/2) - paddleHalfHeight, playerPaddle.position.y));
+                
+                console.log('[Pong] Player paddle Y:', playerPaddle.position.y, 'Hand Y:', handY);
+            }
+        }
+
+        // --- GAME LOGIC FUNCTIONS ---
+        function updateBallPosition() {
+            // Move ball
+            ball.position.add(ballVelocity);
+
+            // Collision with top/bottom walls
+            if (ball.position.y > (arenaHeight / 2) - 0.15 || ball.position.y < -(arenaHeight / 2) + 0.15) {
+                ballVelocity.y = -ballVelocity.y;
+            }
+
+            // Collision with paddles (using Bounding Boxes for accuracy)
+            const ballBox = new THREE.Box3().setFromObject(ball);
+            const playerBox = new THREE.Box3().setFromObject(playerPaddle);
+            const opponentBox = new THREE.Box3().setFromObject(opponentPaddle);
+
+            // Player paddle collision
+            if (ballBox.intersectsBox(playerBox) && ballVelocity.x < 0) {
+                ballVelocity.x = -ballVelocity.x;
+                // Add a little 'spin' based on where it hits the paddle
+                const hitPosition = (ball.position.y - playerPaddle.position.y) / 1; // 1 is paddle height
+                ballVelocity.y += hitPosition * 0.1;
+            }
+
+            // Opponent paddle collision
+            if (ballBox.intersectsBox(opponentBox) && ballVelocity.x > 0) {
+                ballVelocity.x = -ballVelocity.x;
+            }
+
+            // Scoring
+            if (ball.position.x > (arenaWidth / 2) + 1) {
+                // Player scores
+                playerScore++;
+                updateScoreboard();
+                resetBall(-1); // Ball moves towards opponent
+            } else if (ball.position.x < -(arenaWidth / 2) - 1) {
+                // Opponent scores
+                opponentScore++;
+                updateScoreboard();
+                resetBall(1); // Ball moves towards player
+            }
+        }
+        
+        function updateOpponentPosition() {
+            // Simple AI: tries to match the ball's y-position
+            const targetY = ball.position.y;
+            // Add some smoothing/lag to make it beatable
+            opponentPaddle.position.y += (targetY - opponentPaddle.position.y) * 0.07;
+            
+            // Clamp paddle position so it doesn't go off-screen
+            const paddleHalfHeight = 0.5; // Half of the paddle's visual height (1)
+            opponentPaddle.position.y = Math.max(-(arenaHeight/2) + paddleHalfHeight, Math.min((arenaHeight/2) - paddleHalfHeight, opponentPaddle.position.y));
+        }
+        
+        function resetBall(direction) {
+            // Check for winner
+            if(playerScore >= winningScore || opponentScore >= winningScore){
+                endGame();
+                return;
+            }
+        
+            ball.position.set(0, 0, 0);
+            // Randomize starting y-velocity for variety
+            ballVelocity.set(0.1 * direction, Math.random() * 0.05 - 0.025, 0);
+        }
+
+        function updateScoreboard() {
+            document.getElementById('player-score').innerText = playerScore;
+            document.getElementById('opponent-score').innerText = opponentScore;
+        }
+
+        function endGame() {
+            gameIsOver = true;
+            ball.visible = false; // Hide the ball
+            const winnerMessage = document.getElementById('winner-message');
+            winnerMessage.innerText = playerScore >= winningScore ? 'YOU WIN' : 'GAME OVER';
+            winnerMessage.style.color = playerScore >= winningScore ? '#00ffff' : '#ef00ff';
+            winnerMessage.style.display = 'block';
+        }
+
+        // --- EVENT LISTENERS ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- START THE GAME ---
+        init();
+    </script>
+</body>
+</html>
