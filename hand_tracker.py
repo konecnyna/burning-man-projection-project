@@ -108,9 +108,14 @@ class HandTracker:
         current_hands = []
         if results.multi_hand_landmarks:
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                # Extract hand data
+                # Extract hand data with confidence
                 hand_data = self._extract_hand_data(hand_landmarks, frame.shape)
                 hand_data['hand_id'] = idx
+                
+                # Add confidence data
+                confidence_data = self._calculate_confidence(hand_landmarks, results, idx)
+                hand_data['confidence'] = confidence_data
+                
                 current_hands.append(hand_data)
                 
                 # Draw landmarks and connections
@@ -192,6 +197,65 @@ class HandTracker:
                 'ring': ring_tip,
                 'pinky': pinky_tip
             }
+        }
+    
+    def _calculate_confidence(self, hand_landmarks, results, hand_idx) -> Dict:
+        """Calculate confidence metrics for hand detection"""
+        landmarks = hand_landmarks.landmark
+        
+        # 1. Landmark visibility score (average of all landmark visibility scores)
+        visibility_scores = [lm.visibility for lm in landmarks if hasattr(lm, 'visibility')]
+        avg_visibility = sum(visibility_scores) / len(visibility_scores) if visibility_scores else 0.8
+        
+        # 2. Landmark presence score (how many landmarks have reasonable coordinates)
+        valid_landmarks = 0
+        total_landmarks = len(landmarks)
+        for lm in landmarks:
+            if 0 <= lm.x <= 1 and 0 <= lm.y <= 1 and -1 <= lm.z <= 1:
+                valid_landmarks += 1
+        presence_score = valid_landmarks / total_landmarks if total_landmarks > 0 else 0.0
+        
+        # 3. Hand classification confidence (if available)
+        classification_score = 0.8  # Default score
+        if hasattr(results, 'multi_handedness') and results.multi_handedness:
+            if hand_idx < len(results.multi_handedness):
+                handedness = results.multi_handedness[hand_idx]
+                if hasattr(handedness, 'classification') and handedness.classification:
+                    classification_score = handedness.classification[0].score
+        
+        # 4. Stability score (how much the hand moved since last frame)
+        stability_score = 1.0  # Start with perfect stability
+        if self.previous_hands and hand_idx < len(self.previous_hands):
+            prev_palm = self.previous_hands[hand_idx].get('palm_center', {})
+            if prev_palm:
+                # Calculate palm center from current landmarks
+                wrist = landmarks[0]
+                palm_x = (wrist.x + landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 5
+                palm_y = (wrist.y + landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 5
+                
+                # Calculate movement distance
+                dx = palm_x - prev_palm.get('x', palm_x)
+                dy = palm_y - prev_palm.get('y', palm_y)
+                movement = (dx*dx + dy*dy) ** 0.5
+                
+                # Convert movement to stability score (less movement = higher stability)
+                stability_score = max(0.0, 1.0 - (movement * 10))  # Scale movement
+        
+        # 5. Overall confidence (weighted average)
+        overall_confidence = (
+            avg_visibility * 0.3 +
+            presence_score * 0.3 +
+            classification_score * 0.2 +
+            stability_score * 0.2
+        )
+        
+        return {
+            'overall': round(overall_confidence, 3),
+            'visibility': round(avg_visibility, 3),
+            'presence': round(presence_score, 3),
+            'classification': round(classification_score, 3),
+            'stability': round(stability_score, 3),
+            'quality': 'high' if overall_confidence > 0.8 else 'medium' if overall_confidence > 0.6 else 'low'
         }
         
     def _draw_hand_bounding_box(self, frame, hand_landmarks, hand_id):

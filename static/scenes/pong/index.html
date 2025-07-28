@@ -172,12 +172,40 @@
             if (hand.palm_center) {
                 // Get Y coordinate (0 = top, 1 = bottom)
                 handY = hand.palm_center.y;
-                console.log('[Pong] Hand Y position:', handY);
                 
-                // Update hand indicator position
+                // Get confidence data
+                const confidence = hand.confidence || {};
+                const overallConfidence = confidence.overall || 0.0;
+                const quality = confidence.quality || 'unknown';
+                
+                console.log('[Pong] Hand Y:', handY.toFixed(3), 
+                           'Confidence:', overallConfidence, 
+                           'Quality:', quality,
+                           'Visibility:', confidence.visibility,
+                           'Stability:', confidence.stability);
+                
+                // Update hand indicator position and style based on confidence
                 const screenY = handY * window.innerHeight;
                 handIndicator.style.top = `${screenY - 10}px`;
                 handIndicator.style.left = '50px';
+                
+                // Change hand indicator color based on confidence quality
+                if (quality === 'high') {
+                    handIndicator.style.background = '#00ff88';
+                    handIndicator.style.boxShadow = '0 0 20px #00ff88';
+                } else if (quality === 'medium') {
+                    handIndicator.style.background = '#ffaa00';
+                    handIndicator.style.boxShadow = '0 0 20px #ffaa00';
+                } else {
+                    handIndicator.style.background = '#ff4444';
+                    handIndicator.style.boxShadow = '0 0 20px #ff4444';
+                }
+                
+                // Adjust opacity based on overall confidence
+                handIndicator.style.opacity = Math.max(0.3, overallConfidence);
+                
+                // Store current hand data for use in game loop
+                window.currentHandData = hand;
                 
                 // Make sure hand indicator is visible
                 if (!isHandDetected) {
@@ -276,6 +304,17 @@
         // --- PLAYER CONTROL WITH HAND TRACKING ---
         function updatePlayerPosition() {
             if (isHandDetected) {
+                // Get current hand confidence (if available)
+                const currentHand = getCurrentHandData();
+                const confidence = currentHand?.confidence || {};
+                const overallConfidence = confidence.overall || 0.5;
+                
+                // Only use high-confidence hand data for paddle control
+                if (overallConfidence < 0.3) {
+                    console.log('[Pong] Low confidence hand data, skipping paddle update:', overallConfidence);
+                    return;
+                }
+                
                 // Convert hand Y (0-1) to paddle position with increased sensitivity
                 // handY: 0 = top of screen = top of arena
                 // handY: 1 = bottom of screen = bottom of arena
@@ -288,9 +327,10 @@
                 
                 const targetY = (1 - clampedHandY) * (arenaHeight - 1) - (arenaHeight / 2) + paddleHalfHeight;
                 
-                // Increase responsiveness by reducing smoothing and adding instant response
-                const smoothingFactor = 0.6; // Increased from 0.2 for faster response
-                const instantResponse = 0.3; // Immediate movement component
+                // Adjust responsiveness based on confidence
+                const confidenceMultiplier = Math.min(1.0, overallConfidence * 1.5); // Higher confidence = more responsive
+                const smoothingFactor = 0.6 * confidenceMultiplier; // Increased from 0.2 for faster response
+                const instantResponse = 0.3 * confidenceMultiplier; // Immediate movement component
                 
                 // Blend smooth movement with instant response
                 const smoothMovement = (targetY - playerPaddle.position.y) * smoothingFactor;
@@ -301,8 +341,16 @@
                 // Clamp paddle position
                 playerPaddle.position.y = Math.max(-(arenaHeight/2) + paddleHalfHeight, Math.min((arenaHeight/2) - paddleHalfHeight, playerPaddle.position.y));
                 
-                console.log('[Pong] Player paddle Y:', playerPaddle.position.y.toFixed(2), 'Hand Y:', handY.toFixed(3), 'Sensitivity Y:', clampedHandY.toFixed(3));
+                console.log('[Pong] Player paddle Y:', playerPaddle.position.y.toFixed(2), 
+                           'Hand Y:', handY.toFixed(3), 
+                           'Confidence:', overallConfidence.toFixed(3));
             }
+        }
+        
+        // Helper function to get current hand data
+        function getCurrentHandData() {
+            // This would need to be set during handleHandTracking
+            return window.currentHandData || null;
         }
 
         // --- GAME LOGIC FUNCTIONS ---

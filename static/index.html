@@ -1239,6 +1239,10 @@
         const wasDetected = this.appState.get('handsDetected');
         const nowDetected = hands.length > 0;
 
+        if (hands.some(hand => hand.confidence.overall < .65)) {
+          return;
+        }
+
         // Only update detection-related state, not hands array to avoid recursion
         if (wasDetected !== nowDetected) {
           console.log(`[ModeManager] Hand detection changed: ${wasDetected} -> ${nowDetected}`);
