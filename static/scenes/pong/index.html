@@ -45,6 +45,20 @@
             display: none;
         }
 
+        /* Reset Countdown Display */
+        #reset-countdown {
+            position: absolute;
+            top: 60%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+            z-index: 100;
+            color: #ffffff;
+            display: none;
+        }
+
         /* Hand tracking indicator */
         .hand-indicator {
             position: absolute;
@@ -74,6 +88,9 @@
     <!-- Winner Message Display -->
     <div id="winner-message"></div>
 
+    <!-- Reset Countdown Display -->
+    <div id="reset-countdown"></div>
+
     <!-- Hand tracking indicator -->
     <div class="hand-indicator" id="handIndicator"></div>
 
@@ -94,6 +111,8 @@
         let opponentScore = 0;
         const winningScore = 5;
         let gameIsOver = false;
+        let resetTimer = null;
+        let countdownInterval = null;
 
         // --- BALL PHYSICS ---
         let ballVelocity = new THREE.Vector3(0.1, 0.02, 0); // Initial speed and direction
@@ -257,19 +276,32 @@
         // --- PLAYER CONTROL WITH HAND TRACKING ---
         function updatePlayerPosition() {
             if (isHandDetected) {
-                // Convert hand Y (0-1) to paddle position
+                // Convert hand Y (0-1) to paddle position with increased sensitivity
                 // handY: 0 = top of screen = top of arena
                 // handY: 1 = bottom of screen = bottom of arena
                 const paddleHalfHeight = 0.5;
-                const targetY = (1 - handY) * (arenaHeight - 1) - (arenaHeight / 2) + paddleHalfHeight;
                 
-                // Smoothly move the paddle for better feel
-                playerPaddle.position.y += (targetY - playerPaddle.position.y) * 0.2;
+                // Increase sensitivity by expanding the movement range
+                const sensitivityMultiplier = 1.3; // Makes small movements more pronounced
+                const centeredHandY = (handY - 0.5) * sensitivityMultiplier + 0.5; // Center around 0.5 and amplify
+                const clampedHandY = Math.max(0, Math.min(1, centeredHandY)); // Keep in 0-1 range
+                
+                const targetY = (1 - clampedHandY) * (arenaHeight - 1) - (arenaHeight / 2) + paddleHalfHeight;
+                
+                // Increase responsiveness by reducing smoothing and adding instant response
+                const smoothingFactor = 0.6; // Increased from 0.2 for faster response
+                const instantResponse = 0.3; // Immediate movement component
+                
+                // Blend smooth movement with instant response
+                const smoothMovement = (targetY - playerPaddle.position.y) * smoothingFactor;
+                const instantMovement = (targetY - playerPaddle.position.y) * instantResponse;
+                
+                playerPaddle.position.y += smoothMovement + instantMovement;
                 
                 // Clamp paddle position
                 playerPaddle.position.y = Math.max(-(arenaHeight/2) + paddleHalfHeight, Math.min((arenaHeight/2) - paddleHalfHeight, playerPaddle.position.y));
                 
-                console.log('[Pong] Player paddle Y:', playerPaddle.position.y, 'Hand Y:', handY);
+                console.log('[Pong] Player paddle Y:', playerPaddle.position.y.toFixed(2), 'Hand Y:', handY.toFixed(3), 'Sensitivity Y:', clampedHandY.toFixed(3));
             }
         }
 
@@ -350,6 +382,69 @@
             winnerMessage.innerText = playerScore >= winningScore ? 'YOU WIN' : 'GAME OVER';
             winnerMessage.style.color = playerScore >= winningScore ? '#00ffff' : '#ef00ff';
             winnerMessage.style.display = 'block';
+
+            // Start the reset countdown
+            startResetCountdown();
+        }
+
+        function startResetCountdown() {
+            const resetCountdown = document.getElementById('reset-countdown');
+            resetCountdown.style.display = 'block';
+            
+            let countdown = 5;
+            resetCountdown.innerText = `Game resets in ${countdown} seconds...`;
+
+            // Update countdown every second
+            countdownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    resetCountdown.innerText = `Game resets in ${countdown} seconds...`;
+                } else {
+                    resetCountdown.innerText = 'Restarting game...';
+                }
+            }, 1000);
+
+            // Reset the game after 5 seconds
+            resetTimer = setTimeout(() => {
+                resetGame();
+            }, 5000);
+        }
+
+        function resetGame() {
+            console.log('[Pong] Resetting game...');
+            
+            // Clear timers
+            if (resetTimer) {
+                clearTimeout(resetTimer);
+                resetTimer = null;
+            }
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+
+            // Reset game state
+            gameIsOver = false;
+            playerScore = 0;
+            opponentScore = 0;
+
+            // Hide UI elements
+            document.getElementById('winner-message').style.display = 'none';
+            document.getElementById('reset-countdown').style.display = 'none';
+
+            // Reset ball and make it visible
+            ball.position.set(0, 0, 0);
+            ball.visible = true;
+            ballVelocity.set(0.1, Math.random() * 0.05 - 0.025, 0);
+
+            // Reset paddle positions
+            playerPaddle.position.y = -0.5;
+            opponentPaddle.position.y = -0.5;
+
+            // Update scoreboard
+            updateScoreboard();
+
+            console.log('[Pong] Game reset complete');
         }
 
         // --- EVENT LISTENERS ---
