@@ -1237,11 +1237,10 @@
       // Handle hand detection changes
       onHandsChanged(hands) {
         const wasDetected = this.appState.get('handsDetected');
-        const nowDetected = hands.length > 0;
-
-        if (hands.some(hand => hand.confidence.overall < .65)) {
-          return;
-        }
+        
+        // Filter out low-confidence hands before determining detection state
+        const highConfidenceHands = hands.filter(hand => hand.confidence.overall >= .65);
+        const nowDetected = highConfidenceHands.length > 0;
 
         // Only update detection-related state, not hands array to avoid recursion
         if (wasDetected !== nowDetected) {
@@ -1475,7 +1474,7 @@
         this.cycleTimer = null;
         this.countdownTimer = null;
         this.currentSceneIframe = null;
-        this.defaultDuration = 15
+        this.defaultDuration = 45
 
         // Scene configurations
         this.scenes = [
@@ -2132,8 +2131,10 @@
 
       // Process hand tracking data and update state
       processHandEvent(hands) {
+        // Filter out low-confidence hands to maintain consistency with idle detection
+        const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .65);
         // Update hands state - this will trigger ModeManager via subscription
-        this.appState.setState({ hands: hands || [] });
+        this.appState.setState({ hands: filteredHands });
       }
 
       initializeKeyboardShortcuts() {
