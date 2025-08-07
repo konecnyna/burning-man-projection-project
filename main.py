@@ -4,6 +4,7 @@ import sys
 import time
 import signal
 import threading
+import argparse
 from datetime import datetime
 import webview
 from event_system import EventBus, HandTrackingEvents
@@ -11,7 +12,7 @@ from web_app import run_web_app
 from hand_tracker import HandTracker
 
 class HandTrackingKiosk:
-    def __init__(self, headless=False, production_mode=False):
+    def __init__(self, headless=False, production_mode=False, port=5000):
         self.event_bus = EventBus()
         self.hand_tracker = HandTracker(self.event_bus)
         self.web_app = None
@@ -20,6 +21,7 @@ class HandTrackingKiosk:
         self.running = False
         self.headless = headless
         self.production_mode = production_mode
+        self.port = port
         
     def start(self):
         """Start the hand tracking kiosk application"""
@@ -31,12 +33,12 @@ class HandTrackingKiosk:
         
         try:
             # Start web server
-            print("Starting web server...")
+            print(f"Starting web server on port {self.port}...")
             self.web_app, self.socketio, self.server_thread = run_web_app(
                 self.event_bus, 
                 self.hand_tracker,
                 host='localhost', 
-                port=5000, 
+                port=self.port, 
                 debug=False,
                 production_mode=self.production_mode
             )
@@ -70,7 +72,7 @@ class HandTrackingKiosk:
             # Create webview window
             window = webview.create_window(
                 title='Hand Tracking Kiosk',
-                url='http://localhost:5000',
+                url=f'http://localhost:{self.port}',
                 width=1200,
                 height=800,
                 resizable=True,
@@ -109,7 +111,7 @@ class HandTrackingKiosk:
         """Run in headless mode - keep the application running without webview"""
         try:
             print("Application running in headless mode...")
-            print("Web server available at http://localhost:5000")
+            print(f"Web server available at http://localhost:{self.port}")
             print("Press Ctrl+C to exit")
             
             # Keep the main thread alive
@@ -132,27 +134,30 @@ def main():
     print("Hand Tracking Kiosk v1.0")
     print("=" * 50)
     
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Hand Tracking Kiosk')
+    parser.add_argument('--kiosk', action='store_true', help='Run in kiosk mode')
+    parser.add_argument('--headless', action='store_true', help='Run in headless mode')
+    parser.add_argument('--production', action='store_true', help='Run in production mode')
+    parser.add_argument('--port', type=int, default=5000, help='Port to run web server on (default: 5000)')
     
-    # Check command line arguments
-    kiosk_mode = '--kiosk' in sys.argv
-    headless_mode = '--headless' in sys.argv
-    production_mode = '--production' in sys.argv
+    args = parser.parse_args()
     
-    if kiosk_mode:
+    if args.kiosk:
         print("Running in KIOSK MODE")
         # In kiosk mode, you might want to:
         # - Set fullscreen=True and frameless=True in create_window()
         # - Disable window controls
         # - Add auto-restart logic
     
-    if headless_mode:
+    if args.headless:
         print("Running in HEADLESS MODE")
     
-    if production_mode:
+    if args.production:
         print("Running in PRODUCTION MODE - Dev controls hidden")
     
     # Create and start the application
-    app = HandTrackingKiosk(headless=headless_mode, production_mode=production_mode)
+    app = HandTrackingKiosk(headless=args.headless, production_mode=args.production, port=args.port)
     
     try:
         app.start()

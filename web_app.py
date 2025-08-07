@@ -68,9 +68,8 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
     
     @app.route('/')
     def index():
-        # Serve the static HTML file directly for now
-        with open('static/index.html', 'r') as f:
-            return f.read()
+        # Use Flask's send_from_directory for proper static file handling
+        return send_from_directory('static', 'index.html')
     
     @app.route('/scenes/<path:filename>')
     def serve_scenes(filename):
