@@ -717,6 +717,13 @@
       if (signalText) {
         signalText.textContent = 'PRESENCE DETECTED';
       }
+      
+      // Notify parent to reset idle timer
+      if (isIframe && window.parent) {
+        window.parent.postMessage({
+          type: 'hand_detected'
+        }, '*');
+      }
     }
 
     function handleHandLost() {

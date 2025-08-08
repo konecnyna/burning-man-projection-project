@@ -149,6 +149,9 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
         """Video streaming route"""
         if not hand_tracker:
             return Response("Hand tracker not available", status=503)
+        # Check if video processing is enabled
+        if not getattr(hand_tracker, 'enable_video_processing', True):
+            return Response("Video feed disabled in production mode", status=503)
         return Response(generate_video_stream(),
                        mimetype='multipart/x-mixed-replace; boundary=frame')
     

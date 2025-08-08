@@ -567,11 +567,12 @@ let cometParticles;
 let simpleParticles;
 // Typing animation
 class TypingAnimation {
-    constructor(element, text, speed = 100) {
+    constructor(element, texts, speed = 100) {
         this.element = element;
-        this.text = text;
+        this.texts = Array.isArray(texts) ? texts : [texts];
         this.speed = speed;
         this.i = 0;
+        this.textIndex = 0;
         this.isDeleting = false;
         this.currentText = '';
         this.glitchChance = 0.05; // 5% chance of glitch per character
@@ -580,7 +581,7 @@ class TypingAnimation {
     }
     
     type() {
-        const fullText = this.text;
+        const fullText = this.texts[this.textIndex];
         
         if (this.isDeleting) {
             this.currentText = fullText.substring(0, this.currentText.length - 1);
@@ -609,6 +610,8 @@ class TypingAnimation {
         } else if (this.isDeleting && this.currentText === '') {
             this.isDeleting = false;
             this.i = 0;
+            // Move to next text in array
+            this.textIndex = (this.textIndex + 1) % this.texts.length;
             typeSpeed = 1000;
         }
         
@@ -629,8 +632,22 @@ class TypingAnimation {
 function initializeTypingAnimation() {
     const typedTextElement = document.querySelector('.typed-text');
     if (typedTextElement) {
-        new TypingAnimation(typedTextElement, 'Come peer into the looking glass...', 120);
-        console.log('Typing animation initialized');
+        const mysteriousTexts = [
+            'Come peer into the looking glass...',
+            'Your hands weave psychedelic portals...',
+            'The depths of Atlantis call to you...',
+            'Reality melts beneath your fingertips...',
+            'Paint kaleidoscopic visions with your touch...',
+            'Lost civilizations watch and wait...',
+            'Your gestures unleash fractal dimensions...',
+            'The crystal city pulses with your movements...',
+            'Conjure swirling galaxies with your palms...',
+            'Radical self-expression through finger wiggling...',
+            'Your hands conduct symphonies of color...'
+        ];
+        
+        new TypingAnimation(typedTextElement, mysteriousTexts, 120);
+        console.log('Typing animation initialized with multiple texts');
     }
 }
 

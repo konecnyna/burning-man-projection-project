@@ -1262,12 +1262,15 @@
           } else if (currentMode === 'active') {
             console.log('[ModeManager] Hand detected in active mode, resetting idle timer');
             this.resetIdleTimer();
+          } else if (currentMode === 'onboarding') {
+            console.log('[ModeManager] Hand detected in onboarding mode, resetting idle timer');
+            this.resetIdleTimer();
           }
           this.hideIdleWarning();
         } else {
-          // Hand lost - start idle timer if in active mode
-          if (currentMode === 'active') {
-            console.log('[ModeManager] Hand lost in active mode, starting idle timer');
+          // Hand lost - start idle timer if in active or onboarding mode
+          if (currentMode === 'active' || currentMode === 'onboarding') {
+            console.log(`[ModeManager] Hand lost in ${currentMode} mode, starting idle timer`);
             this.startIdleTimer();
           }
         }
@@ -1308,6 +1311,8 @@
           welcomeShownThisSession: true
         });
 
+        // Start idle timer for onboarding mode
+        this.startIdleTimer();
 
         // Load onboarding scene
         if (this.loadSceneCallback) {
@@ -2719,43 +2724,6 @@
         }
       }
 
-      updateIdleWarning() {
-        const idleWarning = document.getElementById('idleWarning');
-        const warningCountdown = document.getElementById('idleWarningCountdown');
-
-        if (this.isIdle || !this.idleTimeoutStartTime) {
-          if (this.idleWarningVisible) {
-            idleWarning.classList.remove('visible');
-            this.idleWarningVisible = false;
-          }
-          return;
-        }
-
-        // Calculate time remaining until idle timeout
-        const elapsed = (Date.now() - this.idleTimeoutStartTime) / 1000;
-        const remaining = Math.max(0, (this.idleTimeout / 1000) - elapsed);
-
-        // Log the countdown every second
-        const remainingSeconds = Math.floor(remaining);
-        //console.log(`[JS] Idle timeout countdown: ${remainingSeconds}s remaining (${remaining.toFixed(1)}s precise)`);
-
-        if (remaining <= 5 && remaining > 0) {
-          // Show warning when under 3 seconds
-          if (!this.idleWarningVisible) {
-            console.log('[JS] Showing idle warning - under 3 seconds');
-            idleWarning.classList.add('visible');
-            this.idleWarningVisible = true;
-          }
-          warningCountdown.textContent = Math.ceil(remaining);
-        } else {
-          // Hide warning when over 3 seconds or at 0
-          if (this.idleWarningVisible) {
-            console.log('[JS] Hiding idle warning - over 3 seconds or timeout reached');
-            idleWarning.classList.remove('visible');
-            this.idleWarningVisible = false;
-          }
-        }
-      }
 
       updateDebugPanel() {
         const debugVisible = this.appState.get('debugVisible');
@@ -2901,31 +2869,10 @@
         this.loadIdleScene();
       }
 
-      resetIdleTimer() {
-        console.log('[JS] Resetting idle timer');
-        if (this.idleTimer) {
-          clearTimeout(this.idleTimer);
-        }
-
-        if (!this.isIdle) {
-          this.idleTimeoutStartTime = Date.now();
-          this.idleTimer = setTimeout(() => {
-            this.enterIdleMode();
-          }, this.idleTimeout);
-        }
-      }
 
       enterIdleMode() {
         console.log('[JS] Entering idle mode - ending session');
         this.mode = 'idle';
-        this.idleTimeoutStartTime = null;
-
-        // Hide idle warning
-        const idleWarning = document.getElementById('idleWarning');
-        if (this.idleWarningVisible) {
-          idleWarning.classList.remove('visible');
-          this.idleWarningVisible = false;
-        }
 
         // Pause scene countdown
         if (this.sceneCountdownTimer) {
@@ -2940,9 +2887,6 @@
       exitIdleMode() {
         console.log('[JS] Exiting idle mode - starting onboarding mode');
         this.mode = 'onboarding';
-        if (this.idleTimer) {
-          clearTimeout(this.idleTimer);
-        }
 
         this.initializeSceneHandlers();
 
@@ -2951,7 +2895,6 @@
 
         // Show onboarding screen
         this.showOnboardingScreen();
-        this.resetIdleTimer();
       }
 
       pauseSceneSystem() {
@@ -3102,6 +3045,12 @@
             } else if (!event.data.hovering && window.app.sceneManager.sceneHandlers.onboarding.isHovering) {
               window.app.sceneManager.sceneHandlers.onboarding.stopCountdown();
             }
+          }
+        } else if (event.data.type === 'hand_detected') {
+          // Handle hand detection in onboarding/welcome screen
+          console.log('Hand detected in onboarding, resetting idle timer');
+          if (window.app && window.app.modeManager) {
+            window.app.modeManager.resetIdleTimer();
           }
         } else if (event.data.type === 'iframe_ready') {
           console.log('Iframe ready:', event.data.scene);

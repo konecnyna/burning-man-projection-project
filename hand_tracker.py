@@ -11,8 +11,9 @@ class HandTracker:
     """
     Hand tracking using MediaPipe directly
     """
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, production_mode: bool = False):
         self.event_bus = event_bus
+        self.production_mode = production_mode
         
         # Use MediaPipe directly like in your working implementation
         self.mp_hands = mp.solutions.hands
@@ -35,6 +36,14 @@ class HandTracker:
         self.frame_count = 0
         self.current_frame = None
         self.frame_lock = threading.Lock()
+        
+        # Stable hand tracking
+        self.tracked_hands = {}  # stable_id -> hand_data
+        self.next_hand_id = 0
+        self.max_tracking_distance = 0.3  # Maximum distance to consider same hand
+        
+        # Video processing (disabled in production mode for performance)
+        self.enable_video_processing = not production_mode
         
     def start(self, camera_index: int = 0):
         """Start the hand tracking system"""
@@ -102,40 +111,59 @@ class HandTracker:
         # Process with MediaPipe
         results = self.hands.process(rgb_frame)
         
-        # Create debug frame for visualization
-        debug_frame = frame.copy()
-        
         current_hands = []
+        raw_hand_landmarks = []
         if results.multi_hand_landmarks:
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # Extract hand data
                 hand_data = self._extract_hand_data(hand_landmarks, frame.shape)
-                hand_data['hand_id'] = idx
+                # Store landmark index for video processing
+                hand_data['_landmark_index'] = idx
                 current_hands.append(hand_data)
+                raw_hand_landmarks.append(hand_landmarks)
                 
-                # Draw landmarks and connections
-                self.mp_drawing.draw_landmarks(
-                    debug_frame, 
-                    hand_landmarks, 
-                    self.mp_hands.HAND_CONNECTIONS,
-                    self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                    self.mp_drawing_styles.get_default_hand_connections_style()
-                )
-                
-                # Draw bounding box
-                self._draw_hand_bounding_box(debug_frame, hand_landmarks, idx)
+        # Update stable hand tracking
+        current_hands = self._update_stable_hand_tracking(current_hands)
         
-        # Add debug overlay
-        cv2.putText(debug_frame, f"Hands: {len(current_hands)}", (10, 30), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(debug_frame, f"FPS: {int(self.fps)}", (10, 60), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(debug_frame, "MEDIAPIPE", (10, 90), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-                
-        # Store debug frame for video streaming
-        with self.frame_lock:
-            self.current_frame = debug_frame
+        # Video processing (only in development mode)
+        if self.enable_video_processing:
+            # Create debug frame for visualization
+            debug_frame = frame.copy()
+            
+            # Draw with stable IDs - need to map back to landmarks
+            hand_landmarks_map = {}
+            for i, hand_data in enumerate(current_hands):
+                if i < len(raw_hand_landmarks):
+                    hand_landmarks_map[hand_data['hand_id']] = raw_hand_landmarks[i]
+            
+            for hand_data in current_hands:
+                hand_id = hand_data['hand_id']
+                if hand_id in hand_landmarks_map:
+                    hand_landmarks = hand_landmarks_map[hand_id]
+                    
+                    # Draw landmarks and connections
+                    self.mp_drawing.draw_landmarks(
+                        debug_frame, 
+                        hand_landmarks, 
+                        self.mp_hands.HAND_CONNECTIONS,
+                        self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                        self.mp_drawing_styles.get_default_hand_connections_style()
+                    )
+                    
+                    # Draw bounding box with stable ID
+                    self._draw_hand_bounding_box(debug_frame, hand_landmarks, hand_id)
+            
+            # Add debug overlay
+            cv2.putText(debug_frame, f"Hands: {len(current_hands)}", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(debug_frame, f"FPS: {int(self.fps)}", (10, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(debug_frame, "MEDIAPIPE", (10, 90), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                    
+            # Store debug frame for video streaming
+            with self.frame_lock:
+                self.current_frame = debug_frame
                 
         # Emit events based on state changes
         self._emit_hand_events(current_hands)
@@ -153,6 +181,60 @@ class HandTracker:
         ))
         
         self.previous_hands = current_hands
+        
+    def _update_stable_hand_tracking(self, detected_hands):
+        """Update stable hand tracking to maintain consistent IDs"""
+        import math
+        
+        # Calculate distances between current hands and tracked hands
+        def calculate_distance(hand1, hand2):
+            """Calculate distance between two hand palm centers"""
+            p1 = hand1['palm_center']
+            p2 = hand2['palm_center']
+            return math.sqrt((p1['x'] - p2['x'])**2 + (p1['y'] - p2['y'])**2)
+        
+        # Create list to hold hands with stable IDs
+        stable_hands = []
+        used_stable_ids = set()
+        
+        # Match detected hands to existing tracked hands
+        for detected_hand in detected_hands:
+            best_match_id = None
+            best_distance = float('inf')
+            
+            # Find closest existing tracked hand
+            for stable_id, tracked_hand in self.tracked_hands.items():
+                if stable_id in used_stable_ids:
+                    continue
+                    
+                distance = calculate_distance(detected_hand, tracked_hand)
+                if distance < self.max_tracking_distance and distance < best_distance:
+                    best_distance = distance
+                    best_match_id = stable_id
+            
+            # Assign stable ID
+            if best_match_id is not None:
+                # Matched to existing hand
+                detected_hand['hand_id'] = best_match_id
+                used_stable_ids.add(best_match_id)
+            else:
+                # New hand detected
+                detected_hand['hand_id'] = self.next_hand_id
+                self.next_hand_id += 1
+            
+            stable_hands.append(detected_hand)
+        
+        # Update tracked hands dictionary
+        new_tracked_hands = {}
+        for hand in stable_hands:
+            new_tracked_hands[hand['hand_id']] = hand
+        
+        self.tracked_hands = new_tracked_hands
+        
+        # Sort hands by their stable ID to maintain consistent ordering
+        stable_hands.sort(key=lambda h: h['hand_id'])
+        
+        return stable_hands
         
     def _extract_hand_data(self, hand_landmarks, frame_shape) -> Dict:
         """Extract normalized hand data from MediaPipe landmarks"""
@@ -291,6 +373,8 @@ class HandTracker:
             
     def get_current_frame(self):
         """Get the current frame for video streaming"""
+        if not self.enable_video_processing:
+            return None
         with self.frame_lock:
             return self.current_frame.copy() if self.current_frame is not None else None
             

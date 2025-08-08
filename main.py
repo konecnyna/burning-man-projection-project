@@ -14,7 +14,7 @@ from hand_tracker import HandTracker
 class HandTrackingKiosk:
     def __init__(self, headless=False, production_mode=False, port=5000):
         self.event_bus = EventBus()
-        self.hand_tracker = HandTracker(self.event_bus)
+        self.hand_tracker = HandTracker(self.event_bus, production_mode=production_mode)
         self.web_app = None
         self.socketio = None
         self.server_thread = None
