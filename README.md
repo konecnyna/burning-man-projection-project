@@ -1,33 +1,54 @@
-# How to
+# ATLANTIS Hand Tracking Kiosk
 
-First make sure you follow prereqs and setup steps.
+Interactive hand tracking installation for Burning Man 2025.
 
-1. start server: `node src/server.server.js`
-2. site map:
-   - apps:
-      - http://localhost:3000/fluid-sim/index.html
-      - http://localhost:3000/neon-white-board/index.html
-   - pipe:
-      - http://localhost:3000/ 
+## Installation
 
-## Prereqs
+MediaPipe requires Python 3.11.11 for optimal performance.
 
-- python3
-- node v22.0.0
+```bash
+# Install pyenv (if not already installed)
+brew install pyenv
 
-## Setup
+# Install Python 3.11.11
+pyenv install 3.11.11
+pyenv local 3.11.11
 
+# Create virtual environment with correct Python version
+~/.pyenv/versions/3.11.11/bin/python -m venv venv
+source venv/bin/activate
 
-### Python opencv wrapper:
+# Install requirements
+pip install -r requirements.txt
+```
 
-1. `cd src/cv`
-2. `pip3 install -r requirements.txt`
-3. `python3 src/cv/main.py --enable-mouse --show-cv`
-4. `profit`
+## Running the Application
 
-### Node
+```bash
+# Activate virtual environment
+source venv/bin/activate
 
-1. `cd src/server`
-2. `npm install`
+# Run in development mode
+python main.py
 
-* Note: python3/pip3 is an alias for python 3.xx
+# Run in kiosk mode (fullscreen)
+python main.py --kiosk
+```
+
+## Features
+
+- Real-time hand tracking using MediaPipe
+- Multiple interactive visual scenes
+- Auto-cycling between scenes
+- Idle timeout and screensaver mode
+- Pipboy-style terminal UI aesthetic
+- Offline operation (no internet required)
+
+## Project Structure
+
+- `main.py` - Application entry point
+- `hand_tracker.py` - MediaPipe hand tracking
+- `scene_manager.py` - Scene management and cycling
+- `web_app.py` - Flask server and WebSocket handling
+- `static/` - Frontend HTML, CSS, and JavaScript files
+- `static/scenes/` - Individual interactive scene implementations

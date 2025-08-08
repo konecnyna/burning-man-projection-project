@@ -1,0 +1,3063 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlantis Hand Tracking Program</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --pipboy-green: #00ff41;
+      --pipboy-green-dark: #00dd33;
+      --pipboy-orange: rgb(255, 170, 60);
+      --pipboy-orange-glow: rgba(255, 170, 60, 0.5);
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #000;
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .app-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .scene-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+    }
+
+    .scene-container.active {
+      opacity: 1;
+    }
+
+    .scene-container.transitioning {
+      opacity: 0.5;
+    }
+
+    .parent-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 17, 0, 0.9);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    .parent-overlay.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .overlay-content {
+      text-align: center;
+      max-width: 600px;
+      background: #001100;
+      border: 3px solid #00ff41;
+      border-radius: 10px;
+      box-shadow:
+        0 0 30px rgba(0, 255, 65, 0.5),
+        inset 0 0 30px rgba(0, 255, 65, 0.1);
+      padding: 40px;
+      position: relative;
+    }
+
+    .overlay-content h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      color: #00ff41;
+      text-shadow: 0 0 20px #00ff41;
+      font-weight: bold;
+    }
+
+    .overlay-content p {
+      font-size: 1.2rem;
+      margin-bottom: 2rem;
+      color: #00dd33;
+      opacity: 0.9;
+    }
+
+    .scene-progress {
+      width: 100%;
+      height: 4px;
+      background: rgba(0, 255, 65, 0.2);
+      border: 1px solid #00ff41;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    }
+
+    .scene-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #00ff41, #00dd33);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px #00ff41;
+    }
+
+    .scene-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      color: #00ff41;
+      text-shadow: 0 0 5px #00ff41;
+    }
+
+    .scene-counter {
+      font-size: 1rem;
+      opacity: 0.8;
+      color: #00ff41;
+    }
+
+    .scene-timer {
+      font-size: 1rem;
+      opacity: 0.8;
+      color: #00ff41;
+    }
+
+    .hand-cursor {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      background: #00ff88;
+      border-radius: 50%;
+      box-shadow: 0 0 20px #00ff88;
+      transition: all 0.1s ease;
+      transform: translate(-50%, -50%);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .hand-cursor.hand-0 {
+      background: #00ff88;
+      box-shadow: 0 0 20px #00ff88;
+    }
+
+    .hand-cursor.hand-1 {
+      background: #ff6b6b;
+      box-shadow: 0 0 20px #ff6b6b;
+    }
+
+    .hand-cursor.hand-2 {
+      background: #4ecdc4;
+      box-shadow: 0 0 20px #4ecdc4;
+    }
+
+    .hand-cursor.hand-3 {
+      background: #ffe66d;
+      box-shadow: 0 0 20px #ffe66d;
+    }
+
+    .hand-cursor.hand-4 {
+      background: #a8e6cf;
+      box-shadow: 0 0 20px #a8e6cf;
+    }
+
+    .hand-cursor.hand-5 {
+      background: #ff8b94;
+      box-shadow: 0 0 20px #ff8b94;
+    }
+
+    .status-bar {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: #001100;
+      border: 2px solid #00ff41;
+      border-radius: 10px;
+      box-shadow:
+        0 0 20px rgba(0, 255, 65, 0.3),
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 50;
+      font-family: 'Share Tech Mono', monospace;
+      color: #00ff41;
+      max-height: 60px;
+      overflow: visible;
+    }
+
+    .idle-warning {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(51, 34, 0, 0.95);
+      border: 2px solid var(--pipboy-orange);
+      border-radius: 8px;
+      box-shadow:
+        0 0 20px var(--pipboy-orange-glow),
+        inset 0 0 15px rgba(255, 170, 60, 0.1);
+      padding: 12px 20px;
+      z-index: 60;
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--pipboy-orange);
+      text-shadow: 0 0 8px var(--pipboy-orange);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      animation: warning-pulse 1s ease-in-out infinite;
+    }
+
+    .idle-warning.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .warning-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .warning-icon {
+      font-size: 1.2rem;
+      animation: warning-flash 0.5s ease-in-out infinite alternate;
+    }
+
+    .warning-text {
+      font-size: 0.9rem;
+      font-weight: bold;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #00ff41;
+      text-shadow: 0 0 5px #00ff41;
+    }
+
+    .status-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--pipboy-orange);
+      box-shadow: 0 0 10px var(--pipboy-orange);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-indicator.connected {
+      background: var(--pipboy-orange);
+      box-shadow: 0 0 10px var(--pipboy-orange);
+    }
+
+    .status-indicator.ready {
+      background: var(--pipboy-green);
+      box-shadow: 0 0 15px var(--pipboy-green);
+      animation: ready-pulse 1.5s ease-in-out infinite;
+    }
+
+    .debug-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #001100;
+      border: 2px solid #00ff41;
+      border-radius: 5px;
+      box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
+      color: #00ff41;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+      text-shadow: 0 0 5px #00ff41;
+      padding: 10px 15px;
+      cursor: pointer;
+      z-index: 100;
+      transition: all 0.3s ease;
+    }
+
+    .debug-toggle:hover {
+      background: rgba(0, 255, 65, 0.1);
+      box-shadow: 0 0 25px rgba(0, 255, 65, 0.5);
+    }
+
+    .debug-panel {
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      background: #001100;
+      border: 2px solid #00ff41;
+      border-radius: 10px;
+      box-shadow:
+        0 0 20px rgba(0, 255, 65, 0.3),
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+      padding: 15px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.8rem;
+      color: #00ff41;
+      text-shadow: 0 0 5px #00ff41;
+      z-index: 100;
+      display: none;
+      max-width: 400px;
+    }
+
+    .debug-panel.visible {
+      display: block;
+    }
+
+    .manual-controls {
+      position: fixed;
+      top: 50%;
+      left: 20px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 100;
+      background: #001100;
+      border: 2px solid #00ff41;
+      border-radius: 10px;
+      box-shadow:
+        0 0 20px rgba(0, 255, 65, 0.3),
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+      padding: 15px;
+      width: auto;
+    }
+
+    .manual-controls button {
+      background: rgba(0, 255, 65, 0.1);
+      border: 1px solid #00ff41;
+      border-radius: 5px;
+      color: #00ff41;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+      text-shadow: 0 0 5px #00ff41;
+      padding: 10px 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      width: auto;
+      white-space: nowrap;
+    }
+
+    .manual-controls button:hover {
+      background: rgba(0, 255, 65, 0.2);
+      box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
+    }
+
+    .debug-video {
+      position: fixed;
+      top: 60px;
+      left: 20px;
+      background: #001100;
+      border: 2px solid #00ff41;
+      border-radius: 10px;
+      box-shadow:
+        0 0 20px rgba(0, 255, 65, 0.3),
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+      padding: 10px;
+      z-index: 100;
+      display: none;
+    }
+
+    .debug-video.visible {
+      display: block;
+    }
+
+    .debug-video img {
+      max-width: 320px;
+      max-height: 240px;
+      border-radius: 8px;
+    }
+
+    .debug-control {
+      margin: 5px 0;
+    }
+
+    .debug-control button {
+      background: rgba(0, 255, 65, 0.1);
+      border: 1px solid #00ff41;
+      border-radius: 3px;
+      color: #00ff41;
+      font-family: 'Share Tech Mono', monospace;
+      font-weight: bold;
+      text-shadow: 0 0 5px #00ff41;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.3s ease;
+    }
+
+    .debug-control button:hover {
+      background: rgba(0, 255, 65, 0.2);
+      box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    }
+
+    .debug-points {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 99;
+      display: none;
+    }
+
+    .debug-points.visible {
+      display: block;
+    }
+
+    .debug-point-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .controls-hud-hidden .status-bar,
+    .controls-hud-hidden .debug-toggle,
+    .controls-hud-hidden .debug-panel,
+    .controls-hud-hidden .debug-video,
+    .controls-hud-hidden .manual-controls,
+    .controls-hud-hidden .parent-overlay,
+    .controls-hud-hidden .idle-warning {
+      display: none !important;
+    }
+
+    /* Production mode CSS - Hide development controls even if JS fails */
+    .production-hidden {
+      display: none !important;
+    }
+
+    /* Add pulse animation for pipboy style */
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    @keyframes ready-pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow: 0 0 15px var(--pipboy-green);
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.7;
+        box-shadow: 0 0 25px var(--pipboy-green), 0 0 35px rgba(0, 255, 65, 0.3);
+        transform: scale(1.1);
+      }
+    }
+
+    @keyframes warning-pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 20px var(--pipboy-orange-glow), inset 0 0 15px rgba(255, 170, 60, 0.1);
+      }
+
+      50% {
+        box-shadow: 0 0 30px var(--pipboy-orange-glow), 0 0 40px rgba(255, 170, 60, 0.2), inset 0 0 20px rgba(255, 170, 60, 0.2);
+      }
+    }
+
+    @keyframes warning-flash {
+      0% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0.6;
+      }
+    }
+
+    /* Add scanlines effect to HUD elements */
+    .status-bar::before,
+    .debug-panel::before,
+    .manual-controls::before,
+    .debug-video::before,
+    .overlay-content::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(transparent 50%,
+          rgba(0, 255, 65, 0.03) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Glitch transition overlay */
+    .glitch-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 9999;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.1s ease;
+      pointer-events: none;
+    }
+
+    .glitch-overlay.active {
+      opacity: 1;
+      visibility: visible;
+      animation: glitchEffect 0.8s ease-in-out;
+    }
+
+    @keyframes glitchEffect {
+      0% {
+        opacity: 0;
+        filter: hue-rotate(0deg) saturate(1);
+        transform: translateX(0);
+      }
+
+      10% {
+        opacity: 1;
+        filter: hue-rotate(90deg) saturate(3);
+        transform: translateX(-2px);
+        box-shadow: 2px 0 0 #ff0040, -2px 0 0 #00ff40;
+      }
+
+      20% {
+        opacity: 0.8;
+        filter: hue-rotate(180deg) saturate(2);
+        transform: translateX(2px);
+        box-shadow: -2px 0 0 #ff0040, 2px 0 0 #0040ff;
+      }
+
+      30% {
+        opacity: 1;
+        filter: hue-rotate(270deg) saturate(4);
+        transform: translateX(-1px);
+        box-shadow: 1px 0 0 #40ff00, -1px 0 0 #ff4000;
+      }
+
+      40% {
+        opacity: 0.6;
+        filter: hue-rotate(45deg) saturate(1.5);
+        transform: translateX(1px);
+      }
+
+      50% {
+        opacity: 1;
+        filter: hue-rotate(135deg) saturate(2.5);
+        transform: translateX(0);
+        box-shadow: 0 0 10px #00ff41;
+      }
+
+      60% {
+        opacity: 0.4;
+        filter: hue-rotate(225deg) saturate(1.8);
+        transform: translateX(-1px);
+      }
+
+      70% {
+        opacity: 0.9;
+        filter: hue-rotate(315deg) saturate(3.2);
+        transform: translateX(1px);
+      }
+
+      80% {
+        opacity: 0.3;
+        filter: hue-rotate(60deg) saturate(1.2);
+        transform: translateX(0);
+      }
+
+      90% {
+        opacity: 0.7;
+        filter: hue-rotate(120deg) saturate(2.8);
+        transform: translateX(-0.5px);
+      }
+
+      100% {
+        opacity: 0;
+        filter: hue-rotate(0deg) saturate(1);
+        transform: translateX(0);
+      }
+    }
+
+    /* Additional glitch effects for scene container */
+    .scene-container.glitching {
+      animation: sceneGlitch 0.8s ease-in-out;
+    }
+
+    @keyframes sceneGlitch {
+
+      0%,
+      100% {
+        transform: translateX(0);
+        filter: contrast(1) brightness(1);
+      }
+
+      10% {
+        transform: translateX(-2px);
+        filter: contrast(1.2) brightness(1.1) hue-rotate(90deg);
+      }
+
+      20% {
+        transform: translateX(2px);
+        filter: contrast(0.8) brightness(0.9) hue-rotate(180deg);
+      }
+
+      30% {
+        transform: translateX(-1px);
+        filter: contrast(1.5) brightness(1.2) hue-rotate(270deg);
+      }
+
+      40% {
+        transform: translateX(1px);
+        filter: contrast(0.9) brightness(0.8) hue-rotate(45deg);
+      }
+
+      50% {
+        transform: translateX(0);
+        filter: contrast(1.3) brightness(1.3) hue-rotate(135deg);
+      }
+
+      60% {
+        transform: translateX(-0.5px);
+        filter: contrast(0.7) brightness(0.7) hue-rotate(225deg);
+      }
+
+      70% {
+        transform: translateX(0.5px);
+        filter: contrast(1.4) brightness(1.4) hue-rotate(315deg);
+      }
+
+      80% {
+        transform: translateX(0);
+        filter: contrast(1.1) brightness(1.1) hue-rotate(60deg);
+      }
+
+      90% {
+        transform: translateX(-0.2px);
+        filter: contrast(0.95) brightness(0.95) hue-rotate(120deg);
+      }
+    }
+
+    .status-bar>*,
+    .debug-panel>*,
+    .manual-controls>*,
+    .debug-video>*,
+    .overlay-content>* {
+      position: relative;
+      z-index: 2;
+    }
+  </style>
+</head>
+
+<body>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono:wght@400&display=swap" rel="stylesheet">
+  <div class="app-container">
+    <!-- Scene containers will be dynamically created -->
+    <div class="scene-container active" id="scene-container">
+      <!-- Current scene content will be loaded here -->
+    </div>
+
+    <!-- Glitch transition overlay -->
+    <div class="glitch-overlay" id="glitchOverlay"></div>
+
+    <!-- Parent overlay for scene transitions -->
+    <div class="parent-overlay hud-element" id="parentOverlay">
+      <div class="overlay-content">
+        <h1 id="overlayTitle">Loading...</h1>
+        <p id="overlayDescription">Preparing interactive experience...</p>
+
+        <div id="overlayExtraContent"></div>
+      </div>
+    </div>
+
+    <!-- Hand cursors -->
+    <div class="hand-cursors" id="handCursors">
+      <!-- Hand cursors will be created dynamically -->
+    </div>
+
+    <!-- Debug points -->
+    <div class="debug-points hud-element" id="debugPoints">
+      <canvas class="debug-point-canvas" id="debugCanvas1"></canvas>
+      <canvas class="debug-point-canvas" id="debugCanvas2"></canvas>
+      <canvas class="debug-point-canvas" id="debugCanvas3"></canvas>
+      <canvas class="debug-point-canvas" id="debugCanvas4"></canvas>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar hud-element" id="status-bar">
+      <div class="status-item">
+        <div class="status-indicator" id="connectionStatus"></div>
+        <span id="connectionText">Disconnected</span>
+      </div>
+      <div class="status-item">
+        <span id="fpsCounter">FPS: 0</span>
+      </div>
+      <div class="status-item">
+        <span id="handCounter">Hands: 0</span>
+      </div>
+      <div class="status-item">
+        <span id="currentScene">Scene: Loading</span>
+      </div>
+      <div class="status-item">
+        <span id="sceneCountdown">Next: --</span>
+      </div>
+    </div>
+
+    <!-- Idle warning notification -->
+    <div class="idle-warning hud-element" id="idleWarning">
+      <div class="warning-content">
+        <span class="warning-icon">⚠</span>
+        <span class="warning-text">No hands detected. Entering idle mode in <span
+            id="idleWarningCountdown">3</span>s</span>
+      </div>
+    </div>
+
+    <!-- Debug controls -->
+    <button class="debug-toggle hud-element" id="debug-toggle" onclick="toggleDebug()">Debug</button>
+    <div class="debug-panel hud-element" id="debug-panel">
+      <div>Events: <span id="eventCount">0</span></div>
+      <div>Scene: <span id="debugScene">-</span></div>
+      <div>Timer: <span id="debugTimer">-</span></div>
+      <div>Auto-cycle: <span id="debugAutoCycle">-</span></div>
+      <div>Hands detected: <span id="debugHandCount">0</span></div>
+      <div>Debug points: <span id="debugPointsStatus">Off</span></div>
+      <div>Controls/HUD: <span id="controlsHUDStatus">On</span></div>
+      <div class="debug-control">
+        <button onclick="toggleVideo()">Toggle Video</button>
+        <button onclick="toggleDebugPoints()">Toggle Debug Points</button>
+        <button onclick="toggleControlsHUD()">Toggle Controls/HUD</button>
+      </div>
+      <div style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px;">
+        Tip: Ctrl+Shift+H to toggle Controls/HUD
+      </div>
+    </div>
+
+    <!-- Debug video display -->
+    <div class="debug-video" id="debugVideo">
+      <!-- <img id="videoStream" src="/video_feed" alt="Camera Feed"> -->
+    </div>
+
+    <!-- Manual controls -->
+    <div class="manual-controls hud-element" id="manual-controls">
+      <button onclick="previousScene()">Prev ◀</button>
+      <button onclick="nextScene()">Next ▶</button>
+      <!-- <button onclick="toggleAutoCycle()">Auto</button> -->
+    </div>
+  </div>
+
+  <script src="/static/socket.io.js"></script>
+  <script>
+    // ============================================================================
+    // APPLICATION STATE - Global state container (similar to Android Application)
+    // ============================================================================
+    class ApplicationState {
+      constructor() {
+        this.state = {
+          // Core application state
+          isConnected: false,
+          fps: 0,
+          eventCount: 0,
+
+          // Mode state
+          currentMode: 'idle', // idle, onboarding, active, transitioning
+          previousMode: null,
+          modeStartTime: Date.now(),
+
+          // Session state
+          sessionActive: false,
+          sessionStartTime: null,
+          welcomeShownThisSession: false,
+
+          // Hand tracking state
+          hands: [],
+          handsDetected: false,
+          lastHandDetectedTime: null,
+
+          // Scene state
+          currentScene: null,
+          sceneStartTime: null,
+          sceneIndex: 0,
+          totalScenes: 0,
+
+          // Idle management
+          idleTimeoutMs: 15000,
+          idleTimeoutStartTime: null,
+
+          // Debug state
+          debugVisible: false,
+          debugPointsVisible: false,
+          controlsHUDVisible: true
+        };
+
+        this.listeners = new Map();
+        this.stateHistory = [];
+        this.maxHistorySize = 100;
+      }
+
+      // Get current state (read-only)
+      getState() {
+        return { ...this.state };
+      }
+
+      // Get specific state value
+      get(key) {
+        return this.state[key];
+      }
+
+      // Update state and notify listeners
+      setState(updates) {
+        const oldState = { ...this.state };
+        this.state = { ...this.state, ...updates };
+
+        // Add to history
+        this.stateHistory.push({
+          timestamp: Date.now(),
+          changes: updates,
+          oldState: oldState,
+          newState: { ...this.state }
+        });
+
+        // Trim history
+        if (this.stateHistory.length > this.maxHistorySize) {
+          this.stateHistory.shift();
+        }
+
+        // Notify listeners
+        Object.keys(updates).forEach(key => {
+          if (this.listeners.has(key)) {
+            this.listeners.get(key).forEach(callback => {
+              callback(this.state[key], oldState[key], this.state);
+            });
+          }
+        });
+
+        // Notify global listeners
+        if (this.listeners.has('*')) {
+          this.listeners.get('*').forEach(callback => {
+            callback(this.state, oldState, updates);
+          });
+        }
+      }
+
+      // Subscribe to state changes
+      subscribe(key, callback) {
+        if (!this.listeners.has(key)) {
+          this.listeners.set(key, []);
+        }
+        this.listeners.get(key).push(callback);
+
+        // Return unsubscribe function
+        return () => {
+          const callbacks = this.listeners.get(key);
+          if (callbacks) {
+            const index = callbacks.indexOf(callback);
+            if (index > -1) {
+              callbacks.splice(index, 1);
+            }
+          }
+        };
+      }
+
+      // Get state history for debugging
+      getHistory() {
+        return [...this.stateHistory];
+      }
+
+      // Reset state to initial values
+      reset() {
+        this.setState({
+          currentMode: 'idle',
+          previousMode: null,
+          modeStartTime: Date.now(),
+          sessionActive: false,
+          sessionStartTime: null,
+          welcomeShownThisSession: false,
+          hands: [],
+          handsDetected: false,
+          lastHandDetectedTime: null,
+          currentScene: null,
+          sceneStartTime: null,
+          sceneIndex: 0,
+          idleTimeoutStartTime: null
+        });
+      }
+    }
+
+    // ============================================================================
+    // HUD MANAGER - Centralized HUD visibility management
+    // ============================================================================
+    class HUDManager {
+      constructor(appState) {
+        this.appState = appState;
+        this.debugMode = false;
+        this.productionMode = false;
+        this.overlayTimer = null;
+        this.loadProductionMode();
+      }
+
+      async loadProductionMode() {
+        try {
+          const response = await fetch('/api/production-mode');
+          const data = await response.json();
+          this.productionMode = data.production_mode;
+          console.log(`[HUDManager] Production mode: ${this.productionMode}`);
+          
+          // Apply production mode styles immediately
+          this.applyProductionModeStyles();
+        } catch (error) {
+          console.warn('[HUDManager] Failed to load production mode status:', error);
+          this.productionMode = false;
+        }
+      }
+
+      applyProductionModeStyles() {
+        if (this.productionMode) {
+          // Hide development UI elements in production mode
+          const devElements = document.querySelectorAll('#manual-controls, #debug-toggle');
+          devElements.forEach(element => {
+            if (element) {
+              element.style.display = 'none';
+              element.classList.add('production-hidden');
+            }
+          });
+          console.log('[HUDManager] Applied production mode - hiding dev controls');
+        }
+      }
+
+      show(reason = 'unknown') {
+        console.log(`[HUDManager] Showing HUD (reason: ${reason})`);
+        
+        // Show HUD elements when not in idle mode, but respect debug settings
+        const appContainer = document.querySelector('.app-container');
+        if (appContainer && this.appState.get('controlsHUDVisible') !== false) {
+          appContainer.classList.remove('controls-hud-hidden');
+        }
+
+        // Show all elements with hud-element class
+        const hudElements = document.querySelectorAll('.hud-element');
+        hudElements.forEach(element => {
+          // Skip production-hidden elements
+          if (this.productionMode && element.classList.contains('production-hidden')) {
+            return;
+          }
+          element.style.display = '';
+        });
+
+        // Ensure production mode styles are still applied
+        this.applyProductionModeStyles();
+      }
+
+      hide(reason = 'unknown') {
+        console.log(`[HUDManager] Hiding HUD (reason: ${reason})`);
+        
+        // Hide ALL HUD elements
+        const appContainer = document.querySelector('.app-container');
+        if (appContainer) {
+          appContainer.classList.add('controls-hud-hidden');
+        }
+
+        // Hide all elements with hud-element class
+        const hudElements = document.querySelectorAll('.hud-element');
+        hudElements.forEach(element => {
+          element.style.display = 'none';
+        });
+      }
+
+      hideForMode(mode) {
+        console.log(`[HUDManager] Hiding HUD for mode: ${mode}`);
+        this.hide(`mode-${mode}`);
+      }
+
+      showForMode(mode) {
+        console.log(`[HUDManager] Showing HUD for mode: ${mode}`);
+        
+        // Different modes might have different HUD visibility rules
+        switch (mode) {
+          case 'idle':
+            this.hide('idle-mode');
+            break;
+          case 'onboarding':
+            // For onboarding, we might want to show only specific elements
+            this.show('onboarding-mode');
+            break;
+          case 'active':
+            this.show('active-mode');
+            break;
+          default:
+            this.show('default-mode');
+        }
+      }
+
+      updateVisibility(mode) {
+        if (mode === 'idle') {
+          this.hideForMode('idle');
+        } else {
+          this.showForMode(mode);
+        }
+      }
+
+      setDebugMode(enabled) {
+        this.debugMode = enabled;
+        // Could add debug-specific HUD behavior here
+      }
+
+      showOverlay(title, description, extraContent) {
+        console.log(`[HUDManager] Showing overlay: ${title}`, title, description, extraContent);
+        
+        const overlay = document.getElementById('parentOverlay');
+        const overlayTitle = document.getElementById('overlayTitle');
+        const overlayDescription = document.getElementById('overlayDescription');
+        const overlayExtraContent = document.getElementById('overlayExtraContent');
+        
+        if (overlayTitle && title) {
+          overlayTitle.textContent = title;
+        }
+        
+        if (overlayDescription && description) {
+          overlayDescription.textContent = description;
+        }
+        
+        // Handle extra content (scene progress, etc.)
+        if (overlayExtraContent) {
+          if (extraContent) {
+            overlayExtraContent.innerHTML = extraContent;
+          } else {
+            overlayExtraContent.innerHTML = '';
+          }
+        }
+        
+        // Show the overlay (regardless of production mode)
+        overlay.classList.add('visible');
+        
+        // Auto-hide after 3 seconds
+        if (this.overlayTimer) {
+          clearTimeout(this.overlayTimer);
+        }
+        
+        this.overlayTimer = setTimeout(() => {
+          this.hideOverlay();
+        }, 3000);
+      }
+
+      hideOverlay() {
+        console.log('[HUDManager] Hiding overlay');
+        
+        const overlay = document.getElementById('parentOverlay');
+        if (overlay) {
+          overlay.classList.remove('visible');
+        }
+        
+        if (this.overlayTimer) {
+          clearTimeout(this.overlayTimer);
+          this.overlayTimer = null;
+        }
+      }
+    }
+
+    // ============================================================================
+    // MODE MANAGER - Handles application mode state machine
+    // ============================================================================
+    class ModeManager {
+      constructor(appState, loadSceneCallback = null) {
+        this.appState = appState;
+        this.loadSceneCallback = loadSceneCallback;
+        this.hudManager = new HUDManager(appState);
+        this.idleTimer = null;
+        this.idleWarningTimer = null;
+        this.idleWarningVisible = false;
+
+        // Scene definitions for mode-specific scenes
+        this.idleScene = {
+          id: 'idle',
+          name: 'Idle Screen',
+          description: 'Screensaver mode - show hands to begin',
+          duration: 0,
+          html_file: 'scenes/idle.html',
+          background_color: '#000000'
+        };
+
+        this.onboardingScene = {
+          id: 'onboarding',
+          name: 'Welcome & Instructions',
+          description: 'Interactive welcome and instructions',
+          duration: 0,
+          html_file: 'scenes/welcome.html',
+          background_color: '#1e3c72'
+        };
+
+        // Mode definitions
+        this.modes = {
+          idle: {
+            name: 'Idle',
+            allowTransitions: ['onboarding'],
+            onEnter: () => this.onEnterIdle(),
+            onExit: () => this.onExitIdle()
+          },
+          onboarding: {
+            name: 'Onboarding',
+            allowTransitions: ['active', 'idle'],
+            onEnter: () => this.onEnterOnboarding(),
+            onExit: () => this.onExitOnboarding()
+          },
+          active: {
+            name: 'Active',
+            allowTransitions: ['idle'],
+            onEnter: () => this.onEnterActive(),
+            onExit: () => this.onExitActive()
+          },
+          transitioning: {
+            name: 'Transitioning',
+            allowTransitions: ['idle', 'onboarding', 'active'],
+            onEnter: () => this.onEnterTransitioning(),
+            onExit: () => this.onExitTransitioning()
+          }
+        };
+
+        // Subscribe to hand tracking events
+        this.appState.subscribe('hands', (hands) => this.onHandsChanged(hands));
+
+        // Initialize the current mode (trigger initial mode entry)
+        this.initializeCurrentMode();
+      }
+
+      // Initialize the current mode by triggering its enter handler
+      initializeCurrentMode() {
+        const currentMode = this.appState.get('currentMode');
+        this.transitionTo(currentMode);
+        console.log(`[ModeManager] Initializing current mode: ${currentMode}`);
+
+        const modeConfig = this.modes[currentMode];
+        if (modeConfig && modeConfig.onEnter) {
+          modeConfig.onEnter();
+        }
+      }
+
+      // Transition to a new mode
+      transitionTo(newMode) {
+        const currentMode = this.appState.get('currentMode');
+        if (currentMode === newMode) {
+          console.log(`[ModeManager] Already in ${newMode} mode`);
+          return;
+        }
+
+        switch(newMode) {
+          
+        }
+
+        // Check if transition is allowed
+        if (!this.modes[currentMode].allowTransitions.includes(newMode)) {
+          console.warn(`[ModeManager] Invalid transition from ${currentMode} to ${newMode}`);
+          return;
+        }
+
+        console.log(`[ModeManager] Transitioning from ${currentMode} to ${newMode}`);
+
+        // Trigger glitch transition effect
+        this.triggerGlitchTransition(() => {
+          // Exit current mode
+          if (this.modes[currentMode].onExit) {
+            this.modes[currentMode].onExit();
+          }
+
+          // Update state
+          this.appState.setState({
+            previousMode: currentMode,
+            currentMode: newMode,
+            modeStartTime: Date.now()
+          });
+
+          // Enter new mode
+          if (this.modes[newMode].onEnter) {
+            this.modes[newMode].onEnter();
+          }
+        });
+      }
+
+      // Trigger glitch transition animation
+      triggerGlitchTransition(callback) {
+        const glitchOverlay = document.getElementById('glitchOverlay');
+        const sceneContainer = document.getElementById('scene-container');
+
+        if (glitchOverlay && sceneContainer) {
+          // Start glitch effects
+          glitchOverlay.classList.add('active');
+          sceneContainer.classList.add('glitching');
+
+          // Execute transition in the middle of the glitch
+          setTimeout(() => {
+            if (callback) callback();
+          }, 400); // Middle of 0.8s animation
+
+          // Clean up glitch effects
+          setTimeout(() => {
+            glitchOverlay.classList.remove('active');
+            sceneContainer.classList.remove('glitching');
+          }, 800); // Full animation duration
+        } else {
+          // Fallback if elements not found
+          if (callback) callback();
+        }
+      }
+
+      // Handle hand detection changes
+      onHandsChanged(hands) {
+        const wasDetected = this.appState.get('handsDetected');
+        const nowDetected = hands.length > 0;
+
+        // Only update detection-related state, not hands array to avoid recursion
+        if (wasDetected !== nowDetected) {
+          console.log(`[ModeManager] Hand detection changed: ${wasDetected} -> ${nowDetected}`);
+          this.appState.setState({
+            handsDetected: nowDetected,
+            lastHandDetectedTime: nowDetected ? Date.now() : this.appState.get('lastHandDetectedTime')
+          });
+          this.onHandDetectionChanged(nowDetected);
+        }
+      }
+
+      onHandDetectionChanged(detected) {
+        const currentMode = this.appState.get('currentMode');
+        console.log(`[ModeManager] onHandDetectionChanged: detected=${detected}, currentMode=${currentMode}`);
+
+        if (detected) {
+          // Hand detected - handle mode transitions
+          if (currentMode === 'idle') {
+            console.log('[ModeManager] Hand detected in idle mode, transitioning to onboarding');
+            this.transitionTo('onboarding');
+          } else if (currentMode === 'active') {
+            console.log('[ModeManager] Hand detected in active mode, resetting idle timer');
+            this.resetIdleTimer();
+          } else if (currentMode === 'onboarding') {
+            console.log('[ModeManager] Hand detected in onboarding mode, resetting idle timer');
+            this.resetIdleTimer();
+          }
+          this.hideIdleWarning();
+        } else {
+          // Hand lost - start idle timer if in active or onboarding mode
+          if (currentMode === 'active' || currentMode === 'onboarding') {
+            console.log(`[ModeManager] Hand lost in ${currentMode} mode, starting idle timer`);
+            this.startIdleTimer();
+          }
+        }
+      }
+
+      // Mode enter/exit handlers
+      onEnterIdle() {
+        console.log('[ModeManager] Entering idle mode');
+        this.clearIdleTimer();
+        this.hideIdleWarning();
+        this.hudManager.hideForMode('idle');
+
+        this.appState.setState({
+          sessionActive: false,
+          sessionStartTime: null,
+          welcomeShownThisSession: false
+        });
+
+        // Load idle scene
+        if (this.loadSceneCallback) {
+          this.loadSceneCallback(this.idleScene);
+        }
+      }
+
+      onExitIdle() {
+        console.log('[ModeManager] Exiting idle mode');
+      }
+
+      onEnterOnboarding() {
+        console.log('[ModeManager] Entering onboarding mode');
+        this.clearIdleTimer();
+        this.hideIdleWarning();
+        this.hudManager.showForMode('onboarding');
+        
+        this.appState.setState({
+          sessionActive: true,
+          sessionStartTime: Date.now(),
+          welcomeShownThisSession: true
+        });
+
+        // Start idle timer for onboarding mode
+        this.startIdleTimer();
+
+        // Load onboarding scene
+        if (this.loadSceneCallback) {
+          console.log('[ModeManager] Loading onboarding scene:', this.onboardingScene);
+          this.loadSceneCallback(this.onboardingScene);
+        }
+      }
+
+      onExitOnboarding() {
+        console.log('[ModeManager] Exiting onboarding mode');
+
+        // Show HUD when exiting onboarding mode
+        const appContainer = document.querySelector('.app-container');
+        if (appContainer && this.appState.get('controlsHUDVisible') !== false) {
+          appContainer.classList.remove('controls-hud-hidden');
+        }
+      }
+
+      onEnterActive() {
+        console.log('[ModeManager] Entering active mode');
+        this.startIdleTimer();
+      }
+
+      onExitActive() {
+        console.log('[ModeManager] Exiting active mode');
+        this.clearIdleTimer();
+        this.hideIdleWarning();
+      }
+
+      onEnterTransitioning() {
+        console.log('[ModeManager] Entering transitioning mode');
+      }
+
+      onExitTransitioning() {
+        console.log('[ModeManager] Exiting transitioning mode');
+      }
+
+      // Complete onboarding and move to active mode
+      completeOnboarding() {
+        if (this.appState.get('currentMode') === 'onboarding') {
+          this.transitionTo('active');
+        }
+      }
+
+      // Idle timer management
+      startIdleTimer() {
+        this.clearIdleTimer();
+
+        const idleTimeoutMs = this.appState.get('idleTimeoutMs');
+        this.appState.setState({ idleTimeoutStartTime: Date.now() });
+
+        console.log(`[ModeManager] Starting idle timer: ${idleTimeoutMs}ms`);
+
+        this.idleTimer = setTimeout(() => {
+          console.log('[ModeManager] Idle timeout reached');
+          this.transitionTo('idle');
+        }, idleTimeoutMs);
+
+        // Start warning timer (show warning 5 seconds before timeout)
+        const warningTimeMs = Math.max(0, idleTimeoutMs - 5000);
+        this.idleWarningTimer = setTimeout(() => {
+          this.showIdleWarning();
+        }, warningTimeMs);
+      }
+
+      resetIdleTimer() {
+        const currentMode = this.appState.get('currentMode');
+        if (currentMode === 'active') {
+          console.log('[ModeManager] Resetting idle timer');
+          this.startIdleTimer();
+        }
+      }
+
+      clearIdleTimer() {
+        if (this.idleTimer) {
+          clearTimeout(this.idleTimer);
+          this.idleTimer = null;
+        }
+        if (this.idleWarningTimer) {
+          clearTimeout(this.idleWarningTimer);
+          this.idleWarningTimer = null;
+        }
+        this.appState.setState({ idleTimeoutStartTime: null });
+      }
+
+      // Idle warning management
+      showIdleWarning() {
+        if (!this.idleWarningVisible) {
+          console.log('[ModeManager] Showing idle warning');
+          const idleWarning = document.getElementById('idleWarning');
+          if (idleWarning) {
+            idleWarning.classList.add('visible');
+            this.idleWarningVisible = true;
+            this.updateIdleWarningCountdown();
+          }
+        }
+      }
+
+      hideIdleWarning() {
+        if (this.idleWarningVisible) {
+          console.log('[ModeManager] Hiding idle warning');
+          const idleWarning = document.getElementById('idleWarning');
+          if (idleWarning) {
+            idleWarning.classList.remove('visible');
+            this.idleWarningVisible = false;
+          }
+        }
+      }
+
+      updateIdleWarningCountdown() {
+        if (!this.idleWarningVisible) return;
+
+        const idleTimeoutStartTime = this.appState.get('idleTimeoutStartTime');
+        const idleTimeoutMs = this.appState.get('idleTimeoutMs');
+
+        if (idleTimeoutStartTime) {
+          const elapsed = Date.now() - idleTimeoutStartTime;
+          const remaining = Math.max(0, (idleTimeoutMs - elapsed) / 1000);
+
+          const warningCountdown = document.getElementById('idleWarningCountdown');
+          if (warningCountdown) {
+            warningCountdown.textContent = Math.ceil(remaining);
+          }
+
+          if (remaining > 0) {
+            setTimeout(() => this.updateIdleWarningCountdown(), 100);
+          }
+        }
+      }
+
+      // Get current mode info
+      getCurrentMode() {
+        return this.appState.get('currentMode');
+      }
+
+      // Check if in specific mode
+      isIdle() {
+        return this.getCurrentMode() === 'idle';
+      }
+
+      isOnboarding() {
+        return this.getCurrentMode() === 'onboarding';
+      }
+
+      isActive() {
+        return this.getCurrentMode() === 'active';
+      }
+
+    }
+
+    // ============================================================================
+    // SCENE MANAGER - Handles scene lifecycle and transitions
+    // ============================================================================
+    class SceneManager {
+      constructor(appState, modeManager, app) {
+        this.appState = appState;
+        this.modeManager = modeManager;
+        this.app = app;
+        this.hudManager = modeManager.hudManager;
+        this.sceneHandlers = {};
+        this.cycleTimer = null;
+        this.countdownTimer = null;
+        this.currentSceneIframe = null;
+        this.defaultDuration = 15
+
+        // Scene configurations
+        this.scenes = [
+          {
+            id: 'fluidsim',
+            name: 'Fluid Simulation',
+            description: 'WebGL fluid simulation controlled by hand movements',
+            duration: this.defaultDuration,
+            html_file: 'scenes/fluidsim/index.html',
+            background_color: '#000000'
+          },
+          {
+            id: 'cosmic_symbolism',
+            name: 'Cosmic Symbolism',
+            description: 'Navigate through cosmic imagery with hand movements',
+            duration: this.defaultDuration,
+            html_file: 'scenes/cosmic-symbolism/index.html',
+            background_color: '#000000'
+          },
+          {
+            id: 'psychedelic_waves',
+            name: 'Psychedelic Waves',
+            description: 'WebGL shader-based wave visualization controlled by hand movements',
+            duration: this.defaultDuration,
+            html_file: 'scenes/psychedelic-waves/index.html',
+            background_color: '#000000'
+          },
+          {
+            id: 'orbits',
+            name: 'Orbits',
+            description: 'An interactive flight through attractor orbits using hopalong formula',
+            duration: this.defaultDuration,
+            html_file: 'scenes/orbits/index.html',
+            background_color: '#000000'
+          },
+          {
+            id: 'tie_dye',
+            name: 'Tie Dye',
+            description: 'Use your hands to create a tie dye pattern',
+            duration: this.defaultDuration,
+            html_file: 'scenes/tie-dye/index.html',
+            background_color: '#000000'
+          }
+        ];
+
+
+        // Subscribe to mode changes
+        this.appState.subscribe('currentMode', (mode) => this.onModeChanged(mode));
+
+        // Initialize scene handlers
+        this.initializeSceneHandlers();
+
+        // Handle initial mode
+        this.onModeChanged(this.appState.get('currentMode'));
+      }
+
+      // Handle mode changes
+      onModeChanged(mode) {
+        console.log(`[SceneManager] Mode changed to: ${mode}`);
+
+        switch (mode) {
+          case 'idle':
+            // Scene loading is now handled by ModeManager
+            this.stopSceneCycling();
+            break;
+          case 'onboarding':
+            // Scene loading is now handled by ModeManager
+            this.stopSceneCycling();
+            break;
+          case 'active':
+            this.startSceneCycling();
+            break;
+        }
+      }
+
+      // Load specific scene types - these are now handled by ModeManager
+      loadIdleScene() {
+        console.log('[SceneManager] Idle scene loading is now handled by ModeManager');
+        this.stopSceneCycling();
+      }
+
+      loadOnboardingScene() {
+        console.log('[SceneManager] Onboarding scene loading is now handled by ModeManager');
+        this.stopSceneCycling();
+      }
+
+      startSceneCycling() {
+        console.log('[SceneManager] Starting scene cycling');
+        this.stopSceneCycling();
+
+        // Start with first scene
+        this.appState.setState({ sceneIndex: 0, totalScenes: this.scenes.length });
+        this.loadScene(this.scenes[0]);
+        this.scheduleNextScene();
+      }
+
+      stopSceneCycling() {
+        if (this.cycleTimer) {
+          clearTimeout(this.cycleTimer);
+          this.cycleTimer = null;
+        }
+        if (this.countdownTimer) {
+          clearInterval(this.countdownTimer);
+          this.countdownTimer = null;
+        }
+      }
+
+      scheduleNextScene() {
+        const currentScene = this.appState.get('currentScene');
+        if (!currentScene || currentScene.duration === 0) return;
+
+        this.cycleTimer = setTimeout(() => {
+          this.nextScene();
+        }, currentScene.duration * 1000);
+
+        // Start countdown timer
+        this.startSceneCountdown();
+      }
+
+      nextScene() {
+        if (this.modeManager.getCurrentMode() !== 'active') return;
+
+        const currentIndex = this.appState.get('sceneIndex');
+        const nextIndex = (currentIndex + 1) % this.scenes.length;
+
+        this.appState.setState({ sceneIndex: nextIndex });
+        this.loadScene(this.scenes[nextIndex]);
+        this.scheduleNextScene();
+      }
+
+      previousScene() {
+        if (this.modeManager.getCurrentMode() !== 'active') return;
+
+        const currentIndex = this.appState.get('sceneIndex');
+        const prevIndex = (currentIndex - 1 + this.scenes.length) % this.scenes.length;
+
+        this.appState.setState({ sceneIndex: prevIndex });
+        this.loadScene(this.scenes[prevIndex]);
+        this.scheduleNextScene();
+      }
+
+      startSceneCountdown() {
+        if (this.countdownTimer) {
+          clearInterval(this.countdownTimer);
+        }
+
+        this.countdownTimer = setInterval(() => {
+          this.updateSceneCountdown();
+        }, 1000);
+      }
+
+      updateSceneCountdown() {
+        const currentScene = this.appState.get('currentScene');
+        const sceneStartTime = this.appState.get('sceneStartTime');
+
+        if (!currentScene || !sceneStartTime || currentScene.duration === 0) {
+          const countdownElement = document.getElementById('sceneCountdown');
+          if (countdownElement) {
+            countdownElement.textContent = 'Next: --';
+          }
+          return;
+        }
+
+        const elapsed = (Date.now() - sceneStartTime) / 1000;
+        const remaining = Math.max(0, currentScene.duration - elapsed);
+
+        const countdownElement = document.getElementById('sceneCountdown');
+        if (countdownElement) {
+          if (remaining <= 0) {
+            countdownElement.textContent = 'Next: Now';
+          } else {
+            const minutes = Math.floor(remaining / 60);
+            const seconds = Math.floor(remaining % 60);
+
+            if (minutes > 0) {
+              countdownElement.textContent = `Next: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+            } else {
+              countdownElement.textContent = `Next: ${seconds}s`;
+            }
+          }
+        }
+      }
+
+      // Load a scene
+      async loadScene(scene) {
+        try {
+          console.log('[SceneManager] Loading scene:', scene.id);
+
+          // Clean up previous scene
+          if (this.appState.get('currentScene')) {
+            this.callSceneHandler('onDestroy');
+          }
+
+          // Update state
+          this.appState.setState({
+            currentScene: scene,
+            sceneStartTime: Date.now()
+          });
+
+          // Show overlay during scene transition (only in active mode)
+          if (this.modeManager.getCurrentMode() === 'active') {
+            const sceneIndex = this.appState.get('sceneIndex') + 1; // 1-based for display
+            const totalScenes = this.appState.get('totalScenes');
+            const duration = scene.duration;
+            const progressPercent = Math.round((sceneIndex / totalScenes) * 100);
+            
+            const sceneProgressContent = `
+              <div class="scene-progress">
+                <div class="scene-progress-bar" style="width: ${progressPercent}%;"></div>
+              </div>
+              <div class="scene-info">
+                <div class="scene-counter">Content ${sceneIndex} of ${totalScenes}</div>
+                <div class="scene-timer">${duration}s remaining</div>
+              </div>
+            `;
+            
+            this.hudManager.showOverlay(
+              scene.name,
+              scene.description,
+              sceneProgressContent
+            );
+          }
+
+
+          const container = document.getElementById('scene-container');
+
+          // Handle iframe scenes
+          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'idle'].includes(scene.id)) {
+            container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
+
+            setTimeout(() => {
+              const iframe = document.getElementById('scene-iframe');
+              if (iframe && iframe.contentWindow) {
+                this.currentSceneIframe = iframe.contentWindow;
+              }
+            }, 1000);
+          } else {
+            // Load HTML fragment scenes
+            const response = await fetch(`/${scene.html_file}`);
+            if (!response.ok) {
+              throw new Error(`Failed to load scene: ${response.status}`);
+            }
+            const html = await response.text();
+            container.innerHTML = html;
+            this.currentSceneIframe = null;
+          }
+
+          // Initialize scene
+          this.callSceneHandler('onInit');
+
+        } catch (error) {
+          console.error('[SceneManager] Error loading scene:', error);
+        }
+      }
+
+      // Call scene handler method
+      callSceneHandler(method, ...args) {
+        const currentScene = this.appState.get('currentScene');
+        if (!currentScene) return;
+
+        // Try main app scene handlers first
+        if (this.sceneHandlers[currentScene.id]) {
+          const handler = this.sceneHandlers[currentScene.id][method];
+          if (typeof handler === 'function') {
+            handler.call(this.sceneHandlers[currentScene.id], ...args);
+            return;
+          }
+        }
+
+        // Try iframe communication for complex scenes
+        if (this.currentSceneIframe) {
+          const messageType = method.replace('on', '').toLowerCase();
+          let data = {};
+
+          if (args.length > 0) {
+            data = args[0];
+          }
+
+          this.currentSceneIframe.postMessage({
+            type: messageType,
+            data: data
+          }, '*');
+        }
+      }
+
+      // Initialize scene handlers
+      initializeSceneHandlers() {
+        // Reference to managers for handlers
+        const appState = this.appState;
+        const modeManager = this.modeManager;
+        const sceneManager = this;
+
+        // Idle scene handler
+        this.sceneHandlers.idle = {
+          onInit: function () {
+            console.log('[SceneHandler] Idle scene initialized');
+          },
+          onHandDetected: function (hands) {
+            // Mode manager will handle transition
+          },
+          onHandMove: function (hands) {
+            // No interaction needed
+          },
+          onHandLost: function () {
+            // No action needed
+          }
+        };
+
+        // Onboarding scene handler
+        this.sceneHandlers.onboarding = {
+          handCursor: null,
+          countdownTimer: null,
+          countdownStartTime: null,
+          isHovering: false,
+
+          onInit: function () {
+            console.log('[SceneHandler] Onboarding scene initialized');
+            // Create hand cursor
+            this.handCursor = document.createElement('div');
+            this.handCursor.className = 'hand-cursor';
+            this.handCursor.style.cssText = `
+                            position: fixed;
+                            width: 20px;
+                            height: 20px;
+                            border: 2px solid #00ff41;
+                            border-radius: 50%;
+                            background: rgba(0, 255, 65, 0.3);
+                            pointer-events: none;
+                            z-index: 9999;
+                            transition: all 0.1s ease;
+                            box-shadow: 0 0 10px #00ff41;
+                            display: none;
+                        `;
+            document.body.appendChild(this.handCursor);
+          },
+
+          onHandMove: function (hands) {
+            if (hands.length > 0) {
+              const hand = hands[0];
+              const palmX = hand.palm_center.x;
+              const palmY = hand.palm_center.y;
+
+              // Show and position cursor
+              if (this.handCursor) {
+                this.handCursor.style.display = 'block';
+                this.handCursor.style.left = (palmX * window.innerWidth) + 'px';
+                this.handCursor.style.top = (palmY * window.innerHeight) + 'px';
+              }
+
+              // Highlight instruction modules
+              const modules = document.querySelectorAll('.instruction-module');
+              modules.forEach(module => module.classList.remove('active'));
+
+              if (palmY > 0.3 && palmY < 0.8) {
+                if (palmX < 0.33) {
+                  const module1 = document.getElementById('instruction1');
+                  if (module1) module1.classList.add('active');
+                } else if (palmX < 0.66) {
+                  const module2 = document.getElementById('instruction2');
+                  if (module2) module2.classList.add('active');
+                } else {
+                  const module3 = document.getElementById('instruction3');
+                  if (module3) module3.classList.add('active');
+                }
+              }
+
+              // Check hover over begin text
+              const beginText = document.getElementById('beginText');
+              if (beginText) {
+                const rect = beginText.getBoundingClientRect();
+                const screenX = palmX * window.innerWidth;
+                const screenY = palmY * window.innerHeight;
+
+                const expandedRect = {
+                  left: rect.left - 50,
+                  right: rect.right + 50,
+                  top: rect.top - 50,
+                  bottom: rect.bottom + 50
+                };
+
+                const isOverBeginText = screenX >= expandedRect.left && screenX <= expandedRect.right &&
+                  screenY >= expandedRect.top && screenY <= expandedRect.bottom;
+
+                if (isOverBeginText && !this.isHovering) {
+                  this.startCountdown();
+                } else if (!isOverBeginText && this.isHovering) {
+                  this.stopCountdown();
+                }
+              }
+            } else {
+              if (this.handCursor) {
+                this.handCursor.style.display = 'none';
+              }
+              this.stopCountdown();
+            }
+          },
+
+          startCountdown: function () {
+            if (this.isHovering) return;
+
+            console.log('[SceneHandler] Starting onboarding countdown');
+            this.isHovering = true;
+            this.countdownStartTime = Date.now();
+
+            const overlay = document.getElementById('countdownOverlay');
+            if (overlay) {
+              overlay.classList.add('visible');
+            }
+
+            if (this.handCursor) {
+              this.handCursor.style.background = 'rgba(0, 255, 65, 0.6)';
+              this.handCursor.style.transform = 'scale(1.5)';
+              this.handCursor.style.boxShadow = '0 0 20px #00ff41';
+            }
+
+            this.updateCountdown();
+          },
+
+          updateCountdown: function () {
+            if (!this.isHovering) return;
+
+            const elapsed = (Date.now() - this.countdownStartTime) / 1000;
+            const remaining = Math.max(0, 3 - elapsed);
+            const progress = (elapsed / 3) * 220;
+
+            const countdownNumber = document.getElementById('countdownNumber');
+            if (countdownNumber) {
+              countdownNumber.textContent = Math.ceil(remaining);
+            }
+
+            const progressRing = document.getElementById('countdownRing');
+            if (progressRing) {
+              progressRing.style.strokeDashoffset = 220 - progress;
+            }
+
+            if (remaining > 0) {
+              this.countdownTimer = setTimeout(() => this.updateCountdown(), 50);
+            } else {
+              this.completeCountdown();
+            }
+          },
+
+          completeCountdown: function () {
+            console.log('[SceneHandler] Onboarding countdown complete');
+            this.stopCountdown();
+            // Trigger transition to active mode
+            modeManager.completeOnboarding();
+          },
+
+          stopCountdown: function () {
+            if (!this.isHovering) return;
+
+            this.isHovering = false;
+
+            if (this.countdownTimer) {
+              clearTimeout(this.countdownTimer);
+              this.countdownTimer = null;
+            }
+
+            const overlay = document.getElementById('countdownOverlay');
+            if (overlay) {
+              overlay.classList.remove('visible');
+            }
+
+            if (this.handCursor) {
+              this.handCursor.style.background = 'rgba(0, 255, 65, 0.3)';
+              this.handCursor.style.transform = 'scale(1)';
+              this.handCursor.style.boxShadow = '0 0 10px #00ff41';
+            }
+
+            const countdownNumber = document.getElementById('countdownNumber');
+            if (countdownNumber) {
+              countdownNumber.textContent = '3';
+            }
+
+            const progressRing = document.getElementById('countdownRing');
+            if (progressRing) {
+              progressRing.style.strokeDashoffset = '220';
+            }
+          },
+
+          onHandDetected: function (hands) {
+            const signalText = document.querySelector('.signal-text');
+            if (signalText) {
+              signalText.textContent = 'TRACKING ACTIVE';
+            }
+          },
+
+          onHandLost: function () {
+            document.querySelectorAll('.instruction-module').forEach(module => {
+              module.classList.remove('active');
+            });
+
+            const signalText = document.querySelector('.signal-text');
+            if (signalText) {
+              signalText.textContent = 'SIGNAL DETECTED';
+            }
+
+            if (this.handCursor) {
+              this.handCursor.style.display = 'none';
+            }
+            this.stopCountdown();
+          },
+
+          onDestroy: function () {
+            if (this.handCursor) {
+              this.handCursor.remove();
+              this.handCursor = null;
+            }
+            this.stopCountdown();
+
+            // Clean up any remaining cursors
+            const existingCursors = document.querySelectorAll('.hand-cursor');
+            existingCursors.forEach(cursor => cursor.remove());
+          }
+        };
+      }
+    }
+
+    // ============================================================================
+    // MAIN APPLICATION CLASS (Simplified)
+    // ============================================================================
+    class HandTrackingKiosk {
+      constructor() {
+        // Initialize core managers
+        this.appState = new ApplicationState();
+        this.modeManager = new ModeManager(this.appState, (scene) => this.loadScene(scene));
+        this.sceneManager = new SceneManager(this.appState, this.modeManager, this);
+
+        // Socket and connection
+        this.socket = io();
+
+        // UI state
+        this.handColorAssignments = new Map();
+        this.nextColorIndex = 0;
+        this.debugPoints = {};
+
+        // Subscribe to application state changes
+        this.setupStateSubscriptions();
+
+        // Initialize components
+        this.initializeSocket();
+        this.initializeDebugPoints();
+
+        // Start in idle mode
+        console.log('[App] Starting application in idle mode');
+      }
+
+      // Setup subscriptions to state changes
+      setupStateSubscriptions() {
+        // Subscribe to connection state
+        this.appState.subscribe('isConnected', (connected) => {
+          this.updateConnectionStatus(connected);
+        });
+
+        // Subscribe to hands state
+        this.appState.subscribe('hands', (hands) => {
+          this.updateHandVisualization(hands);
+        });
+
+        // Subscribe to scene state
+        this.appState.subscribe('currentScene', (scene) => {
+          this.updateStatusBar();
+        });
+
+        // Subscribe to FPS updates
+        this.appState.subscribe('fps', () => {
+          this.updateStatusBar();
+        });
+
+        // Subscribe to mode changes for HUD visibility
+        this.appState.subscribe('currentMode', (mode) => {
+          this.updateHUDVisibility(mode);
+        });
+      }
+
+      // Update HUD visibility based on mode
+      updateHUDVisibility(mode) {
+        this.modeManager.hudManager.updateVisibility(mode);
+      }
+
+      initializeSocket() {
+        this.socket.on('connect', () => {
+          console.log('[App] Connected to server');
+          this.appState.setState({ isConnected: true });
+
+          // Subscribe only to hand tracking events (no scene events)
+          const eventsToSubscribe = [
+            'hand_moved', 'hand_detected', 'hand_lost', 'frame_processed'
+          ];
+          console.log('[App] Subscribing to events:', eventsToSubscribe);
+          this.socket.emit('subscribe', {
+            events: eventsToSubscribe
+          });
+        });
+
+        this.socket.on('disconnect', () => {
+          console.log('[App] Disconnected from server');
+          this.appState.setState({ isConnected: false });
+        });
+
+        this.socket.on('event', (event) => {
+          this.handleEvent(event);
+        });
+      }
+
+      handleEvent(event) {
+        // Update event count
+        this.appState.setState({
+          eventCount: this.appState.get('eventCount') + 1
+        });
+
+        switch (event.type) {
+          case 'hand_moved':
+            this.processHandEvent(event.data.hands);
+            this.sceneManager.callSceneHandler('onHandMove', event.data.hands);
+            break;
+
+          case 'hand_detected':
+            console.log('[App] Hand detected event received');
+            this.processHandEvent(event.data.hands);
+            this.sceneManager.callSceneHandler('onHandDetected', event.data.hands);
+            break;
+
+          case 'hand_lost':
+            console.log('[App] Hand lost event received');
+            this.processHandEvent(event.data.hands);
+            this.sceneManager.callSceneHandler('onHandLost');
+            break;
+
+          case 'frame_processed':
+            this.appState.setState({ fps: Math.round(event.data.fps) });
+            break;
+        }
+
+        this.updateDebugPanel();
+      }
+
+      // Process hand tracking data and update state
+      processHandEvent(hands) {
+        // Update hands state - this will trigger ModeManager via subscription
+        this.appState.setState({ hands: hands || [] });
+      }
+
+      initializeKeyboardShortcuts() {
+        document.addEventListener('keydown', (event) => {
+          // Ctrl + Shift + H to toggle controls/HUD
+          if (event.ctrlKey && event.shiftKey && event.key === 'H') {
+            event.preventDefault();
+            this.toggleControlsHUD();
+          }
+        });
+      }
+
+      initializeSceneHandlers() {
+        // Store reference to main app for scene handlers
+        const app = this;
+
+        // Idle scene handler
+        this.sceneHandlers.idle = {
+          onInit: function () {
+            console.log('Idle scene initialized');
+            app.modeManager.hudManager.hideForMode('idle');
+          },
+
+          onHandDetected: function (hands) {
+            console.log('Idle scene: Hand detected, should exit idle mode');
+            // The scene manager will handle exiting idle mode via events
+          },
+
+          onHandMove: function (hands) {
+            // No interaction needed in idle mode - just detect presence
+          },
+
+          onHandLost: function () {
+            console.log('Idle scene: Hand lost');
+          }
+        };
+
+        // Onboarding scene handler with hand cursor
+        this.sceneHandlers.onboarding = {
+          handCursor: null,
+          countdownTimer: null,
+          countdownStartTime: null,
+          isHovering: false,
+
+          onInit: function () {
+            console.log('Onboarding scene onInit called!');
+            // Create hand cursor
+            app.sceneHandlers.onboarding.handCursor = document.createElement('div');
+            app.sceneHandlers.onboarding.handCursor.className = 'hand-cursor';
+            app.sceneHandlers.onboarding.handCursor.style.cssText = `
+                            position: fixed;
+                            width: 20px;
+                            height: 20px;
+                            border: 2px solid #00ff41;
+                            border-radius: 50%;
+                            background: rgba(0, 255, 65, 0.3);
+                            pointer-events: none;
+                            z-index: 9999;
+                            transition: all 0.1s ease;
+                            box-shadow: 0 0 10px #00ff41;
+                            display: none;
+                        `;
+            document.body.appendChild(app.sceneHandlers.onboarding.handCursor);
+            console.log('Onboarding scene cursor initialized:', app.sceneHandlers.onboarding.handCursor);
+          },
+
+          onHandMove: function (hands) {
+            console.log('Onboarding scene onHandMove called with hands:', hands.length);
+            // Highlight instruction modules based on hand position
+            const modules = document.querySelectorAll('.instruction-module');
+            modules.forEach(module => module.classList.remove('active'));
+
+            if (hands.length > 0) {
+              const hand = hands[0]; // Use first hand
+              const palmX = hand.palm_center.x;
+              const palmY = hand.palm_center.y;
+              console.log('Hand position:', palmX, palmY);
+
+              // Show and position hand cursor
+              if (app.sceneHandlers.onboarding.handCursor) {
+                app.sceneHandlers.onboarding.handCursor.style.display = 'block';
+                app.sceneHandlers.onboarding.handCursor.style.left = (palmX * window.innerWidth) + 'px';
+                app.sceneHandlers.onboarding.handCursor.style.top = (palmY * window.innerHeight) + 'px';
+                console.log('Updated cursor position');
+              } else {
+                console.log('Hand cursor not found!');
+              }
+
+              // Check if hand is over any instruction module
+              if (palmY > 0.3 && palmY < 0.8) {
+                if (palmX < 0.33) {
+                  const module1 = document.getElementById('instruction1');
+                  if (module1) module1.classList.add('active');
+                } else if (palmX < 0.66) {
+                  const module2 = document.getElementById('instruction2');
+                  if (module2) module2.classList.add('active');
+                } else {
+                  const module3 = document.getElementById('instruction3');
+                  if (module3) module3.classList.add('active');
+                }
+              }
+
+              // Check if hand is over begin text (with expanded detection area)
+              const beginText = document.getElementById('beginText');
+              if (beginText) {
+                const rect = beginText.getBoundingClientRect();
+                const screenX = palmX * window.innerWidth;
+                const screenY = palmY * window.innerHeight;
+
+                // Expand detection area by 50 pixels on all sides
+                const expandedRect = {
+                  left: rect.left - 50,
+                  right: rect.right + 50,
+                  top: rect.top - 50,
+                  bottom: rect.bottom + 50
+                };
+
+                const isOverBeginText = screenX >= expandedRect.left && screenX <= expandedRect.right &&
+                  screenY >= expandedRect.top && screenY <= expandedRect.bottom;
+
+                if (isOverBeginText && !app.sceneHandlers.onboarding.isHovering) {
+                  app.sceneHandlers.onboarding.startCountdown();
+                } else if (!isOverBeginText && app.sceneHandlers.onboarding.isHovering) {
+                  app.sceneHandlers.onboarding.stopCountdown();
+                }
+              }
+            } else {
+              // Hide cursor when no hands detected
+              if (app.sceneHandlers.onboarding.handCursor) {
+                app.sceneHandlers.onboarding.handCursor.style.display = 'none';
+              }
+              app.sceneHandlers.onboarding.stopCountdown();
+            }
+          },
+
+          startCountdown: function () {
+            if (app.sceneHandlers.onboarding.isHovering) return;
+
+            console.log('Starting countdown...');
+            app.sceneHandlers.onboarding.isHovering = true;
+            app.sceneHandlers.onboarding.countdownStartTime = Date.now();
+
+            // Show countdown overlay
+            const overlay = document.getElementById('countdownOverlay');
+            if (overlay) {
+              overlay.classList.add('visible');
+            }
+
+            // Add hovering class to cursor
+            if (app.sceneHandlers.onboarding.handCursor) {
+              app.sceneHandlers.onboarding.handCursor.style.background = 'rgba(0, 255, 65, 0.6)';
+              app.sceneHandlers.onboarding.handCursor.style.transform = 'scale(1.5)';
+              app.sceneHandlers.onboarding.handCursor.style.boxShadow = '0 0 20px #00ff41';
+            }
+
+            // Start countdown timer
+            app.sceneHandlers.onboarding.updateCountdown();
+          },
+
+          updateCountdown: function () {
+            if (!app.sceneHandlers.onboarding.isHovering) return;
+
+            const elapsed = (Date.now() - app.sceneHandlers.onboarding.countdownStartTime) / 1000;
+            const remaining = Math.max(0, 3 - elapsed);
+            const progress = (elapsed / 3) * 220; // 220 is the stroke-dasharray value
+
+            // Update countdown number
+            const countdownNumber = document.getElementById('countdownNumber');
+            if (countdownNumber) {
+              countdownNumber.textContent = Math.ceil(remaining);
+            }
+
+            // Update progress ring
+            const progressRing = document.getElementById('countdownRing');
+            if (progressRing) {
+              progressRing.style.strokeDashoffset = 220 - progress;
+            }
+
+            if (remaining > 0) {
+              app.sceneHandlers.onboarding.countdownTimer = setTimeout(() => app.sceneHandlers.onboarding.updateCountdown(), 50);
+            } else {
+              app.sceneHandlers.onboarding.completeCountdown();
+            }
+          },
+
+          completeCountdown: function () {
+            console.log('Countdown complete! Starting scene cycling...');
+            app.sceneHandlers.onboarding.stopCountdown();
+
+            // Start the scene system after welcome screen
+            app.restartSceneSystem();
+          },
+
+          stopCountdown: function () {
+            if (!app.sceneHandlers.onboarding.isHovering) return;
+
+            console.log('Stopping countdown...');
+            app.sceneHandlers.onboarding.isHovering = false;
+
+            // Clear timer
+            if (app.sceneHandlers.onboarding.countdownTimer) {
+              clearTimeout(app.sceneHandlers.onboarding.countdownTimer);
+              app.sceneHandlers.onboarding.countdownTimer = null;
+            }
+
+            // Hide countdown overlay
+            const overlay = document.getElementById('countdownOverlay');
+            if (overlay) {
+              overlay.classList.remove('visible');
+            }
+
+            // Remove hovering class from cursor
+            if (app.sceneHandlers.onboarding.handCursor) {
+              app.sceneHandlers.onboarding.handCursor.style.background = 'rgba(0, 255, 65, 0.3)';
+              app.sceneHandlers.onboarding.handCursor.style.transform = 'scale(1)';
+              app.sceneHandlers.onboarding.handCursor.style.boxShadow = '0 0 10px #00ff41';
+            }
+
+            // Reset countdown display
+            const countdownNumber = document.getElementById('countdownNumber');
+            if (countdownNumber) {
+              countdownNumber.textContent = '3';
+            }
+
+            const progressRing = document.getElementById('countdownRing');
+            if (progressRing) {
+              progressRing.style.strokeDashoffset = '220';
+            }
+          },
+
+          onHandDetected: function (hands) {
+            console.log('Onboarding scene: Hand detected');
+            // Update signal status
+            const signalText = document.querySelector('.signal-text');
+            if (signalText) {
+              signalText.textContent = 'TRACKING ACTIVE';
+            }
+          },
+
+          onHandLost: function () {
+            // Remove all active states
+            document.querySelectorAll('.instruction-module').forEach(module => {
+              module.classList.remove('active');
+            });
+
+            // Reset signal status
+            const signalText = document.querySelector('.signal-text');
+            if (signalText) {
+              signalText.textContent = 'SIGNAL DETECTED';
+            }
+
+            // Hide cursor and stop countdown
+            if (app.sceneHandlers.onboarding.handCursor) {
+              app.sceneHandlers.onboarding.handCursor.style.display = 'none';
+            }
+            app.sceneHandlers.onboarding.stopCountdown();
+          },
+
+          onDestroy: function () {
+            // Clean up hand cursor when leaving welcome scene
+            if (app.sceneHandlers.onboarding.handCursor) {
+              console.log('Removing welcome scene hand cursor');
+              app.sceneHandlers.onboarding.handCursor.remove();
+              app.sceneHandlers.onboarding.handCursor = null;
+            }
+
+            // Clean up countdown timer
+            app.sceneHandlers.onboarding.stopCountdown();
+
+            // Also clean up any other hand cursors that might exist
+            const existingCursors = document.querySelectorAll('.hand-cursor');
+            existingCursors.forEach(cursor => {
+              console.log('Removing existing hand cursor:', cursor);
+              cursor.remove();
+            });
+
+            console.log('Onboarding scene cleaned up');
+          }
+        };
+
+        // Welcome scene handler (for active mode scene cycling)
+        this.sceneHandlers.welcome = {
+          handCursor: null,
+          countdownTimer: null,
+          countdownStartTime: null,
+          isHovering: false,
+
+          onInit: function () {
+            console.log('Welcome scene onInit called!');
+            // Create hand cursor
+            app.sceneHandlers.welcome.handCursor = document.createElement('div');
+            app.sceneHandlers.welcome.handCursor.className = 'hand-cursor';
+            app.sceneHandlers.welcome.handCursor.style.cssText = `
+                            position: fixed;
+                            width: 20px;
+                            height: 20px;
+                            border: 2px solid #00ff41;
+                            border-radius: 50%;
+                            background: rgba(0, 255, 65, 0.3);
+                            pointer-events: none;
+                            z-index: 9999;
+                            transition: all 0.1s ease;
+                            box-shadow: 0 0 10px #00ff41;
+                            display: none;
+                        `;
+            document.body.appendChild(app.sceneHandlers.welcome.handCursor);
+            console.log('Welcome scene cursor initialized:', app.sceneHandlers.welcome.handCursor);
+          },
+
+          onHandMove: function (hands) {
+            console.log('Welcome scene onHandMove called with hands:', hands.length);
+            // Highlight instruction modules based on hand position
+            const modules = document.querySelectorAll('.instruction-module');
+            modules.forEach(module => module.classList.remove('active'));
+
+            if (hands.length > 0) {
+              const hand = hands[0]; // Use first hand
+              const palmX = hand.palm_center.x;
+              const palmY = hand.palm_center.y;
+              console.log('Hand position:', palmX, palmY);
+
+              // Show and position hand cursor
+              if (app.sceneHandlers.welcome.handCursor) {
+                app.sceneHandlers.welcome.handCursor.style.display = 'block';
+                app.sceneHandlers.welcome.handCursor.style.left = (palmX * window.innerWidth) + 'px';
+                app.sceneHandlers.welcome.handCursor.style.top = (palmY * window.innerHeight) + 'px';
+                console.log('Updated cursor position');
+              } else {
+                console.log('Hand cursor not found!');
+              }
+
+              // Check if hand is over any instruction module
+              if (palmY > 0.3 && palmY < 0.8) {
+                if (palmX < 0.33) {
+                  const module1 = document.getElementById('instruction1');
+                  if (module1) module1.classList.add('active');
+                } else if (palmX < 0.66) {
+                  const module2 = document.getElementById('instruction2');
+                  if (module2) module2.classList.add('active');
+                } else {
+                  const module3 = document.getElementById('instruction3');
+                  if (module3) module3.classList.add('active');
+                }
+              }
+
+              // Check if hand is hovering over "BEGIN" text for countdown (no countdown in active mode welcome)
+              // This welcome scene in active mode doesn't need countdown functionality
+            } else {
+              // Hide cursor when no hands detected
+              if (app.sceneHandlers.welcome.handCursor) {
+                app.sceneHandlers.welcome.handCursor.style.display = 'none';
+              }
+            }
+          },
+
+          onHandDetected: function (hands) {
+            console.log('Welcome scene: Hand detected');
+            // Update signal text to show hand detected
+            const signalText = document.querySelector('.signal-text');
+            if (signalText) {
+              signalText.textContent = 'PRESENCE DETECTED';
+            }
+          },
+
+          onHandLost: function () {
+            console.log('Welcome scene: Hand lost');
+            const signalText = document.querySelector('.signal-text');
+            if (signalText) {
+              signalText.textContent = 'SIGNAL DETECTED';
+            }
+
+            // Hide cursor when hands are lost
+            if (app.sceneHandlers.welcome.handCursor) {
+              app.sceneHandlers.welcome.handCursor.style.display = 'none';
+            }
+          },
+
+          onDestroy: function () {
+            // Clean up hand cursor when leaving welcome scene
+            if (app.sceneHandlers.welcome.handCursor) {
+              console.log('Removing welcome scene hand cursor');
+              app.sceneHandlers.welcome.handCursor.remove();
+              app.sceneHandlers.welcome.handCursor = null;
+            }
+
+            // Also clean up any other hand cursors that might exist
+            const existingCursors = document.querySelectorAll('.hand-cursor');
+            existingCursors.forEach(cursor => {
+              console.log('Removing existing hand cursor:', cursor);
+              cursor.remove();
+            });
+
+            console.log('Welcome scene cleaned up');
+          }
+        };
+      }
+
+      // Update hand visualization (called via state subscription)
+      updateHandVisualization(hands) {
+        this.assignHandColors(hands);
+        this.renderHandVisualization(hands);
+      }
+
+      assignHandColors(hands) {
+        // Clean up assignments for hands that no longer exist
+        const currentHandIds = new Set(hands.map(hand => hand.hand_id || `temp_${hands.indexOf(hand)}`));
+        for (const handId of this.handColorAssignments.keys()) {
+          if (!currentHandIds.has(handId)) {
+            this.handColorAssignments.delete(handId);
+          }
+        }
+
+        // Assign colors to new hands
+        hands.forEach((hand, index) => {
+          const handId = hand.hand_id || `temp_${index}`;
+          if (!this.handColorAssignments.has(handId)) {
+            this.handColorAssignments.set(handId, this.nextColorIndex % 6);
+            this.nextColorIndex++;
+          }
+        });
+      }
+
+      getHandColorIndex(hand, fallbackIndex) {
+        const handId = hand.hand_id || `temp_${fallbackIndex}`;
+        return this.handColorAssignments.get(handId) || fallbackIndex;
+      }
+
+      renderHandVisualization(hands) {
+        // Always clear debug canvases first
+        Object.values(this.debugPoints).forEach(point => {
+          point.ctx.clearRect(0, 0, point.canvas.width, point.canvas.height);
+        });
+
+        // Only draw debug points if visible and hands exist
+        const debugPointsVisible = this.appState.get('debugPointsVisible');
+        if (debugPointsVisible && hands && hands.length > 0) {
+          hands.forEach((hand, index) => {
+            // Use consistent color assignment
+            const colorIndex = this.getHandColorIndex(hand, index);
+            const debugKey = `hand_${colorIndex + 1}`;
+            const debugPoint = this.debugPoints[debugKey];
+
+            if (debugPoint && hand.palm_center) {
+              const posX = hand.palm_center.x * window.innerWidth;
+              const posY = hand.palm_center.y * window.innerHeight;
+
+              debugPoint.ctx.beginPath();
+              debugPoint.ctx.arc(posX, posY, 25, 0, Math.PI * 2);
+              debugPoint.ctx.fillStyle = debugPoint.color;
+              debugPoint.ctx.fill();
+              debugPoint.ctx.strokeStyle = 'white';
+              debugPoint.ctx.lineWidth = 2;
+              debugPoint.ctx.stroke();
+            }
+          });
+        }
+      }
+
+
+
+      async loadScene(scene) {
+        try {
+          console.log('Loading scene:', scene);
+
+          // Clean up previous scene
+          if (this.currentScene) {
+            this.callSceneHandler('onDestroy');
+          }
+
+          const container = document.getElementById('scene-container');
+
+          // Set current scene
+          this.currentScene = scene;
+
+          // Handle complete HTML page scenes as iframes
+          if (scene.id === 'fluidsim' || scene.id === 'cosmic_symbolism' || scene.id === 'psychedelic_waves' || scene.id === 'tie_dye' || scene.id === 'orbits' || scene.id === 'idle' || scene.id === 'onboarding') {
+            container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
+
+            // Wait for iframe to load, then set up communication
+            setTimeout(() => {
+              const iframe = document.getElementById('scene-iframe');
+              if (iframe && iframe.contentWindow) {
+                this.currentSceneIframe = iframe.contentWindow;
+              }
+            }, 1000);
+          } else {
+            // Load HTML fragment for other scenes
+            const response = await fetch(`/${scene.html_file}`);
+            if (!response.ok) {
+              throw new Error(`Failed to load scene: ${response.status}`);
+            }
+            const html = await response.text();
+            container.innerHTML = html;
+          }
+
+          // Initialize scene if handler exists
+          this.callSceneHandler('onInit');
+
+        } catch (error) {
+          console.error('Error loading scene:', error);
+        }
+
+        console.log("current scene: ", this.currentScene)
+      }
+
+      callSceneHandler(method, ...args) {
+        // Add safety check for currentScene
+        if (!this.currentScene) {
+          console.warn('[App] callSceneHandler called but currentScene is undefined');
+          return;
+        }
+
+        // Delegate to SceneManager's callSceneHandler method
+        if (this.sceneManager && this.sceneManager.callSceneHandler) {
+          this.sceneManager.callSceneHandler(method, ...args);
+        } else {
+          console.warn('[App] SceneManager not available for scene handler calls');
+        }
+      }
+
+      updateConnectionStatus(isConnected) {
+        const indicator = document.getElementById('connectionStatus');
+        const text = document.getElementById('connectionText');
+
+        if (isConnected) {
+          indicator.classList.add('connected');
+          text.textContent = 'Connected';
+        } else {
+          indicator.classList.remove('connected');
+          text.textContent = 'Disconnected';
+        }
+      }
+
+      updateStatusBar() {
+        const state = this.appState.getState();
+
+        document.getElementById('fpsCounter').textContent = `FPS: ${state.fps}`;
+        document.getElementById('handCounter').textContent = `Hands: ${state.hands.length}`;
+        document.getElementById('currentScene').textContent =
+          `Scene: ${state.currentScene ? state.currentScene.name : 'Loading'}`;
+      }
+
+      updateSceneCounter() {
+        if (this.currentSceneIndex !== undefined && this.totalScenes !== undefined) {
+          const counter = document.getElementById('sceneCounter');
+          counter.textContent = `Scene ${this.currentSceneIndex + 1} of ${this.totalScenes}`;
+        }
+      }
+
+      startSceneCountdown() {
+        // Clear any existing countdown timer
+        if (this.sceneCountdownTimer) {
+          clearInterval(this.sceneCountdownTimer);
+        }
+
+        // Set scene start time
+        this.sceneStartTime = Date.now();
+
+        // Log scene info for debugging
+        if (this.currentScene) {
+          console.log('[JS] Starting countdown for scene:', this.currentScene.id, 'duration:', this.currentScene.duration);
+        }
+
+        // Start countdown timer (update every second)
+        this.sceneCountdownTimer = setInterval(() => {
+          this.updateSceneCountdown();
+        }, 1000);
+
+        // Initial update
+        this.updateSceneCountdown();
+      }
+
+      updateSceneCountdown() {
+        const countdownElement = document.getElementById('sceneCountdown');
+        if (!this.currentScene || !this.sceneStartTime || this.mode !== 'active') {
+          countdownElement.textContent = 'Next: --';
+          return;
+        }
+
+        // Get scene duration - should always be specified
+        if (!this.currentScene.duration) {
+          throw Error('[JS] Scene missing duration:', this.currentScene);
+          return;
+        }
+
+        const sceneDuration = this.currentScene.duration;
+
+        // Calculate elapsed time
+        const elapsed = (Date.now() - this.sceneStartTime) / 1000;
+        const remaining = Math.max(0, sceneDuration - elapsed);
+
+        if (remaining <= 0) {
+          countdownElement.textContent = 'Next: Now';
+        } else {
+          const minutes = Math.floor(remaining / 60);
+          const seconds = Math.floor(remaining % 60);
+
+          if (minutes > 0) {
+            countdownElement.textContent = `Next: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+          } else {
+            countdownElement.textContent = `Next: ${seconds}s`;
+          }
+        }
+      }
+
+
+      updateDebugPanel() {
+        const debugVisible = this.appState.get('debugVisible');
+        if (!debugVisible) return;
+
+        const state = this.appState.getState();
+
+        document.getElementById('eventCount').textContent = state.eventCount;
+        document.getElementById('debugScene').textContent =
+          state.currentScene ? state.currentScene.id : 'None';
+        document.getElementById('debugHandCount').textContent = state.hands.length;
+        document.getElementById('debugPointsStatus').textContent =
+          state.debugPointsVisible ? 'On' : 'Off';
+        document.getElementById('controlsHUDStatus').textContent =
+          state.controlsHUDVisible ? 'On' : 'Off';
+      }
+
+      initializeDebugPoints() {
+        this.debugPoints = {
+          hand_1: {
+            canvas: document.getElementById('debugCanvas1'),
+            ctx: document.getElementById('debugCanvas1').getContext('2d'),
+            color: 'red'
+          },
+          hand_2: {
+            canvas: document.getElementById('debugCanvas2'),
+            ctx: document.getElementById('debugCanvas2').getContext('2d'),
+            color: 'blue'
+          },
+          hand_3: {
+            canvas: document.getElementById('debugCanvas3'),
+            ctx: document.getElementById('debugCanvas3').getContext('2d'),
+            color: 'green'
+          },
+          hand_4: {
+            canvas: document.getElementById('debugCanvas4'),
+            ctx: document.getElementById('debugCanvas4').getContext('2d'),
+            color: 'yellow'
+          }
+        };
+
+        // Set canvas sizes
+        this.resizeDebugCanvases();
+
+        // Listen for window resize
+        window.addEventListener('resize', () => {
+          this.resizeDebugCanvases();
+        });
+      }
+
+      resizeDebugCanvases() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        Object.values(this.debugPoints).forEach(point => {
+          point.canvas.width = width;
+          point.canvas.height = height;
+        });
+      }
+
+
+      toggleDebugPoints() {
+        const currentVisible = this.appState.get('debugPointsVisible');
+        const newVisible = !currentVisible;
+
+        this.appState.setState({ debugPointsVisible: newVisible });
+
+        const debugPointsDiv = document.getElementById('debugPoints');
+        if (newVisible) {
+          debugPointsDiv.classList.add('visible');
+        } else {
+          debugPointsDiv.classList.remove('visible');
+        }
+
+        // Force a refresh to clear/show debug points
+        this.renderHandVisualization(this.appState.get('hands'));
+
+        this.updateDebugPanel();
+      }
+
+      toggleControlsHUD() {
+        const currentVisible = this.appState.get('controlsHUDVisible');
+        const newVisible = !currentVisible;
+
+        this.appState.setState({ controlsHUDVisible: newVisible });
+
+        const appContainer = document.querySelector('.app-container');
+        if (newVisible) {
+          appContainer.classList.remove('controls-hud-hidden');
+        } else {
+          appContainer.classList.add('controls-hud-hidden');
+        }
+
+        this.updateDebugPanel();
+      }
+
+      loadDebugSettings() {
+        fetch('/api/debug-settings')
+          .then(response => response.json())
+          .then(settings => {
+            this.debugSettings = { ...this.debugSettings, ...settings };
+            this.debugPointsVisible = this.debugSettings.showDebugPoints;
+            this.controlsHUDVisible = this.debugSettings.showControlsHUD !== false; // Default to true
+
+            const debugPointsDiv = document.getElementById('debugPoints');
+            if (this.debugPointsVisible) {
+              debugPointsDiv.classList.add('visible');
+            } else {
+              debugPointsDiv.classList.remove('visible');
+            }
+
+            const appContainer = document.querySelector('.app-container');
+            if (this.controlsHUDVisible) {
+              appContainer.classList.remove('controls-hud-hidden');
+            } else {
+              appContainer.classList.add('controls-hud-hidden');
+            }
+
+            this.updateDebugPanel();
+          })
+          .catch(error => {
+            console.log('No debug settings found, using defaults');
+            this.updateDebugPanel();
+          });
+      }
+
+      saveDebugSettings() {
+        fetch('/api/debug-settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(this.debugSettings)
+        })
+          .catch(error => {
+            console.error('Failed to save debug settings:', error);
+          });
+      }
+
+      startInIdleMode() {
+        console.log('[JS] Starting in idle mode');
+        this.mode = 'idle';
+        this.loadIdleScene();
+      }
+
+
+      enterIdleMode() {
+        console.log('[JS] Entering idle mode - ending session');
+        this.mode = 'idle';
+
+        // Pause scene countdown
+        if (this.sceneCountdownTimer) {
+          clearInterval(this.sceneCountdownTimer);
+          this.sceneCountdownTimer = null;
+        }
+
+        this.pauseSceneSystem();
+        this.loadIdleScene();
+      }
+
+      exitIdleMode() {
+        console.log('[JS] Exiting idle mode - starting onboarding mode');
+        this.mode = 'onboarding';
+
+        this.initializeSceneHandlers();
+
+        // Reset session flag - new session starts  
+        this.sessionWelcomeShown = false;
+
+        // Show onboarding screen
+        this.showOnboardingScreen();
+      }
+
+      pauseSceneSystem() {
+        console.log('[JS] Pausing scene system');
+        // Tell the backend to pause scene cycling
+        if (this.socket) {
+          this.socket.emit('pause_scene_cycling');
+        }
+      }
+
+      restartSceneSystem() {
+        console.log('[JS] Restarting scene system');
+        // Tell the backend to restart scene cycling
+        if (this.socket) {
+          this.socket.emit('restart_scene_cycling');
+        }
+      }
+
+      // These methods are now handled by ModeManager
+      loadIdleScene() {
+        console.log('[JS] Loading idle scene - delegating to ModeManager');
+        this.modeManager.transitionTo('idle');
+      }
+
+      loadOnboardingScene() {
+        console.log('[JS] Loading onboarding scene - delegating to ModeManager');
+        this.modeManager.transitionTo('onboarding');
+      }
+
+      loadWelcomeScene() {
+        console.log('[JS] Loading welcome scene');
+        const welcomeScene = {
+          id: 'welcome',
+          name: 'Welcome Scene',
+          description: 'Interactive welcome screen',
+          html_file: 'scenes/welcome.html',
+          duration: 30,
+        };
+        this.currentScene = welcomeScene; // Set current scene
+        this.loadScene(welcomeScene);
+      }
+
+      showOnboardingScreen() {
+        console.log('[JS] Showing onboarding screen for new session');
+        this.modeManager.hudManager.showForMode('onboarding');
+        this.sessionWelcomeShown = true;
+        this.loadOnboardingScene();
+
+      }
+
+      exitOnboardingMode() {
+        console.log('[JS] Exiting onboarding mode - starting active mode');
+        this.mode = 'active';
+
+        // Start the scene system after onboarding
+        this.restartSceneSystem();
+      }
+
+      showWelcomeScreen() {
+        console.log('[JS] Showing welcome screen for new session');
+        this.sessionWelcomeShown = true;
+        this.loadWelcomeScene();
+        this.modeManager.hudManager.showForMode('onboarding');
+      }
+
+      startProgressUpdater() {
+        setInterval(() => {
+          // Update scene progress (this would be connected to scene manager)
+          // For now, just a placeholder
+        }, 1000);
+      }
+    }
+
+    // Global functions for manual controls
+    function toggleDebug() {
+      const panel = document.getElementById('debugPanel');
+      const isVisible = panel.classList.toggle('visible');
+      window.app.appState.setState({ debugVisible: isVisible });
+    }
+
+    function nextScene() {
+      console.log('[UI] Next scene button clicked');
+      if (window.app && window.app.sceneManager) {
+        window.app.sceneManager.nextScene();
+      } else {
+        console.error('[UI] SceneManager not available');
+      }
+    }
+
+    function previousScene() {
+      console.log('[UI] Previous scene button clicked');
+      if (window.app && window.app.sceneManager) {
+        window.app.sceneManager.previousScene();
+      } else {
+        console.error('[UI] SceneManager not available');
+      }
+    }
+
+    function toggleAutoCycle() {
+      console.log('Toggle auto-cycle button clicked');
+      if (window.app && window.app.socket) {
+        window.app.socket.emit('toggle_auto_cycle');
+        console.log('Emitted toggle_auto_cycle event');
+      } else {
+        console.error('Socket not available');
+      }
+    }
+
+    function toggleVideo() {
+      const videoDiv = document.getElementById('debugVideo');
+      const isVisible = videoDiv.classList.toggle('visible');
+
+      // If showing video, refresh the stream
+      if (isVisible) {
+        const videoImg = document.getElementById('videoStream');
+        videoImg.src = '/video_feed?' + new Date().getTime();
+      }
+    }
+
+    function toggleDebugPoints() {
+      if (window.app) {
+        window.app.toggleDebugPoints();
+      }
+    }
+
+    function toggleControlsHUD() {
+      if (window.app) {
+        window.app.toggleControlsHUD();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      window.app = new HandTrackingKiosk();
+
+      // Set up iframe message handling
+      window.addEventListener('message', (event) => {
+        if (event.data.type === 'transition_to_active') {
+          // Handle transition from onboarding to active mode
+          console.log('Transitioning from onboarding to active mode');
+          if (window.app && window.app.modeManager) {
+            window.app.modeManager.transitionTo('active');
+          }
+        } else if (event.data.type === 'begin_hover') {
+          // Handle "BEGIN" text hover from onboarding scene (legacy - now handled in welcome.html directly)
+          if (window.app && window.app.sceneManager && window.app.sceneManager.sceneHandlers && window.app.sceneManager.sceneHandlers.onboarding) {
+            if (event.data.hovering && !window.app.sceneManager.sceneHandlers.onboarding.isHovering) {
+              window.app.sceneManager.sceneHandlers.onboarding.startCountdown();
+            } else if (!event.data.hovering && window.app.sceneManager.sceneHandlers.onboarding.isHovering) {
+              window.app.sceneManager.sceneHandlers.onboarding.stopCountdown();
+            }
+          }
+        } else if (event.data.type === 'hand_detected') {
+          // Handle hand detection in onboarding/welcome screen
+          console.log('Hand detected in onboarding, resetting idle timer');
+          if (window.app && window.app.modeManager) {
+            window.app.modeManager.resetIdleTimer();
+          }
+        } else if (event.data.type === 'iframe_ready') {
+          console.log('Iframe ready:', event.data.scene);
+        }
+      });
+    });
+  </script>
+</body>
+
+</html>

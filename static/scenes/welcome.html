@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome - Onboarding</title>
+</head>
+
+<body>
+  <div class="scene welcome-scene">
+    <div class="terminal-frame">
+      <div class="terminal-header">
+        <div class="terminal-title">ATLANTIS HAND TRACKING INTERFACE v4.20.69</div>
+        <div class="terminal-signal">
+          <span class="signal-indicator">●</span>
+          <span class="signal-text">PRESENCE DETECTED</span>
+        </div>
+      </div>
+
+      <div class="terminal-content">
+        <div class="welcome-header">
+          <div class="ascii-art">
+     █████╗ ████████╗██╗      █████╗ ███╗   ██╗████████╗██╗███████╗
+    ██╔══██╗╚══██╔══╝██║     ██╔══██╗████╗  ██║╚══██╔══╝██║██╔════╝
+    ███████║   ██║   ██║     ███████║██╔██╗ ██║   ██║   ██║███████╗
+    ██╔══██║   ██║   ██║     ██╔══██║██║╚██╗██║   ██║   ██║╚════██║
+    ██║  ██║   ██║   ███████╗██║  ██║██║ ╚████║   ██║   ██║███████║
+    ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝   ╚═╝╚══════╝
+    
+    ██╗  ██╗██████╗  ██████╗      █████╗ ███╗   ██╗██████╗     ██████╗ 
+    ██║  ██║╚════██╗██╔═████╗    ██╔══██╗████╗  ██║██╔══██╗    ██╔══██╗
+    ███████║ █████╔╝██║██╔██║    ███████║██╔██╗ ██║██║  ██║    ██║  ██║
+    ╚════██║ ╚═══██╗████╔╝██║    ██╔══██║██║╚██╗██║██║  ██║    ██║  ██║
+         ██║██████╔╝╚██████╔╝    ██║  ██║██║ ╚████║██████╔╝    ██████╔╝
+         ╚═╝╚═════╝  ╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝     ╚═════╝ 
+          </div>
+          <div class="system-status">
+            <span class="status-line">&gt; TRACKING SYSTEM ONLINE</span>
+            <span class="status-line">&gt; GESTURE RECOGNITION: ACTIVE</span>
+            <span class="status-line">&gt; READY FOR INPUT...</span>
+          </div>
+        </div>
+
+        <div class="instruction-grid">
+          <div class="instruction-module" id="instruction1">
+            <div class="module-header">
+              <span class="module-icon">[●]</span>
+              <span class="module-title">HAND DETECTION</span>
+            </div>
+            <div class="module-content">
+              <div class="instruction-text">
+                &gt; Show your hands to the camera<br>
+                &gt; System will auto-detect gestures<br>
+                &gt; Status: <span class="status-ready">READY</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="instruction-module" id="instruction2">
+            <div class="module-header">
+              <span class="module-icon">[●]</span>
+              <span class="module-title">POINT & INTERACT</span>
+            </div>
+            <div class="module-content">
+              <div class="instruction-text">
+                &gt; Point to select objects<br>
+                &gt; Move hands to control interface<br>
+                &gt; Status: <span class="status-ready">READY</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="instruction-module" id="instruction3">
+            <div class="module-header">
+              <span class="module-icon">[●]</span>
+              <span class="module-title">CREATE & EXPRESS</span>
+            </div>
+            <div class="module-content">
+              <div class="instruction-text">
+                &gt; Use gestures to create art<br>
+                &gt; Express through movement<br>
+                &gt; Status: <span class="status-ready">READY</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="terminal-footer">
+          <div class="footer-line">
+            <span class="prompt">&gt;</span>
+            <span class="typing-cursor">_</span>
+            <span class="footer-text" id="beginText">MOVE YOUR HAND HERE TO BEGIN</span>
+            <div class="countdown-overlay" id="countdownOverlay">
+              <div class="countdown-circle">
+                <div class="countdown-number" id="countdownNumber">3</div>
+                <svg class="countdown-progress" width="80" height="80">
+                  <circle cx="40" cy="40" r="35" stroke="var(--pipboy-orange)" stroke-width="3" fill="none"
+                    opacity="0.3" />
+                  <circle cx="40" cy="40" r="35" stroke="var(--pipboy-orange)" stroke-width="3" fill="none"
+                    stroke-dasharray="220" stroke-dashoffset="220" class="countdown-progress-ring" id="countdownRing" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scanlines"></div>
+    <div class="screen-flicker"></div>
+  </div>
+
+  <style>
+    @import url('/static/fonts/fonts.css');
+
+    :root {
+      --pipboy-green: #00ff41;
+      --pipboy-green-dark: #00dd33;
+      --pipboy-orange: rgb(255, 170, 60);
+      --pipboy-orange-glow: rgba(255, 170, 60, 0.5);
+    }
+
+    .welcome-scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      margin: auto;
+      background: #000;
+      font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .terminal-frame {
+      position: relative;
+      width: 80%;
+      height: 80%;
+      margin: auto;
+      
+      background: #001100;
+      border: 3px solid #00ff41;
+      border-radius: 10px;
+      box-shadow:
+        0 0 20px #00ff41,
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+    }
+
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      background: rgba(0, 255, 65, 0.1);
+      border-bottom: 2px solid #00ff41;
+    }
+
+    .terminal-title {
+      color: #00ff41;
+      font-size: 1.2rem;
+      font-weight: bold;
+      text-shadow: 0 0 10px #00ff41;
+    }
+
+    .terminal-signal {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #00ff41;
+    }
+
+    .signal-indicator {
+      color: var(--pipboy-orange);
+      text-shadow: 0 0 10px var(--pipboy-orange);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .signal-text {
+      font-size: 0.9rem;
+    }
+
+    .terminal-content {
+      flex: 1;
+      padding: 30px;
+      color: #00ff41;
+      overflow-y: auto;
+    }
+
+    .welcome-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .ascii-art {
+      font-size: 0.8rem;
+      line-height: 1.2;
+      color: #00ff41;
+      text-shadow: 0 0 10px #00ff41;
+      margin-bottom: 30px;
+      font-family: monospace;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .system-status {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 1rem;
+    }
+
+    .status-line {
+      animation: typewriter 2s steps(20) 1s both;
+      border-right: 2px solid #00ff41;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    .status-line:nth-child(2) {
+      animation-delay: 3s;
+    }
+
+    .status-line:nth-child(3) {
+      animation-delay: 5s;
+    }
+
+    .instruction-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .instruction-module {
+      background: rgba(0, 255, 65, 0.05);
+      border: 2px solid #00ff41;
+      border-radius: 5px;
+      padding: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .instruction-module:hover {
+      background: rgba(0, 255, 65, 0.1);
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+      transform: translateY(-5px);
+    }
+
+    .instruction-module.active {
+      background: rgba(0, 255, 65, 0.2);
+      box-shadow: 0 0 30px rgba(0, 255, 65, 0.6);
+      transform: translateY(-5px) scale(1.02);
+    }
+
+    .instruction-module.active::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.2), transparent);
+      animation: scan 1s ease-in-out;
+    }
+
+    .module-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+
+    .module-icon {
+      color: #00ff41;
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    .module-title {
+      color: #00ff41;
+      text-shadow: 0 0 5px #00ff41;
+    }
+
+    .module-content {
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .instruction-text {
+      color: #00dd33;
+    }
+
+    .status-ready {
+      color: #00ff41;
+      font-weight: bold;
+      text-shadow: 0 0 5px #00ff41;
+      animation: pulse-attention 2s ease-in-out infinite;
+    }
+
+    .terminal-footer {
+      padding: 20px;
+      border-top: 2px solid #00ff41;
+      background: rgba(0, 255, 65, 0.05);
+    }
+
+    .footer-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 2.1rem;
+      color: var(--pipboy-orange);
+      text-shadow: 0 0 10px var(--pipboy-orange);
+    }
+
+    .prompt {
+      /* color: #00ff41; */
+      font-weight: bold;
+    }
+
+    .typing-cursor {
+      animation: blink 1s step-end infinite;
+      /* color: #00ff41; */
+    }
+
+    .footer-text {
+      color: var(--pipboy-orange);
+      font-weight: bold;
+      text-shadow: 0 0 5px var(--pipboy-orange);
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      animation: pulse-attention 2s ease-in-out infinite;
+    }
+
+    .footer-text:hover {
+      color: #00ff88;
+      text-shadow: 0 0 15px #00ff88;
+    }
+
+    /* Hand cursor */
+    .hand-cursor {
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #00ff41;
+      border-radius: 50%;
+      background: rgba(0, 255, 65, 0.3);
+      pointer-events: none;
+      z-index: 9999;
+      transition: all 0.1s ease;
+      box-shadow: 0 0 10px #00ff41;
+    }
+
+    .hand-cursor.hovering {
+      background: rgba(0, 255, 65, 0.6);
+      transform: scale(1.5);
+      box-shadow: 0 0 20px #00ff41;
+    }
+
+    /* Countdown overlay */
+    .countdown-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(1.5);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+      background: rgba(51, 34, 0, 0.8);
+      border: 2px solid var(--pipboy-orange);
+      border-radius: 10px;
+      padding: 30px;
+      box-shadow: 0 0 30px var(--pipboy-orange-glow);
+    }
+
+    .countdown-overlay.visible {
+      opacity: 1;
+    }
+
+    .countdown-circle {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .countdown-number {
+      position: absolute;
+      font-size: 2rem;
+      font-weight: bold;
+      color: var(--pipboy-orange);
+      text-shadow: 0 0 10px var(--pipboy-orange);
+      z-index: 1;
+    }
+
+    .countdown-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: rotate(-90deg);
+    }
+
+    .countdown-progress-ring {
+      transition: stroke-dashoffset 0.1s ease;
+      stroke-linecap: round;
+    }
+
+    /* Screen effects */
+    .scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(transparent 50%,
+          rgba(0, 255, 65, 0.03) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .screen-flicker {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 255, 65, 0.02);
+      pointer-events: none;
+      z-index: 999;
+      animation: flicker 0.15s infinite linear alternate;
+    }
+
+    /* Animations */
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
+    }
+
+    @keyframes typewriter {
+      from {
+        width: 0;
+      }
+
+      to {
+        width: 100%;
+      }
+    }
+
+    @keyframes blink {
+
+      0%,
+      50% {
+        opacity: 1;
+      }
+
+      51%,
+      100% {
+        opacity: 0;
+      }
+    }
+
+    @keyframes scan {
+      0% {
+        left: -100%;
+      }
+
+      100% {
+        left: 100%;
+      }
+    }
+
+    @keyframes flicker {
+      0% {
+        opacity: 0.98;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    @keyframes pulse-attention {
+      0% {
+        opacity: 1;
+        text-shadow: 0 0 5px var(--pipboy-orange);
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.7;
+        text-shadow: 0 0 20px var(--pipboy-orange), 0 0 30px var(--pipboy-orange);
+        transform: scale(1.02);
+      }
+
+      100% {
+        opacity: 1;
+        text-shadow: 0 0 5px var(--pipboy-orange);
+        transform: scale(1);
+      }
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .terminal-frame {
+        width: 95%;
+        height: 95%;
+        margin: 2.5% auto;
+      }
+
+      .instruction-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      .ascii-art {
+        font-size: 0.6rem;
+      }
+
+      .terminal-header {
+        padding: 15px;
+      }
+
+      .terminal-content {
+        padding: 20px;
+      }
+    }
+  </style>
+
+  <script src="/static/socket.io.js"></script>
+  <script>
+    // Welcome scene with direct WebSocket connection
+    console.log('Welcome scene loaded');
+
+    // Check if this is running in an iframe
+    const isIframe = window !== window.parent;
+    
+    // State tracking
+    let isHovering = false;
+    let countdownTimer = null;
+    let countdownStartTime = null;
+    let handCursor = null;
+
+    // Setup WebSocket connection
+    const socket = io();
+
+    // Initialize hand cursor
+    function initializeHandCursor() {
+      handCursor = document.createElement('div');
+      handCursor.className = 'hand-cursor';
+      handCursor.style.display = 'none';
+      document.body.appendChild(handCursor);
+    }
+
+    // Update hand cursor position
+    function updateHandCursor(hands) {
+      if (!handCursor || hands.length === 0) {
+        if (handCursor) handCursor.style.display = 'none';
+        return;
+      }
+
+      const hand = hands[0];
+      const screenX = hand.palm_center.x * window.innerWidth;
+      const screenY = hand.palm_center.y * window.innerHeight;
+
+      handCursor.style.left = (screenX - 10) + 'px';
+      handCursor.style.top = (screenY - 10) + 'px';
+      handCursor.style.display = 'block';
+
+      // Check if cursor is over interactive elements
+      const beginText = document.getElementById('beginText');
+      if (beginText) {
+        const rect = beginText.getBoundingClientRect();
+        const expandedRect = {
+          left: rect.left - 50,
+          right: rect.right + 50,
+          top: rect.top - 50,
+          bottom: rect.bottom + 50
+        };
+
+        const isOverElement = screenX >= expandedRect.left && screenX <= expandedRect.right &&
+          screenY >= expandedRect.top && screenY <= expandedRect.bottom;
+
+        if (isOverElement) {
+          handCursor.classList.add('hovering');
+        } else {
+          handCursor.classList.remove('hovering');
+        }
+      }
+    }
+
+    // Initialize cursor when page loads
+    document.addEventListener('DOMContentLoaded', initializeHandCursor);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeHandCursor);
+    } else {
+      initializeHandCursor();
+    }
+
+    // Subscribe to hand tracking events
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      // Subscribe to hand tracking events
+      socket.emit('subscribe', {
+        events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
+      });
+    });
+
+    // Handle all events
+    socket.on('event', (eventData) => {
+      switch(eventData.type) {
+        case 'hand_moved':
+          if (eventData.data && eventData.data.hands) {
+            handleHandMovement(eventData.data.hands);
+          }
+          break;
+          
+        case 'hand_detected':
+          if (eventData.data && eventData.data.hands) {
+            handleHandDetected(eventData.data.hands);
+          }
+          break;
+          
+        case 'hand_lost':
+          handleHandLost();
+          break;
+          
+        case 'frame_processed':
+          // Optional: handle frame processed events
+          break;
+      }
+    });
+
+    function handleHandMovement(hands) {
+
+      // Update hand cursor
+      updateHandCursor(hands);
+
+      // Clear all active modules
+      const modules = document.querySelectorAll('.instruction-module');
+      modules.forEach(module => module.classList.remove('active'));
+
+      if (hands.length > 0) {
+        const hand = hands[0];
+        const palmX = hand.palm_center.x;
+        const palmY = hand.palm_center.y;
+
+        // Highlight instruction modules based on hand position
+        if (palmY > 0.3 && palmY < 0.8) {
+          if (palmX < 0.33) {
+            const module1 = document.getElementById('instruction1');
+            if (module1) module1.classList.add('active');
+          } else if (palmX < 0.66) {
+            const module2 = document.getElementById('instruction2');
+            if (module2) module2.classList.add('active');
+          } else {
+            const module3 = document.getElementById('instruction3');
+            if (module3) module3.classList.add('active');
+          }
+        }
+
+        // For onboarding scene, check if hand is over "BEGIN" text
+        const beginText = document.getElementById('beginText');
+        if (beginText) {
+          const rect = beginText.getBoundingClientRect();
+          const screenX = palmX * window.innerWidth;
+          const screenY = palmY * window.innerHeight;
+
+          // Expand the clickable area around the text
+          const expandedRect = {
+            left: rect.left - 50,
+            right: rect.right + 50,
+            top: rect.top - 50,
+            bottom: rect.bottom + 50
+          };
+
+          const isOverBeginText = screenX >= expandedRect.left && screenX <= expandedRect.right &&
+            screenY >= expandedRect.top && screenY <= expandedRect.bottom;
+
+          if (isOverBeginText && !isHovering) {
+            startCountdown();
+          } else if (!isOverBeginText && isHovering) {
+            stopCountdown();
+          }
+        }
+      }
+    }
+
+    function handleHandDetected(hands) {
+      const signalText = document.querySelector('.signal-text');
+      if (signalText) {
+        signalText.textContent = 'PRESENCE DETECTED';
+      }
+      
+      // Notify parent to reset idle timer
+      if (isIframe && window.parent) {
+        window.parent.postMessage({
+          type: 'hand_detected'
+        }, '*');
+      }
+    }
+
+    function handleHandLost() {
+      
+      // Hide hand cursor
+      if (handCursor) {
+        handCursor.style.display = 'none';
+        handCursor.classList.remove('hovering');
+      }
+      
+      const signalText = document.querySelector('.signal-text');
+      if (signalText) {
+        signalText.textContent = 'SIGNAL DETECTED';
+      }
+
+      // Clear all active modules
+      const modules = document.querySelectorAll('.instruction-module');
+      modules.forEach(module => module.classList.remove('active'));
+
+      // Stop countdown if active
+      stopCountdown();
+    }
+
+    function startCountdown() {
+      if (isHovering) return;
+
+      isHovering = true;
+      countdownStartTime = Date.now();
+
+      // Show countdown overlay
+      const overlay = document.getElementById('countdownOverlay');
+      if (overlay) {
+        overlay.classList.add('visible');
+      }
+
+      // Start countdown timer
+      updateCountdown();
+    }
+
+    function updateCountdown() {
+      if (!isHovering) return;
+
+      const elapsed = (Date.now() - countdownStartTime) / 1000;
+      const remaining = Math.max(0, 3 - elapsed);
+      const progress = (elapsed / 3) * 220; // 220 is the stroke-dasharray value
+
+      // Update countdown number
+      const countdownNumber = document.getElementById('countdownNumber');
+      if (countdownNumber) {
+        countdownNumber.textContent = Math.ceil(remaining);
+      }
+
+      // Update progress ring
+      const progressRing = document.getElementById('countdownRing');
+      if (progressRing) {
+        progressRing.style.strokeDashoffset = 220 - progress;
+      }
+
+      if (remaining > 0) {
+        countdownTimer = setTimeout(() => updateCountdown(), 50);
+      } else {
+        completeCountdown();
+      }
+    }
+
+    function completeCountdown() {
+      stopCountdown();
+
+      // Notify parent or redirect to active mode
+      if (isIframe && window.parent) {
+        window.parent.postMessage({
+          type: 'transition_to_active'
+        }, '*');
+      }
+    }
+
+    function stopCountdown() {
+      if (!isHovering) return;
+
+      isHovering = false;
+
+      // Clear timer
+      if (countdownTimer) {
+        clearTimeout(countdownTimer);
+        countdownTimer = null;
+      }
+
+      // Hide countdown overlay
+      const overlay = document.getElementById('countdownOverlay');
+      if (overlay) {
+        overlay.classList.remove('visible');
+      }
+
+      // Reset countdown display
+      const countdownNumber = document.getElementById('countdownNumber');
+      if (countdownNumber) {
+        countdownNumber.textContent = '3';
+      }
+
+      const progressRing = document.getElementById('countdownRing');
+      if (progressRing) {
+        progressRing.style.strokeDashoffset = '220';
+      }
+    }
+  </script>
+</body>
+
+</html>
