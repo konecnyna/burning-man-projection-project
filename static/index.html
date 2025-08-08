@@ -1262,12 +1262,18 @@
           } else if (currentMode === 'active') {
             console.log('[ModeManager] Hand detected in active mode, resetting idle timer');
             this.resetIdleTimer();
+          } else if (currentMode === 'onboarding') {
+            console.log('[ModeManager] Hand detected in onboarding mode, resetting idle timer');
+            this.resetIdleTimer();
           }
           this.hideIdleWarning();
         } else {
-          // Hand lost - start idle timer if in active mode
+          // Hand lost - start idle timer if in active or onboarding mode
           if (currentMode === 'active') {
             console.log('[ModeManager] Hand lost in active mode, starting idle timer');
+            this.startIdleTimer();
+          } else if (currentMode === 'onboarding') {
+            console.log('[ModeManager] Hand lost in onboarding mode, starting idle timer');
             this.startIdleTimer();
           }
         }
@@ -1375,8 +1381,8 @@
 
       resetIdleTimer() {
         const currentMode = this.appState.get('currentMode');
-        if (currentMode === 'active') {
-          console.log('[ModeManager] Resetting idle timer');
+        if (currentMode === 'active' || currentMode === 'onboarding') {
+          console.log(`[ModeManager] Resetting idle timer for ${currentMode} mode`);
           this.startIdleTimer();
         }
       }
