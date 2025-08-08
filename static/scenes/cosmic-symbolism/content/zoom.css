@@ -51,7 +51,13 @@ body {
   padding: 0;
   background: #000;
   z-index: 5;
-  opacity: 0; 
+  opacity: 0;
+  /* Performance optimizations */
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
 }
 
 .button
