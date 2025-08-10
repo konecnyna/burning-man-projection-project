@@ -936,7 +936,7 @@
           const data = await response.json();
           this.productionMode = data.production_mode;
           console.log(`[HUDManager] Production mode: ${this.productionMode}`);
-          
+
           // Apply production mode styles immediately
           this.applyProductionModeStyles();
         } catch (error) {
@@ -961,7 +961,7 @@
 
       show(reason = 'unknown') {
         console.log(`[HUDManager] Showing HUD (reason: ${reason})`);
-        
+
         // Show HUD elements when not in idle mode, but respect debug settings
         const appContainer = document.querySelector('.app-container');
         if (appContainer && this.appState.get('controlsHUDVisible') !== false) {
@@ -984,7 +984,7 @@
 
       hide(reason = 'unknown') {
         console.log(`[HUDManager] Hiding HUD (reason: ${reason})`);
-        
+
         // Hide ALL HUD elements
         const appContainer = document.querySelector('.app-container');
         if (appContainer) {
@@ -1005,7 +1005,7 @@
 
       showForMode(mode) {
         console.log(`[HUDManager] Showing HUD for mode: ${mode}`);
-        
+
         // Different modes might have different HUD visibility rules
         switch (mode) {
           case 'idle':
@@ -1038,20 +1038,20 @@
 
       showOverlay(title, description, extraContent) {
         console.log(`[HUDManager] Showing overlay: ${title}`, title, description, extraContent);
-        
+
         const overlay = document.getElementById('parentOverlay');
         const overlayTitle = document.getElementById('overlayTitle');
         const overlayDescription = document.getElementById('overlayDescription');
         const overlayExtraContent = document.getElementById('overlayExtraContent');
-        
+
         if (overlayTitle && title) {
           overlayTitle.textContent = title;
         }
-        
+
         if (overlayDescription && description) {
           overlayDescription.textContent = description;
         }
-        
+
         // Handle extra content (scene progress, etc.)
         if (overlayExtraContent) {
           if (extraContent) {
@@ -1060,15 +1060,15 @@
             overlayExtraContent.innerHTML = '';
           }
         }
-        
+
         // Show the overlay (regardless of production mode)
         overlay.classList.add('visible');
-        
+
         // Auto-hide after 3 seconds
         if (this.overlayTimer) {
           clearTimeout(this.overlayTimer);
         }
-        
+
         this.overlayTimer = setTimeout(() => {
           this.hideOverlay();
         }, 3000);
@@ -1076,12 +1076,12 @@
 
       hideOverlay() {
         console.log('[HUDManager] Hiding overlay');
-        
+
         const overlay = document.getElementById('parentOverlay');
         if (overlay) {
           overlay.classList.remove('visible');
         }
-        
+
         if (this.overlayTimer) {
           clearTimeout(this.overlayTimer);
           this.overlayTimer = null;
@@ -1175,8 +1175,8 @@
           return;
         }
 
-        switch(newMode) {
-          
+        switch (newMode) {
+
         }
 
         // Check if transition is allowed
@@ -1237,7 +1237,10 @@
       // Handle hand detection changes
       onHandsChanged(hands) {
         const wasDetected = this.appState.get('handsDetected');
-        const nowDetected = hands.length > 0;
+
+        // Filter out low-confidence hands before determining detection state
+        const highConfidenceHands = hands.filter(hand => hand.confidence.overall >= .65);
+        const nowDetected = highConfidenceHands.length > 0;
 
         // Reset idle timer whenever hands are present (continuous tracking)
         if (nowDetected) {
@@ -1315,7 +1318,7 @@
         this.clearIdleTimer();
         this.hideIdleWarning();
         this.hudManager.showForMode('onboarding');
-        
+
         this.appState.setState({
           sessionActive: true,
           sessionStartTime: Date.now(),
@@ -1485,15 +1488,33 @@
         this.cycleTimer = null;
         this.countdownTimer = null;
         this.currentSceneIframe = null;
-        this.defaultDuration = 15
+        this.quickScene = 25
+        this.defaultDuration = 45
+        this.popularScene = 75
 
         // Scene configurations
         this.scenes = [
           {
+            id: 'orbits',
+            name: 'Orbits',
+            description: 'An interactive flight through attractor orbits using hopalong formula',
+            duration: this.popularScene,
+            html_file: 'scenes/orbits/index.html',
+            background_color: '#000000'
+          },
+          {
+            id: 'pong',
+            name: 'Hand Tracking Pong',
+            description: 'Classic Pong game controlled by hand Y-axis movement',
+            duration: this.popularScene,
+            html_file: 'scenes/pong/index.html',
+            background_color: '#000000'
+          },
+          {
             id: 'fluidsim',
             name: 'Fluid Simulation',
             description: 'WebGL fluid simulation controlled by hand movements',
-            duration: this.defaultDuration,
+            duration: this.popularScene,
             html_file: 'scenes/fluidsim/index.html',
             background_color: '#000000'
           },
@@ -1501,34 +1522,35 @@
             id: 'cosmic_symbolism',
             name: 'Cosmic Symbolism',
             description: 'Navigate through cosmic imagery with hand movements',
-            duration: this.defaultDuration,
+            duration: this.popularScene,
             html_file: 'scenes/cosmic-symbolism/index.html',
             background_color: '#000000'
           },
-          {
-            id: 'psychedelic_waves',
-            name: 'Psychedelic Waves',
-            description: 'WebGL shader-based wave visualization controlled by hand movements',
-            duration: this.defaultDuration,
-            html_file: 'scenes/psychedelic-waves/index.html',
-            background_color: '#000000'
-          },
-          {
-            id: 'orbits',
-            name: 'Orbits',
-            description: 'An interactive flight through attractor orbits using hopalong formula',
-            duration: this.defaultDuration,
-            html_file: 'scenes/orbits/index.html',
-            background_color: '#000000'
-          },
-          {
+            {
             id: 'tie_dye',
             name: 'Tie Dye',
             description: 'Use your hands to create a tie dye pattern',
             duration: this.defaultDuration,
             html_file: 'scenes/tie-dye/index.html',
             background_color: '#000000'
-          }
+          },
+          {
+            id: 'psychedelic_waves',
+            name: 'Psychedelic Waves',
+            description: 'WebGL shader-based wave visualization controlled by hand movements',
+            duration: this.quickScene,
+            html_file: 'scenes/psychedelic-waves/index.html',
+            background_color: '#000000'
+          },
+          {
+            id: 'wireframe_geometry',
+            name: 'Wireframe Geometry',
+            description: 'Interactive morphing wireframe geometry with hand-triggered pulses',
+            duration: this.quickScene,
+            html_file: 'scenes/wireframe-geometry/index.html',
+            background_color: '#000000'
+          },
+        
         ];
 
 
@@ -1691,7 +1713,7 @@
             const totalScenes = this.appState.get('totalScenes');
             const duration = scene.duration;
             const progressPercent = Math.round((sceneIndex / totalScenes) * 100);
-            
+
             const sceneProgressContent = `
               <div class="scene-progress">
                 <div class="scene-progress-bar" style="width: ${progressPercent}%;"></div>
@@ -1701,7 +1723,7 @@
                 <div class="scene-timer">${duration}s remaining</div>
               </div>
             `;
-            
+
             this.hudManager.showOverlay(
               scene.name,
               scene.description,
@@ -1713,7 +1735,7 @@
           const container = document.getElementById('scene-container');
 
           // Handle iframe scenes
-          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'idle'].includes(scene.id)) {
+          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'idle'].includes(scene.id)) {
             container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
 
             setTimeout(() => {
@@ -2126,8 +2148,10 @@
 
       // Process hand tracking data and update state
       processHandEvent(hands) {
+        // Filter out low-confidence hands to maintain consistency with idle detection
+        const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .65);
         // Update hands state - this will trigger ModeManager via subscription
-        this.appState.setState({ hands: hands || [] });
+        this.appState.setState({ hands: filteredHands });
       }
 
       initializeKeyboardShortcuts() {
@@ -2521,6 +2545,82 @@
             });
 
             console.log('Welcome scene cleaned up');
+          }
+        };
+
+        // Wireframe Geometry scene handler
+        this.sceneHandlers.wireframe_geometry = {
+          onInit: function () {
+            console.log('[SceneHandler] Wireframe Geometry scene initialized');
+          },
+          onHandDetected: function (hands) {
+            console.log('[SceneHandler] Hand detected in wireframe geometry scene, forwarding to iframe');
+            // Forward to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_detected',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandMove: function (hands) {
+            // Forward hand movements to iframe
+            if (sceneManager.currentSceneIframe && hands && hands.length > 0) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_move',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandLost: function () {
+            // Forward hand lost to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_lost'
+              }, '*');
+            }
+          },
+          onCleanup: function () {
+            console.log('Wireframe Geometry scene cleaned up');
+          }
+        };
+
+        // Pong scene handler
+        this.sceneHandlers.pong = {
+          onInit: function () {
+            console.log('[SceneHandler] Pong scene initialized');
+          },
+          onHandDetected: function (hands) {
+            console.log('[SceneHandler] Hand detected in pong scene, forwarding to iframe');
+            // Forward to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_detected',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandMove: function (hands) {
+            // Forward hand movements to iframe
+            if (sceneManager.currentSceneIframe && hands && hands.length > 0) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_move',
+                data: { landmarks: hands }
+              }, '*');
+            }
+          },
+          onHandLost: function () {
+            console.log('[SceneHandler] Hand lost in pong scene, forwarding to iframe');
+            // Forward to iframe
+            if (sceneManager.currentSceneIframe) {
+              sceneManager.currentSceneIframe.postMessage({
+                type: 'hand_lost',
+                data: {}
+              }, '*');
+            }
+          },
+          onCleanup: function () {
+            console.log('Pong scene cleaned up');
           }
         };
       }

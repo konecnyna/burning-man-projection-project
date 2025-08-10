@@ -1,36 +1,36 @@
 <div class="scene idle-scene">
-    <div class="screensaver-container">
-        <div class="floating-logo">
-            <div class="logo-text">ATLANTIS</div>
-            <div class="logo-subtext">4:30 & DICK</div>
-        </div>
-        
-        <div class="floating-particles">
-            <canvas id="particleCanvas"></canvas>
-            <div class="simple-particles" id="simpleParticlesContainer">
-            </div>
-        </div>
-        
-        <div class="idle-message">
-            <div class="message-text" id="typingText">
-                <span class="typed-text"></span>
-                <span class="cursor">|</span>
-            </div>            
-        </div>
+  <div class="screensaver-container">
+    <div class="floating-logo">
+      <div class="logo-text">ATLANTIS</div>
+      <div class="logo-subtext">4:30 & DICK</div>
     </div>
+
+    <div class="floating-particles">
+      <canvas id="particleCanvas"></canvas>
+      <div class="simple-particles" id="simpleParticlesContainer">
+      </div>
+    </div>
+
+    <div class="idle-message">
+      <div class="message-text" id="typingText">
+        <span class="typed-text"></span>
+        <span class="cursor">|</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
-@import url('/static/fonts/fonts.css');
+  @import url('/static/fonts/fonts.css');
 
-:root {
+  :root {
     --pipboy-green: #00ff41;
     --pipboy-green-dark: #00dd33;
     --pipboy-orange: rgb(255, 170, 60);
     --pipboy-orange-glow: rgba(255, 170, 60, 0.5);
-}
+  }
 
-.message-text {
+  .message-text {
     font-size: 4rem;
     color: var(--pipboy-orange);
     text-shadow: 0 0 10px var(--pipboy-orange);
@@ -38,28 +38,28 @@
     position: relative;
     display: inline-block;
     white-space: nowrap;
-}
+  }
 
-.typed-text {
+  .typed-text {
     position: relative;
     display: inline-block;
-}
+  }
 
-.cursor {
+  .cursor {
     display: inline-block;
     background-color: var(--pipboy-orange);
     animation: blink 1s infinite;
     width: 3px;
     height: 1em;
     margin-left: 2px;
-}
+  }
 
-.message-text.glitch {
+  .message-text.glitch {
     animation: glitch 0.3s ease-in-out;
-}
+  }
 
-.message-text.glitch::before,
-.message-text.glitch::after {
+  .message-text.glitch::before,
+  .message-text.glitch::after {
     content: attr(data-text);
     position: absolute;
     top: 0;
@@ -67,21 +67,21 @@
     width: 100%;
     height: 100%;
     background: transparent;
-}
+  }
 
-.message-text.glitch::before {
+  .message-text.glitch::before {
     animation: glitch-1 0.3s ease;
     color: #ff0040;
     z-index: -1;
-}
+  }
 
-.message-text.glitch::after {
+  .message-text.glitch::after {
     animation: glitch-2 0.3s ease;
     color: #00ff9f;
     z-index: -2;
-}
+  }
 
-.idle-scene {
+  .idle-scene {
     position: relative;
     width: 100%;
     height: 100%;
@@ -90,9 +90,9 @@
     animation: gradientShift 5s ease infinite;
     font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
     overflow: hidden;
-}
+  }
 
-.screensaver-container {
+  .screensaver-container {
     position: relative;
     width: 100%;
     height: 100%;
@@ -100,55 +100,55 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-}
+  }
 
-.floating-logo {
+  .floating-logo {
     position: absolute;
     text-align: center;
     color: #00ff41;
     text-shadow: 0 0 20px #00ff41;
     animation: float 18s ease-in-out infinite;
     z-index: 5;
-}
+  }
 
-.logo-text {
+  .logo-text {
     font-size: 14rem;
     font-weight: bold;
     margin-bottom: 1rem;
     letter-spacing: 0.2em;
-}
+  }
 
-.logo-subtext {
+  .logo-subtext {
     font-size: 9.5rem;
     opacity: 0.8;
     letter-spacing: 0.1em;
-}
+  }
 
-.floating-particles {
+  .floating-particles {
     position: absolute;
     width: 100%;
     height: 100%;
     pointer-events: none;
-}
+  }
 
-#particleCanvas {
+  #particleCanvas {
     position: absolute;
     width: 100%;
     height: 100%;
     top: 0;
     left: 0;
     z-index: 1;
-}
+  }
 
-.simple-particles {
+  .simple-particles {
     position: absolute;
     width: 100%;
     height: 100%;
     top: 0;
     left: 0;
-}
+  }
 
-.simple-particle {
+  .simple-particle {
     position: absolute;
     width: 3px;
     height: 3px;
@@ -156,10 +156,10 @@
     border-radius: 50%;
     box-shadow: 0 0 6px #00ff41;
     animation: simpleParticleFloat 12s linear infinite;
-}
+  }
 
 
-.idle-message {
+  .idle-message {
     position: absolute;
     bottom: 10%;
     display: flex;
@@ -168,298 +168,362 @@
     color: #00ff41;
     font-size: 1.2rem;
     text-shadow: 0 0 10px #00ff41;
-}
+  }
 
 
-/* Animations */
-@keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-@keyframes float {
-    0%, 100% { 
-        transform: translateY(0px) translateX(0px);
-        opacity: 0.8;
-    }
-    25% { 
-        transform: translateY(-20px) translateX(30px);
-        opacity: 1;
-    }
-    50% { 
-        transform: translateY(0px) translateX(60px);
-        opacity: 0.9;
-    }
-    75% { 
-        transform: translateY(20px) translateX(30px);
-        opacity: 1;
-    }
-}
-
-
-@keyframes simpleParticleFloat {
+  /* Animations */
+  @keyframes gradientShift {
     0% {
-        transform: translateY(100vh) translateX(0px);
-        opacity: 0;
+      background-position: 0% 50%;
     }
-    10% {
-        opacity: 1;
+
+    50% {
+      background-position: 100% 50%;
     }
-    90% {
-        opacity: 1;
-    }
+
     100% {
-        transform: translateY(-100px) translateX(50px);
-        opacity: 0;
+      background-position: 0% 50%;
     }
-}
+  }
 
-@keyframes pulse {
-    0%, 100% { 
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% { 
-        opacity: 0.3;
-        transform: scale(1.2);
-    }
-}
+  @keyframes float {
 
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
+    0%,
+    100% {
+      transform: translateY(0px) translateX(0px);
+      opacity: 0.8;
+    }
 
-@keyframes glitch {
-    0% { transform: translate(0); }
-    20% { transform: translate(-2px, 2px); }
-    40% { transform: translate(-2px, -2px); }
-    60% { transform: translate(2px, 2px); }
-    80% { transform: translate(2px, -2px); }
-    100% { transform: translate(0); }
-}
+    25% {
+      transform: translateY(-20px) translateX(30px);
+      opacity: 1;
+    }
 
-@keyframes glitch-1 {
-    0% { 
-        transform: translate(0);
-        opacity: 1;
+    50% {
+      transform: translateY(0px) translateX(60px);
+      opacity: 0.9;
     }
-    10% { 
-        transform: translate(-2px, -2px);
-        opacity: 0.8;
-    }
-    20% { 
-        transform: translate(3px, 2px);
-        opacity: 0.9;
-    }
-    30% { 
-        transform: translate(-3px, 3px);
-        opacity: 0.7;
-    }
-    40% { 
-        transform: translate(2px, -1px);
-        opacity: 0.8;
-    }
-    50% { 
-        transform: translate(-1px, 2px);
-        opacity: 0.9;
-    }
-    60% { 
-        transform: translate(-3px, 1px);
-        opacity: 0.7;
-    }
-    70% { 
-        transform: translate(3px, 1px);
-        opacity: 0.8;
-    }
-    80% { 
-        transform: translate(-1px, -1px);
-        opacity: 0.9;
-    }
-    90% { 
-        transform: translate(1px, 2px);
-        opacity: 0.7;
-    }
-    100% { 
-        transform: translate(0);
-        opacity: 1;
-    }
-}
 
-@keyframes glitch-2 {
-    0% { 
-        transform: translate(0);
-        opacity: 1;
+    75% {
+      transform: translateY(20px) translateX(30px);
+      opacity: 1;
     }
-    10% { 
-        transform: translate(2px, 2px);
-        opacity: 0.8;
-    }
-    20% { 
-        transform: translate(-3px, -2px);
-        opacity: 0.9;
-    }
-    30% { 
-        transform: translate(3px, -3px);
-        opacity: 0.7;
-    }
-    40% { 
-        transform: translate(-2px, 1px);
-        opacity: 0.8;
-    }
-    50% { 
-        transform: translate(1px, -2px);
-        opacity: 0.9;
-    }
-    60% { 
-        transform: translate(3px, -1px);
-        opacity: 0.7;
-    }
-    70% { 
-        transform: translate(-3px, -1px);
-        opacity: 0.8;
-    }
-    80% { 
-        transform: translate(1px, 1px);
-        opacity: 0.9;
-    }
-    90% { 
-        transform: translate(-1px, -2px);
-        opacity: 0.7;
-    }
-    100% { 
-        transform: translate(0);
-        opacity: 1;
-    }
-}
+  }
 
-/* Responsive design */
-@media (max-width: 768px) {
+
+  @keyframes simpleParticleFloat {
+    0% {
+      transform: translateY(100vh) translateX(0px);
+      opacity: 0;
+    }
+
+    10% {
+      opacity: 1;
+    }
+
+    90% {
+      opacity: 1;
+    }
+
+    100% {
+      transform: translateY(-100px) translateX(50px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes pulse {
+
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    50% {
+      opacity: 0.3;
+      transform: scale(1.2);
+    }
+  }
+
+  @keyframes blink {
+
+    0%,
+    50% {
+      opacity: 1;
+    }
+
+    51%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes glitch {
+    0% {
+      transform: translate(0);
+    }
+
+    20% {
+      transform: translate(-2px, 2px);
+    }
+
+    40% {
+      transform: translate(-2px, -2px);
+    }
+
+    60% {
+      transform: translate(2px, 2px);
+    }
+
+    80% {
+      transform: translate(2px, -2px);
+    }
+
+    100% {
+      transform: translate(0);
+    }
+  }
+
+  @keyframes glitch-1 {
+    0% {
+      transform: translate(0);
+      opacity: 1;
+    }
+
+    10% {
+      transform: translate(-2px, -2px);
+      opacity: 0.8;
+    }
+
+    20% {
+      transform: translate(3px, 2px);
+      opacity: 0.9;
+    }
+
+    30% {
+      transform: translate(-3px, 3px);
+      opacity: 0.7;
+    }
+
+    40% {
+      transform: translate(2px, -1px);
+      opacity: 0.8;
+    }
+
+    50% {
+      transform: translate(-1px, 2px);
+      opacity: 0.9;
+    }
+
+    60% {
+      transform: translate(-3px, 1px);
+      opacity: 0.7;
+    }
+
+    70% {
+      transform: translate(3px, 1px);
+      opacity: 0.8;
+    }
+
+    80% {
+      transform: translate(-1px, -1px);
+      opacity: 0.9;
+    }
+
+    90% {
+      transform: translate(1px, 2px);
+      opacity: 0.7;
+    }
+
+    100% {
+      transform: translate(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes glitch-2 {
+    0% {
+      transform: translate(0);
+      opacity: 1;
+    }
+
+    10% {
+      transform: translate(2px, 2px);
+      opacity: 0.8;
+    }
+
+    20% {
+      transform: translate(-3px, -2px);
+      opacity: 0.9;
+    }
+
+    30% {
+      transform: translate(3px, -3px);
+      opacity: 0.7;
+    }
+
+    40% {
+      transform: translate(-2px, 1px);
+      opacity: 0.8;
+    }
+
+    50% {
+      transform: translate(1px, -2px);
+      opacity: 0.9;
+    }
+
+    60% {
+      transform: translate(3px, -1px);
+      opacity: 0.7;
+    }
+
+    70% {
+      transform: translate(-3px, -1px);
+      opacity: 0.8;
+    }
+
+    80% {
+      transform: translate(1px, 1px);
+      opacity: 0.9;
+    }
+
+    90% {
+      transform: translate(-1px, -2px);
+      opacity: 0.7;
+    }
+
+    100% {
+      transform: translate(0);
+      opacity: 1;
+    }
+  }
+
+  /* Responsive design */
+  @media (max-width: 768px) {
     .logo-text {
-        font-size: 2.5rem;
+      font-size: 2.5rem;
     }
-    
+
     .logo-subtext {
-        font-size: 1rem;
+      font-size: 1rem;
     }
-    
+
     .idle-message {
-        font-size: 1rem;
-        bottom: 15%;
+      font-size: 1rem;
+      bottom: 15%;
     }
-}
+  }
 </style>
 
 <script>
-// Comet particle system
-class CometParticles {
+  // Comet particle system
+  class CometParticles {
     constructor() {
-        this.canvas = document.getElementById('particleCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.particles = [];
-        this.trailLength = 40; // Longer tail
-        
-        this.resize();
-        this.createParticles();
-        this.animate();
-        
-        window.addEventListener('resize', () => this.resize());
+      this.canvas = document.getElementById('particleCanvas');
+      this.ctx = this.canvas.getContext('2d');
+      this.particles = [];
+      this.trailLength = 40; // Longer tail
+
+      this.resize();
+      this.createParticles();
+      this.animate();
+
+      window.addEventListener('resize', () => this.resize());
     }
-    
+
     resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+      this.canvas.width = window.innerWidth;
+      this.canvas.height = window.innerHeight;
     }
-    
+
     createParticles() {
-        // Only create 1 comet particle
-        this.particles.push({
-            x: Math.random() * this.canvas.width,
-            y: this.canvas.height + Math.random() * 200,
-            baseVx: (Math.random() - 0.5) * 1.5, // Base horizontal velocity
-            vy: -Math.random() * 2 - 0.5, // Slower vertical movement
-            trail: [],
-            delay: Math.random() * 3000, // Initial delay
-            startTime: Date.now(),
-            duration: 20000 + Math.random() * 10000, // Longer duration for single comet
-            waveOffset: Math.random() * Math.PI * 2, // Random wave phase
-            waveAmplitude: 30 + Math.random() * 50, // Wave amplitude
-            waveFrequency: 0.01 + Math.random() * 0.02, // Wave frequency
-            time: 0
-        });
+      // Only create 1 comet particle
+      this.particles.push({
+        x: Math.random() * this.canvas.width,
+        y: this.canvas.height + Math.random() * 200,
+        baseVx: (Math.random() - 0.5) * 1.5, // Base horizontal velocity
+        vy: -Math.random() * 2 - 0.5, // Slower vertical movement
+        trail: [],
+        delay: Math.random() * 3000, // Initial delay
+        startTime: Date.now(),
+        duration: 20000 + Math.random() * 10000, // Longer duration for single comet
+        waveOffset: Math.random() * Math.PI * 2, // Random wave phase
+        waveAmplitude: 30 + Math.random() * 50, // Wave amplitude
+        waveFrequency: 0.01 + Math.random() * 0.02, // Wave frequency
+        time: 0
+      });
     }
-    
+
     updateParticle(particle) {
-        const elapsed = Date.now() - particle.startTime;
-        
-        if (elapsed < particle.delay) return;
-        
-        // Add current position to trail
-        particle.trail.push({ x: particle.x, y: particle.y });
-        if (particle.trail.length > this.trailLength) {
-            particle.trail.shift();
-        }
-        
-        // Update time for wave calculations
-        particle.time += 0.5;
-        
-        // Calculate sinusoidal horizontal movement
-        const waveX = Math.sin(particle.time * particle.waveFrequency + particle.waveOffset) * particle.waveAmplitude;
-        
-        // Update position with curved path
-        particle.x += particle.baseVx + waveX * 0.05; // Apply wave effect gradually
-        particle.y += particle.vy;
-        
-        // Reset particle if it goes off screen or duration exceeded
-        if (particle.y < -100 || particle.x < -200 || particle.x > this.canvas.width + 200 || 
-            elapsed > particle.duration + particle.delay) {
-            particle.x = Math.random() * this.canvas.width;
-            particle.y = this.canvas.height + Math.random() * 200;
-            particle.baseVx = (Math.random() - 0.5) * 1.5;
-            particle.vy = -Math.random() * 2 - 0.5;
-            particle.trail = [];
-            particle.startTime = Date.now();
-            particle.delay = Math.random() * 10000 + 5000; // Longer delay between comets (5-15 seconds)
-            particle.duration = 20000 + Math.random() * 10000;
-            particle.waveOffset = Math.random() * Math.PI * 2;
-            particle.waveAmplitude = 30 + Math.random() * 50;
-            particle.waveFrequency = 0.01 + Math.random() * 0.02;
-            particle.time = 0;
-        }
+      const elapsed = Date.now() - particle.startTime;
+
+      if (elapsed < particle.delay) return;
+
+      // Add current position to trail
+      particle.trail.push({ x: particle.x, y: particle.y });
+      if (particle.trail.length > this.trailLength) {
+        particle.trail.shift();
+      }
+
+      // Update time for wave calculations
+      particle.time += 0.5;
+
+      // Calculate sinusoidal horizontal movement
+      const waveX = Math.sin(particle.time * particle.waveFrequency + particle.waveOffset) * particle.waveAmplitude;
+
+      // Update position with curved path
+      particle.x += particle.baseVx + waveX * 0.05; // Apply wave effect gradually
+      particle.y += particle.vy;
+
+      // Reset particle if it goes off screen or duration exceeded
+      if (particle.y < -100 || particle.x < -200 || particle.x > this.canvas.width + 200 ||
+        elapsed > particle.duration + particle.delay) {
+        particle.x = Math.random() * this.canvas.width;
+        particle.y = this.canvas.height + Math.random() * 200;
+        particle.baseVx = (Math.random() - 0.5) * 1.5;
+        particle.vy = -Math.random() * 2 - 0.5;
+        particle.trail = [];
+        particle.startTime = Date.now();
+        particle.delay = Math.random() * 10000 + 5000; // Longer delay between comets (5-15 seconds)
+        particle.duration = 20000 + Math.random() * 10000;
+        particle.waveOffset = Math.random() * Math.PI * 2;
+        particle.waveAmplitude = 30 + Math.random() * 50;
+        particle.waveFrequency = 0.01 + Math.random() * 0.02;
+        particle.time = 0;
+      }
     }
-    
+
     drawParticle(particle) {
-        const elapsed = Date.now() - particle.startTime;
-        if (elapsed < particle.delay) return;
-        
-        // Draw exhaust trail from bottom of rocket
-        for (let i = 0; i < particle.trail.length; i++) {
-            const alpha = (i / particle.trail.length) * 0.6;
-            const size = 3 + (i / particle.trail.length) * 6;
-            
-            // Calculate trail position offset from rocket bottom (now bottom since flipped)
-            const trailY = particle.trail[i].y + 24; // Offset to bottom of flipped rocket
-            
-            this.ctx.beginPath();
-            this.ctx.arc(particle.trail[i].x, trailY, size, 0, Math.PI * 2);
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.3})`; // White exhaust with lower opacity
-            this.ctx.shadowBlur = 8;
-            this.ctx.shadowColor = `rgba(255, 255, 255, ${alpha * 0.3})`;
-            this.ctx.fill();
-        }
-        
-        // Draw main rocket
-        this.drawRocketSVG(particle.x, particle.y, 1.5, 0.8);
-        
-        // Reset shadow
-        this.ctx.shadowBlur = 0;
+      const elapsed = Date.now() - particle.startTime;
+      if (elapsed < particle.delay) return;
+
+      // Draw exhaust trail from bottom of rocket
+      for (let i = 0; i < particle.trail.length; i++) {
+        const alpha = (i / particle.trail.length) * 0.6;
+        const size = 3 + (i / particle.trail.length) * 6;
+
+        // Calculate trail position offset from rocket bottom (now bottom since flipped)
+        const trailY = particle.trail[i].y + 24; // Offset to bottom of flipped rocket
+
+        this.ctx.beginPath();
+        this.ctx.arc(particle.trail[i].x, trailY, size, 0, Math.PI * 2);
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.3})`; // White exhaust with lower opacity
+        this.ctx.shadowBlur = 8;
+        this.ctx.shadowColor = `rgba(255, 255, 255, ${alpha * 0.3})`;
+        this.ctx.fill();
+      }
+
+      // Draw main rocket
+      this.drawRocketSVG(particle.x, particle.y, 1.5, 0.8);
+
+      // Reset shadow
+      this.ctx.shadowBlur = 0;
     }
-    
+
     drawRocketSVG(x, y, scale, alpha) {
-        if (!this.rocketImg) {
-            // Create SVG data URL
-            const svgData = `
+      if (!this.rocketImg) {
+        // Create SVG data URL
+        const svgData = `
                 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
  "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
 <svg version="1.0" xmlns="http://www.w3.org/2000/svg"
@@ -494,183 +558,183 @@ fill="#00ff41" stroke="none">
 </g>
 </svg>
             `;
-            this.rocketImg = new Image();
-            this.rocketImg.src = 'data:image/svg+xml;base64,' + btoa(svgData);
-        }
-        
-        if (this.rocketImg.complete) {
-            this.ctx.save();
-            this.ctx.globalAlpha = alpha;
-            this.ctx.shadowBlur = 8;
-            this.ctx.shadowColor = 'rgba(0, 255, 65, 0.3)';
-            
-            const width = 24 * scale;
-            const height = 48 * scale;
-            
-            // Flip the rocket vertically
-            this.ctx.scale(1, -1);
-            this.ctx.drawImage(this.rocketImg, x - width/2, -(y + height/2), width, height);
-            this.ctx.restore();
-        }
+        this.rocketImg = new Image();
+        this.rocketImg.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+      }
+
+      if (this.rocketImg.complete) {
+        this.ctx.save();
+        this.ctx.globalAlpha = alpha;
+        this.ctx.shadowBlur = 8;
+        this.ctx.shadowColor = 'rgba(0, 255, 65, 0.3)';
+
+        const width = 24 * scale;
+        const height = 48 * scale;
+
+        // Flip the rocket vertically
+        this.ctx.scale(1, -1);
+        this.ctx.drawImage(this.rocketImg, x - width / 2, -(y + height / 2), width, height);
+        this.ctx.restore();
+      }
     }
-    
+
     animate() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        for (let particle of this.particles) {
-            this.updateParticle(particle);
-            this.drawParticle(particle);
-        }
-        
-        requestAnimationFrame(() => this.animate());
-    }
-}
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-// Dynamic simple particle system
-class SimpleParticleSystem {
+      for (let particle of this.particles) {
+        this.updateParticle(particle);
+        this.drawParticle(particle);
+      }
+
+      requestAnimationFrame(() => this.animate());
+    }
+  }
+
+  // Dynamic simple particle system
+  class SimpleParticleSystem {
     constructor() {
-        this.container = document.getElementById('simpleParticlesContainer');
-        this.particleCount = 50; // More particles
-        this.createParticles();
+      this.container = document.getElementById('simpleParticlesContainer');
+      this.particleCount = 50; // More particles
+      this.createParticles();
     }
-    
+
     createParticles() {
-        for (let i = 0; i < this.particleCount; i++) {
-            const particle = document.createElement('div');
-            particle.className = 'simple-particle';
-            
-            // Random positioning and timing
-            const left = Math.random() * 100;
-            const delay = Math.random() * 20;
-            const duration = 10 + Math.random() * 15;
-            const size = 2 + Math.random() * 4;
-            
-            particle.style.left = `${left}%`;
-            particle.style.animationDelay = `${delay}s`;
-            particle.style.animationDuration = `${duration}s`;
-            particle.style.width = `${size}px`;
-            particle.style.height = `${size}px`;
-            
-            // Vary opacity and glow
-            const opacity = 0.3 + Math.random() * 0.7;
-            const glowSize = 4 + Math.random() * 8;
-            particle.style.opacity = opacity;
-            particle.style.boxShadow = `0 0 ${glowSize}px #00ff41`;
-            
-            this.container.appendChild(particle);
-        }
-    }
-}
+      for (let i = 0; i < this.particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'simple-particle';
 
-// Initialize particles when canvas is ready
-let cometParticles;
-let simpleParticles;
-// Typing animation
-class TypingAnimation {
+        // Random positioning and timing
+        const left = Math.random() * 100;
+        const delay = Math.random() * 20;
+        const duration = 10 + Math.random() * 15;
+        const size = 2 + Math.random() * 4;
+
+        particle.style.left = `${left}%`;
+        particle.style.animationDelay = `${delay}s`;
+        particle.style.animationDuration = `${duration}s`;
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+
+        // Vary opacity and glow
+        const opacity = 0.3 + Math.random() * 0.7;
+        const glowSize = 4 + Math.random() * 8;
+        particle.style.opacity = opacity;
+        particle.style.boxShadow = `0 0 ${glowSize}px #00ff41`;
+
+        this.container.appendChild(particle);
+      }
+    }
+  }
+
+  // Initialize particles when canvas is ready
+  let cometParticles;
+  let simpleParticles;
+  // Typing animation
+  class TypingAnimation {
     constructor(element, text, speed = 100) {
-        this.element = element;
-        this.text = text;
-        this.speed = speed;
-        this.i = 0;
-        this.isDeleting = false;
-        this.currentText = '';
-        this.glitchChance = 0.05; // 5% chance of glitch per character
-        
-        this.type();
-    }
-    
-    type() {
-        const fullText = this.text;
-        
-        if (this.isDeleting) {
-            this.currentText = fullText.substring(0, this.currentText.length - 1);
-        } else {
-            this.currentText = fullText.substring(0, this.i + 1);
-            this.i++;
-        }
-        
-        this.element.textContent = this.currentText;
-        
-        // Random glitch effect
-        if (Math.random() < this.glitchChance) {
-            this.triggerGlitch();
-        }
-        
-        let typeSpeed = this.speed;
-        
-        if (this.isDeleting) {
-            typeSpeed /= 2;
-        }
-        
-        if (!this.isDeleting && this.currentText === fullText) {
-            // Pause at end of text
-            typeSpeed = 3000;
-            this.isDeleting = true;
-        } else if (this.isDeleting && this.currentText === '') {
-            this.isDeleting = false;
-            this.i = 0;
-            typeSpeed = 1000;
-        }
-        
-        setTimeout(() => this.type(), typeSpeed);
-    }
-    
-    triggerGlitch() {
-        const messageText = this.element.parentElement;
-        messageText.setAttribute('data-text', this.currentText);
-        messageText.classList.add('glitch');
-        
-        setTimeout(() => {
-            messageText.classList.remove('glitch');
-        }, 300);
-    }
-}
+      this.element = element;
+      this.text = text;
+      this.speed = speed;
+      this.i = 0;
+      this.isDeleting = false;
+      this.currentText = '';
+      this.glitchChance = 0.05; // 5% chance of glitch per character
 
-function initializeTypingAnimation() {
+      this.type();
+    }
+
+    type() {
+      const fullText = this.text;
+
+      if (this.isDeleting) {
+        this.currentText = fullText.substring(0, this.currentText.length - 1);
+      } else {
+        this.currentText = fullText.substring(0, this.i + 1);
+        this.i++;
+      }
+
+      this.element.textContent = this.currentText;
+
+      // Random glitch effect
+      if (Math.random() < this.glitchChance) {
+        this.triggerGlitch();
+      }
+
+      let typeSpeed = this.speed;
+
+      if (this.isDeleting) {
+        typeSpeed /= 2;
+      }
+
+      if (!this.isDeleting && this.currentText === fullText) {
+        // Pause at end of text
+        typeSpeed = 3000;
+        this.isDeleting = true;
+      } else if (this.isDeleting && this.currentText === '') {
+        this.isDeleting = false;
+        this.i = 0;
+        typeSpeed = 1000;
+      }
+
+      setTimeout(() => this.type(), typeSpeed);
+    }
+
+    triggerGlitch() {
+      const messageText = this.element.parentElement;
+      messageText.setAttribute('data-text', this.currentText);
+      messageText.classList.add('glitch');
+
+      setTimeout(() => {
+        messageText.classList.remove('glitch');
+      }, 300);
+    }
+  }
+
+  function initializeTypingAnimation() {
     const typedTextElement = document.querySelector('.typed-text');
     if (typedTextElement) {
-        new TypingAnimation(typedTextElement, 'Come peer into the looking glass...', 120);
-        console.log('Typing animation initialized');
+      new TypingAnimation(typedTextElement, 'Come peer into the looking glass...', 120);
+      console.log('Typing animation initialized');
     }
-}
+  }
 
-document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', () => {
     // Initialize typing animation
     initializeTypingAnimation();
-    
+
     // Small delay to ensure canvas is rendered
     setTimeout(() => {
-        cometParticles = new CometParticles();
-        simpleParticles = new SimpleParticleSystem();
+      cometParticles = new CometParticles();
+      simpleParticles = new SimpleParticleSystem();
     }, 100);
-});
+  });
 
-// Scene-specific interaction logic
-if (window.sceneHandlers) {
+  // Scene-specific interaction logic
+  if (window.sceneHandlers) {
     window.sceneHandlers.idle = {
-        onInit: function() {
-            console.log('Idle scene initialized');
-            // Reinitialize particles if needed
-            if (document.getElementById('particleCanvas') && !cometParticles) {
-                setTimeout(() => {
-                    cometParticles = new CometParticles();
-                    simpleParticles = new SimpleParticleSystem();
-                }, 100);
-            }
-        },
-        
-        onHandDetected: function(hands) {
-            console.log('Idle scene: Hand detected, should exit idle mode');
-            // The scene manager will handle exiting idle mode
-        },
-        
-        onHandMove: function(hands) {
-            // No interaction needed in idle mode
-        },
-        
-        onHandLost: function() {
-            // No action needed - scene manager handles this
+      onInit: function () {
+        console.log('Idle scene initialized');
+        // Reinitialize particles if needed
+        if (document.getElementById('particleCanvas') && !cometParticles) {
+          setTimeout(() => {
+            cometParticles = new CometParticles();
+            simpleParticles = new SimpleParticleSystem();
+          }, 100);
         }
+      },
+
+      onHandDetected: function (hands) {
+        console.log('Idle scene: Hand detected, should exit idle mode');
+        // The scene manager will handle exiting idle mode
+      },
+
+      onHandMove: function (hands) {
+        // No interaction needed in idle mode
+      },
+
+      onHandLost: function () {
+        // No action needed - scene manager handles this
+      }
     };
-}
+  }
 </script>

@@ -347,11 +347,39 @@
       cursor: pointer;
       transition: all 0.3s ease;
       animation: pulse-attention 2s ease-in-out infinite;
+      padding: 20px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      background: rgba(255, 170, 60, 0.05);
     }
 
     .footer-text:hover {
       color: #00ff88;
       text-shadow: 0 0 15px #00ff88;
+    }
+
+    .footer-text.hand-hovering {
+      color: #00ff88;
+      text-shadow: 0 0 25px #00ff88, 0 0 35px #00ff88, 0 0 45px #00ff88;
+      border: 2px solid #00ff88;
+      background: rgba(0, 255, 136, 0.15);
+      transform: scale(1.05);
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+      animation: pulse-hand-hover 1s ease-in-out infinite;
+    }
+
+    .footer-text.hand-hovering::before {
+      content: '>>> ';
+      color: #00ff88;
+      font-weight: bold;
+      animation: blink-arrows 0.8s ease-in-out infinite;
+    }
+
+    .footer-text.hand-hovering::after {
+      content: ' <<<';
+      color: #00ff88;
+      font-weight: bold;
+      animation: blink-arrows 0.8s ease-in-out infinite;
     }
 
     /* Hand cursor */
@@ -523,6 +551,32 @@
         opacity: 1;
         text-shadow: 0 0 5px var(--pipboy-orange);
         transform: scale(1);
+      }
+    }
+
+    @keyframes pulse-hand-hover {
+      0% {
+        transform: scale(1.05);
+        text-shadow: 0 0 25px #00ff88, 0 0 35px #00ff88, 0 0 45px #00ff88;
+      }
+
+      50% {
+        transform: scale(1.08);
+        text-shadow: 0 0 30px #00ff88, 0 0 40px #00ff88, 0 0 50px #00ff88, 0 0 60px #00ff88;
+      }
+
+      100% {
+        transform: scale(1.05);
+        text-shadow: 0 0 25px #00ff88, 0 0 35px #00ff88, 0 0 45px #00ff88;
+      }
+    }
+
+    @keyframes blink-arrows {
+      0%, 50% {
+        opacity: 1;
+      }
+      51%, 100% {
+        opacity: 0.3;
       }
     }
 
