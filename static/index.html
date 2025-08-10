@@ -1242,6 +1242,14 @@
         const highConfidenceHands = hands.filter(hand => hand.confidence.overall >= .65);
         const nowDetected = highConfidenceHands.length > 0;
 
+        // Reset idle timer whenever hands are present (continuous tracking)
+        if (nowDetected) {
+          const currentMode = this.appState.get('currentMode');
+          if (currentMode === 'active' || currentMode === 'onboarding') {
+            this.resetIdleTimer();
+          }
+        }
+
         // Only update detection-related state, not hands array to avoid recursion
         if (wasDetected !== nowDetected) {
           console.log(`[ModeManager] Hand detection changed: ${wasDetected} -> ${nowDetected}`);
@@ -1265,12 +1273,18 @@
           } else if (currentMode === 'active') {
             console.log('[ModeManager] Hand detected in active mode, resetting idle timer');
             this.resetIdleTimer();
+          } else if (currentMode === 'onboarding') {
+            console.log('[ModeManager] Hand detected in onboarding mode, resetting idle timer');
+            this.resetIdleTimer();
           }
           this.hideIdleWarning();
         } else {
-          // Hand lost - start idle timer if in active mode
+          // Hand lost - start idle timer if in active or onboarding mode
           if (currentMode === 'active') {
             console.log('[ModeManager] Hand lost in active mode, starting idle timer');
+            this.startIdleTimer();
+          } else if (currentMode === 'onboarding') {
+            console.log('[ModeManager] Hand lost in onboarding mode, starting idle timer');
             this.startIdleTimer();
           }
         }
@@ -1378,8 +1392,8 @@
 
       resetIdleTimer() {
         const currentMode = this.appState.get('currentMode');
-        if (currentMode === 'active') {
-          console.log('[ModeManager] Resetting idle timer');
+        if (currentMode === 'active' || currentMode === 'onboarding') {
+          console.log(`[ModeManager] Resetting idle timer for ${currentMode} mode`);
           this.startIdleTimer();
         }
       }
