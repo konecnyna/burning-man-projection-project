@@ -71,6 +71,7 @@
             <span class="prompt">&gt;</span>
             <span class="typing-cursor">_</span>
             <span class="footer-text" id="beginText">MOVE YOUR HAND HERE TO BEGIN</span>
+            <span class="auto-timer-text" id="autoTimerText">AUTO-START IN --</span>
             <div class="countdown-overlay" id="countdownOverlay">
               <div class="countdown-circle">
                 <div class="countdown-number" id="countdownNumber">3</div>
@@ -426,6 +427,19 @@
       animation: blink-arrows 0.8s ease-in-out infinite;
     }
 
+    .auto-timer-text {
+      color: var(--pipboy-orange);
+      font-weight: bold;
+      text-shadow: 0 0 5px var(--pipboy-orange);
+      position: relative;
+      margin-left: auto;
+      padding: 20px;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      background: rgba(255, 170, 60, 0.05);
+      animation: pulse-attention 3s ease-in-out infinite;
+    }
+
     /* Hand cursor */
     .hand-cursor {
       position: fixed;
@@ -763,6 +777,9 @@
     let countdownStartTime = null;
     let handCursor = null;
     let activeHandId = null;
+    let autoStartTimer = null;
+    let autoStartTime = 30;
+    let autoStartCountdown = null;
 
     // Setup WebSocket connection
     const socket = io();
@@ -866,10 +883,56 @@
       });
     }
 
+    // Auto-start timer functions
+    function startAutoTimer() {
+      autoStartCountdown = autoStartTime;
+      updateAutoTimer();
+    }
+
+    function updateAutoTimer() {
+      const timerText = document.getElementById('autoTimerText');
+      if (timerText) {
+        timerText.textContent = `AUTO-START IN ${autoStartCountdown}`;
+      }
+
+      if (autoStartCountdown > 0) {
+        autoStartCountdown--;
+        autoStartTimer = setTimeout(() => updateAutoTimer(), 1000);
+      } else {
+        // Auto-start the experience
+        completeAutoStart();
+      }
+    }
+
+    function stopAutoTimer() {
+      if (autoStartTimer) {
+        clearTimeout(autoStartTimer);
+        autoStartTimer = null;
+      }
+    }
+
+    function completeAutoStart() {
+      stopAutoTimer();
+      
+      // Hide the auto-timer text
+      const timerText = document.getElementById('autoTimerText');
+      if (timerText) {
+        timerText.style.display = 'none';
+      }
+
+      // Notify parent or redirect to active mode
+      if (isIframe && window.parent) {
+        window.parent.postMessage({
+          type: 'transition_to_active'
+        }, '*');
+      }
+    }
+
     // Initialize when page loads
     function initializePage() {
       initializeHandCursor();
       startInstructionAnimations();
+      startAutoTimer();
     }
     
     document.addEventListener('DOMContentLoaded', initializePage);
@@ -985,6 +1048,13 @@
       if (signalText) {
         signalText.textContent = 'PRESENCE DETECTED';
       }
+      
+      // Stop auto-timer when hand is detected
+      stopAutoTimer();
+      const timerText = document.getElementById('autoTimerText');
+      if (timerText) {
+        timerText.style.display = 'none';
+      }
     }
 
     function handleHandLost() {
@@ -1006,6 +1076,13 @@
 
       // Stop countdown if active
       stopCountdown();
+      
+      // Restart auto-timer when hand is lost
+      const timerText = document.getElementById('autoTimerText');
+      if (timerText) {
+        timerText.style.display = 'inline';
+      }
+      startAutoTimer();
     }
 
     function startCountdown() {
@@ -1052,6 +1129,13 @@
 
     function completeCountdown() {
       stopCountdown();
+      stopAutoTimer();
+
+      // Hide the auto-timer text
+      const timerText = document.getElementById('autoTimerText');
+      if (timerText) {
+        timerText.style.display = 'none';
+      }
 
       // Notify parent or redirect to active mode
       if (isIframe && window.parent) {
