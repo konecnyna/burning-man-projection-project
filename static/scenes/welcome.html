@@ -620,6 +620,7 @@
     let countdownTimer = null;
     let countdownStartTime = null;
     let handCursor = null;
+    let activeHandId = null;
 
     // Setup WebSocket connection
     const socket = io();
@@ -636,10 +637,24 @@
     function updateHandCursor(hands) {
       if (!handCursor || hands.length === 0) {
         if (handCursor) handCursor.style.display = 'none';
+        activeHandId = null;
         return;
       }
 
-      const hand = hands[0];
+      // Find the active hand to track consistently using hand_id
+      let hand = null;
+      
+      if (activeHandId !== null) {
+        // Look for the hand with the same ID we were tracking
+        hand = hands.find(h => h.hand_id === activeHandId);
+      }
+      
+      if (!hand) {
+        // If we don't have an active hand or can't find it, use the first hand
+        hand = hands[0];
+        activeHandId = hand.hand_id;
+      }
+
       const screenX = hand.palm_center.x * window.innerWidth;
       const screenY = hand.palm_center.y * window.innerHeight;
 
@@ -721,7 +736,19 @@
       modules.forEach(module => module.classList.remove('active'));
 
       if (hands.length > 0) {
-        const hand = hands[0];
+        // Use the same hand selection logic as updateHandCursor
+        let hand = null;
+        if (activeHandId !== null) {
+          // Look for the hand with the same ID we were tracking
+          hand = hands.find(h => h.hand_id === activeHandId);
+        }
+        
+        if (!hand) {
+          // If we don't have an active hand or can't find it, use the first hand
+          hand = hands[0];
+          activeHandId = hand.hand_id;
+        }
+        
         const palmX = hand.palm_center.x;
         const palmY = hand.palm_center.y;
 

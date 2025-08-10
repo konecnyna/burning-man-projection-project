@@ -36,6 +36,11 @@ class HandTracker:
         self.current_frame = None
         self.frame_lock = threading.Lock()
         
+        # Persistent hand tracking
+        self.tracked_hands = {}  # persistent_id -> hand_data
+        self.next_hand_id = 0
+        self.max_tracking_distance = 0.15  # Max distance to consider same hand
+        
         # Gesture tracking
         self.previous_gestures = {}  # hand_id -> gesture_name
         self.gesture_hold_time = {}  # hand_id -> timestamp
@@ -110,33 +115,45 @@ class HandTracker:
         debug_frame = frame.copy()
         
         current_hands = []
+        detected_hands = []
+        
         if results.multi_hand_landmarks:
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # Extract hand data with confidence
                 hand_data = self._extract_hand_data(hand_landmarks, frame.shape)
-                hand_data['hand_id'] = idx
                 
                 # Add confidence data
                 confidence_data = self._calculate_confidence(hand_landmarks, results, idx)
                 hand_data['confidence'] = confidence_data
                 
-                # Detect thumbs up/down gesture and emit separate events
-                gesture = self._detect_thumbs_gesture(hand_data)
-                self._emit_gesture_events(idx, gesture)
+                detected_hands.append(hand_data)
                 
-                current_hands.append(hand_data)
-                
-                # Draw landmarks and connections
-                self.mp_drawing.draw_landmarks(
-                    debug_frame, 
-                    hand_landmarks, 
-                    self.mp_hands.HAND_CONNECTIONS,
-                    self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                    self.mp_drawing_styles.get_default_hand_connections_style()
-                )
-                
-                # Draw bounding box
-                self._draw_hand_bounding_box(debug_frame, hand_landmarks, idx)
+        # Assign persistent IDs based on position tracking
+        current_hands = self._assign_persistent_ids(detected_hands)
+        
+        # Process gestures and drawing for tracked hands
+        for hand_data in current_hands:
+            hand_id = hand_data['hand_id']
+            
+            # Detect thumbs up/down gesture and emit separate events
+            gesture = self._detect_thumbs_gesture(hand_data)
+            self._emit_gesture_events(hand_id, gesture)
+            
+            # Draw landmarks and connections (need to find corresponding MediaPipe landmarks)
+            if results.multi_hand_landmarks:
+                # Find the closest MediaPipe detection to draw
+                closest_idx = self._find_closest_mediapipe_detection(hand_data, results.multi_hand_landmarks, frame.shape)
+                if closest_idx is not None:
+                    self.mp_drawing.draw_landmarks(
+                        debug_frame, 
+                        results.multi_hand_landmarks[closest_idx], 
+                        self.mp_hands.HAND_CONNECTIONS,
+                        self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                        self.mp_drawing_styles.get_default_hand_connections_style()
+                    )
+                    
+                    # Draw bounding box
+                    self._draw_hand_bounding_box(debug_frame, results.multi_hand_landmarks[closest_idx], hand_id)
         
         # Add debug overlay
         cv2.putText(debug_frame, f"Hands: {len(current_hands)}", (10, 30), 
@@ -206,6 +223,90 @@ class HandTracker:
                 'pinky': pinky_tip
             }
         }
+    
+    def _assign_persistent_ids(self, detected_hands) -> List[Dict]:
+        """Assign persistent IDs to detected hands based on position tracking"""
+        if not detected_hands:
+            # No hands detected, clear all tracked hands
+            self.tracked_hands.clear()
+            return []
+        
+        # Calculate distances between detected hands and previously tracked hands
+        assignments = {}  # detected_idx -> persistent_id
+        used_persistent_ids = set()
+        
+        # First pass: assign detected hands to closest tracked hands within threshold
+        for det_idx, detected_hand in enumerate(detected_hands):
+            best_persistent_id = None
+            best_distance = float('inf')
+            
+            for persistent_id, tracked_hand in self.tracked_hands.items():
+                if persistent_id in used_persistent_ids:
+                    continue
+                    
+                # Calculate distance between palm centers
+                dx = detected_hand['palm_center']['x'] - tracked_hand['palm_center']['x']
+                dy = detected_hand['palm_center']['y'] - tracked_hand['palm_center']['y']
+                distance = (dx*dx + dy*dy) ** 0.5
+                
+                if distance < self.max_tracking_distance and distance < best_distance:
+                    best_distance = distance
+                    best_persistent_id = persistent_id
+            
+            if best_persistent_id is not None:
+                assignments[det_idx] = best_persistent_id
+                used_persistent_ids.add(best_persistent_id)
+        
+        # Second pass: assign new IDs to unassigned detected hands
+        for det_idx, detected_hand in enumerate(detected_hands):
+            if det_idx not in assignments:
+                # Create new persistent ID
+                assignments[det_idx] = self.next_hand_id
+                self.next_hand_id += 1
+        
+        # Update tracked hands with current frame data
+        new_tracked_hands = {}
+        result_hands = []
+        
+        for det_idx, detected_hand in enumerate(detected_hands):
+            persistent_id = assignments[det_idx]
+            
+            # Add persistent ID to hand data
+            detected_hand['hand_id'] = persistent_id
+            
+            # Store in tracked hands
+            new_tracked_hands[persistent_id] = detected_hand.copy()
+            result_hands.append(detected_hand)
+        
+        self.tracked_hands = new_tracked_hands
+        return result_hands
+    
+    def _find_closest_mediapipe_detection(self, hand_data, mediapipe_landmarks, frame_shape) -> Optional[int]:
+        """Find the MediaPipe detection closest to our tracked hand for drawing"""
+        if not mediapipe_landmarks:
+            return None
+        
+        best_idx = None
+        best_distance = float('inf')
+        
+        for idx, landmarks in enumerate(mediapipe_landmarks):
+            # Calculate palm center from MediaPipe landmarks
+            wrist = landmarks.landmark[0]
+            palm_x = (wrist.x + landmarks.landmark[5].x + landmarks.landmark[9].x + 
+                     landmarks.landmark[13].x + landmarks.landmark[17].x) / 5
+            palm_y = (wrist.y + landmarks.landmark[5].y + landmarks.landmark[9].y + 
+                     landmarks.landmark[13].y + landmarks.landmark[17].y) / 5
+            
+            # Calculate distance to our tracked hand
+            dx = palm_x - hand_data['palm_center']['x']
+            dy = palm_y - hand_data['palm_center']['y']
+            distance = (dx*dx + dy*dy) ** 0.5
+            
+            if distance < best_distance:
+                best_distance = distance
+                best_idx = idx
+        
+        return best_idx
     
     def _calculate_confidence(self, hand_landmarks, results, hand_idx) -> Dict:
         """Calculate confidence metrics for hand detection"""
