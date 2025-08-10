@@ -1552,6 +1552,14 @@
             html_file: 'scenes/wireframe-geometry/index.html',
             background_color: '#000000'
           },
+          {
+            id: 'kaleidoscope',
+            name: 'Kaleidoscope',
+            description: 'Interactive kaleidoscope with hand-controlled pattern movement',
+            duration: this.defaultDuration,
+            html_file: 'scenes/kaleidoscope/index.html',
+            background_color: '#000000'
+          },
         
         ];
 
@@ -1737,7 +1745,7 @@
           const container = document.getElementById('scene-container');
 
           // Handle iframe scenes
-          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'idle'].includes(scene.id)) {
+          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'kaleidoscope', 'idle'].includes(scene.id)) {
             container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
 
             setTimeout(() => {
