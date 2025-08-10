@@ -300,6 +300,7 @@
         let scene, camera, renderer, particles, geometry, material;
         let mouseX = 0, mouseY = 0;
         let handDetected = false;
+        let activeHandId = null; // Track specific hand ID
         let time = 0;
         
         // Particle system parameters
@@ -518,7 +519,20 @@
         socket.on('event', (event) => {
             if ((event.type === 'hand_moved' || event.type === 'hand_detected' || event.type === 'frame_processed') && event.data.hands && event.data.hands.length > 0) {
                 try {
-                    const hand = event.data.hands[0];
+                    // Use persistent hand ID tracking
+                    const hands = event.data.hands;
+                    let hand = null;
+                    
+                    if (activeHandId !== null) {
+                        // Look for the hand with the same ID we were tracking
+                        hand = hands.find(h => h.hand_id === activeHandId);
+                    }
+                    
+                    if (!hand) {
+                        // If we don't have an active hand or can't find it, use the first hand
+                        hand = hands[0];
+                        activeHandId = hand.hand_id;
+                    }
                     if (hand.palm_center) {
                         // Convert normalized coordinates to screen coordinates
                         mouseX = hand.palm_center.x * window.innerWidth;
@@ -538,6 +552,7 @@
                 }
             } else if (event.type === 'hand_lost') {
                 handDetected = false;
+                activeHandId = null;
                 handCursor.classList.remove('active');
                 document.getElementById('handCount').textContent = '0';
                 updateSystemStatus();

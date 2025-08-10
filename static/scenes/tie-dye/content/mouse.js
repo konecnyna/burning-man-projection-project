@@ -16,7 +16,8 @@ window.requestSmoothMouse = (function () {
 
 
 var pos = [],
-  Mouse = window.Mouse;
+  Mouse = window.Mouse,
+  activeHandId = null; // Track specific hand ID
 
 Mouse = {
   x: -1, 
@@ -124,7 +125,19 @@ window.addEventListener('message', (event) => {
     try {
       const hands = event.data.data;
       if (hands.length > 0) {
-        const hand = hands[0];
+        // Use persistent hand ID tracking
+        let hand = null;
+        
+        if (activeHandId !== null) {
+          // Look for the hand with the same ID we were tracking
+          hand = hands.find(h => h.hand_id === activeHandId);
+        }
+        
+        if (!hand) {
+          // If we don't have an active hand or can't find it, use the first hand
+          hand = hands[0];
+          activeHandId = hand.hand_id;
+        }
         let posX = hand.palm_center.x * window.innerWidth;
         let posY = hand.palm_center.y * window.innerHeight;
         
@@ -134,5 +147,7 @@ window.addEventListener('message', (event) => {
     } catch (e) {
       console.trace(e);
     }
+  } else if (event.data.type === 'handlost') {
+    activeHandId = null;
   }
 });

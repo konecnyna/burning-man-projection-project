@@ -24,6 +24,8 @@ class HandTrackingEvents:
     HAND_LOST = "hand_lost"
     HAND_MOVED = "hand_moved"
     GESTURE_DETECTED = "gesture_detected"
+    THUMBS_UP = "thumbs_up"
+    THUMBS_DOWN = "thumbs_down"
     PERSON_DETECTED = "person_detected"
     CAMERA_ERROR = "camera_error"
     FRAME_PROCESSED = "frame_processed"

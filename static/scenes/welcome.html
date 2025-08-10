@@ -11,7 +11,11 @@
   <div class="scene welcome-scene">
     <div class="terminal-frame">
       <div class="terminal-header">
-        <div class="terminal-title">ATLANTIS HAND TRACKING INTERFACE v4.20.69</div>
+        <div class="terminal-title">ATLANTIS HAND TRACKING INTERFACE v4.20.69
+          <br/>
+          <span class="terminal-author">by Dr. Boom Boom PhD</span>
+        </div>
+        
         <div class="terminal-signal">
           <span class="signal-indicator">●</span>
           <span class="signal-text">PRESENCE DETECTED</span>
@@ -45,43 +49,19 @@
         <div class="instruction-grid">
           <div class="instruction-module" id="instruction1">
             <div class="module-header">
-              <span class="module-icon">[●]</span>
-              <span class="module-title">HAND DETECTION</span>
-            </div>
-            <div class="module-content">
-              <div class="instruction-text">
-                &gt; Show your hands to the camera<br>
-                &gt; System will auto-detect gestures<br>
-                &gt; Status: <span class="status-ready">READY</span>
-              </div>
+              <span class="module-title">✋ SHOW HANDS</span>
             </div>
           </div>
 
           <div class="instruction-module" id="instruction2">
             <div class="module-header">
-              <span class="module-icon">[●]</span>
-              <span class="module-title">POINT & INTERACT</span>
-            </div>
-            <div class="module-content">
-              <div class="instruction-text">
-                &gt; Point to select objects<br>
-                &gt; Move hands to control interface<br>
-                &gt; Status: <span class="status-ready">READY</span>
-              </div>
+              <span class="module-title">👋 WAVE HANDS</span>
             </div>
           </div>
 
           <div class="instruction-module" id="instruction3">
             <div class="module-header">
-              <span class="module-icon">[●]</span>
-              <span class="module-title">CREATE & EXPRESS</span>
-            </div>
-            <div class="module-content">
-              <div class="instruction-text">
-                &gt; Use gestures to create art<br>
-                &gt; Express through movement<br>
-                &gt; Status: <span class="status-ready">READY</span>
-              </div>
+              <span class="module-title">🧠 MELT MIND</span>
             </div>
           </div>
         </div>
@@ -177,6 +157,14 @@
       text-shadow: 0 0 10px #00ff41;
     }
 
+    .terminal-author {
+      color: var(--pipboy-orange);
+      font-size: 0.9rem;
+      font-weight: normal;
+      text-shadow: 0 0 8px #ffff00;
+      margin-top: 5px;
+    }
+
     .terminal-signal {
       display: flex;
       align-items: center;
@@ -254,6 +242,57 @@
       transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
+      user-select: none;
+      pointer-events: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      animation: pipboy-attention 4s ease-in-out infinite;
+    }
+
+    #instruction1 {
+      animation-delay: 0s;
+    }
+
+    #instruction1::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.1), transparent);
+      animation: scan-sweep-1 8s ease-in-out infinite;
+    }
+
+    #instruction2 {
+      animation-delay: 1.3s;
+    }
+
+    #instruction2::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.1), transparent);
+      animation: scan-sweep-2 9s ease-in-out infinite;
+    }
+
+    #instruction3 {
+      animation-delay: 2.6s;
+    }
+
+    #instruction3::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.1), transparent);
+      animation: scan-sweep-3 7s ease-in-out infinite;
     }
 
     .instruction-module:hover {
@@ -294,6 +333,7 @@
     }
 
     .module-title {
+      font-size: 3.3em;
       color: #00ff41;
       text-shadow: 0 0 5px #00ff41;
     }
@@ -580,6 +620,98 @@
       }
     }
 
+    @keyframes pipboy-attention {
+      0% {
+        box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+        border-color: #00ff41;
+        transform: scale(1);
+      }
+      
+      15% {
+        box-shadow: 0 0 15px rgba(0, 255, 65, 0.6), 0 0 25px rgba(0, 255, 65, 0.3);
+        border-color: #00ff88;
+        transform: scale(1.02);
+      }
+      
+      20% {
+        box-shadow: 0 0 20px rgba(0, 255, 65, 0.8), 0 0 30px rgba(0, 255, 65, 0.5);
+        border-color: #00ff41;
+        transform: scale(1);
+      }
+      
+      25% {
+        box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+        border-color: #00dd33;
+        transform: scale(1.01);
+      }
+      
+      30% {
+        box-shadow: 0 0 25px rgba(0, 255, 65, 0.9), 0 0 35px rgba(0, 255, 65, 0.6);
+        border-color: #00ff41;
+        transform: scale(1);
+      }
+      
+      100% {
+        box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+        border-color: #00ff41;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes pipboy-glitch {
+      0%, 90%, 100% {
+        transform: translate(0);
+        filter: hue-rotate(0deg);
+      }
+      
+      91% {
+        transform: translate(-1px, 1px);
+        filter: hue-rotate(90deg);
+      }
+      
+      92% {
+        transform: translate(1px, -1px);
+        filter: hue-rotate(180deg);
+      }
+      
+      93% {
+        transform: translate(-1px, -1px);
+        filter: hue-rotate(270deg);
+      }
+      
+      94% {
+        transform: translate(1px, 1px);
+        filter: hue-rotate(360deg);
+      }
+    }
+
+    @keyframes scan-sweep-1 {
+      0%, 80%, 100% {
+        left: -100%;
+      }
+      85%, 95% {
+        left: 100%;
+      }
+    }
+
+    @keyframes scan-sweep-2 {
+      0%, 75%, 100% {
+        left: -100%;
+      }
+      82%, 92% {
+        left: 100%;
+      }
+    }
+
+    @keyframes scan-sweep-3 {
+      0%, 85%, 100% {
+        left: -100%;
+      }
+      88%, 98% {
+        left: 100%;
+      }
+    }
+
     /* Responsive design */
     @media (max-width: 768px) {
       .terminal-frame {
@@ -620,6 +752,7 @@
     let countdownTimer = null;
     let countdownStartTime = null;
     let handCursor = null;
+    let activeHandId = null;
 
     // Setup WebSocket connection
     const socket = io();
@@ -636,10 +769,24 @@
     function updateHandCursor(hands) {
       if (!handCursor || hands.length === 0) {
         if (handCursor) handCursor.style.display = 'none';
+        activeHandId = null;
         return;
       }
 
-      const hand = hands[0];
+      // Find the active hand to track consistently using hand_id
+      let hand = null;
+      
+      if (activeHandId !== null) {
+        // Look for the hand with the same ID we were tracking
+        hand = hands.find(h => h.hand_id === activeHandId);
+      }
+      
+      if (!hand) {
+        // If we don't have an active hand or can't find it, use the first hand
+        hand = hands[0];
+        activeHandId = hand.hand_id;
+      }
+
       const screenX = hand.palm_center.x * window.innerWidth;
       const screenY = hand.palm_center.y * window.innerHeight;
 
@@ -721,7 +868,19 @@
       modules.forEach(module => module.classList.remove('active'));
 
       if (hands.length > 0) {
-        const hand = hands[0];
+        // Use the same hand selection logic as updateHandCursor
+        let hand = null;
+        if (activeHandId !== null) {
+          // Look for the hand with the same ID we were tracking
+          hand = hands.find(h => h.hand_id === activeHandId);
+        }
+        
+        if (!hand) {
+          // If we don't have an active hand or can't find it, use the first hand
+          hand = hands[0];
+          activeHandId = hand.hand_id;
+        }
+        
         const palmX = hand.palm_center.x;
         const palmY = hand.palm_center.y;
 

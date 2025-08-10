@@ -1,5 +1,6 @@
 // Initialize mousePos at the top level of the script
 let mousePos = { x: 0, y: 0, px: 0, py: 0 };
+let activeHandId = null; // Track specific hand ID
 
 // Initialize parameters before using them
 let parameters = {
@@ -138,7 +139,20 @@ function domIsReady() {
   socket.on('event', (event) => {
     if ((event.type === 'hand_moved' || event.type === 'hand_detected' || event.type === 'frame_processed') && event.data.hands && event.data.hands.length > 0) {
       try {
-        const hand = event.data.hands[0]; // Use first detected hand
+        // Use persistent hand ID tracking
+        const hands = event.data.hands;
+        let hand = null;
+        
+        if (activeHandId !== null) {
+          // Look for the hand with the same ID we were tracking
+          hand = hands.find(h => h.hand_id === activeHandId);
+        }
+        
+        if (!hand) {
+          // If we don't have an active hand or can't find it, use the first hand
+          hand = hands[0];
+          activeHandId = hand.hand_id;
+        }
         let posX = hand.palm_center.x * window.innerWidth;
         let posY = hand.palm_center.y * window.innerHeight;
 
@@ -151,6 +165,8 @@ function domIsReady() {
       } catch (e) {
         console.trace(e);
       }
+    } else if (event.type === 'hand_lost') {
+      activeHandId = null;
     }
   });
 }

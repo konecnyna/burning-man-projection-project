@@ -631,20 +631,25 @@ fill="#00ff41" stroke="none">
   let simpleParticles;
   // Typing animation
   class TypingAnimation {
-    constructor(element, text, speed = 100) {
+    constructor(element, phrases, speed = 100) {
       this.element = element;
-      this.text = text;
+      this.phrases = phrases;
       this.speed = speed;
       this.i = 0;
       this.isDeleting = false;
       this.currentText = '';
+      this.currentPhraseIndex = 0;
       this.glitchChance = 0.05; // 5% chance of glitch per character
 
       this.type();
     }
 
+    get currentPhrase() {
+      return this.phrases[this.currentPhraseIndex];
+    }
+
     type() {
-      const fullText = this.text;
+      const fullText = this.currentPhrase;
 
       if (this.isDeleting) {
         this.currentText = fullText.substring(0, this.currentText.length - 1);
@@ -668,12 +673,14 @@ fill="#00ff41" stroke="none">
 
       if (!this.isDeleting && this.currentText === fullText) {
         // Pause at end of text
-        typeSpeed = 3000;
+        typeSpeed = 4000; // Longer pause to read the phrase
         this.isDeleting = true;
       } else if (this.isDeleting && this.currentText === '') {
+        // Move to next phrase
+        this.currentPhraseIndex = (this.currentPhraseIndex + 1) % this.phrases.length;
         this.isDeleting = false;
         this.i = 0;
-        typeSpeed = 1000;
+        typeSpeed = 1500; // Pause between phrases
       }
 
       setTimeout(() => this.type(), typeSpeed);
@@ -693,8 +700,21 @@ fill="#00ff41" stroke="none">
   function initializeTypingAnimation() {
     const typedTextElement = document.querySelector('.typed-text');
     if (typedTextElement) {
-      new TypingAnimation(typedTextElement, 'Come peer into the looking glass...', 120);
-      console.log('Typing animation initialized');
+      // Cheeky, Burning Man & project-themed phrases
+      const phrases = [
+        "Come peer into the looking glass... )'(",
+        'Your hands hold the power of creation...',
+        'Step into your digital trip...',
+        'The art sees you...',
+        'In dust we trust, in code we flow...',
+        'Burning bits in the digital desert...',
+        "Atlantis' portal awaits your touch Dusty Traveler...",               
+        'PENIS!!! hehehehehe',       
+        "Created by Dr. Boom Bomm PhD"
+      ];
+      
+      new TypingAnimation(typedTextElement, phrases, 120);
+      console.log('Typing animation initialized with', phrases.length, 'phrases');
     }
   }
 

@@ -36,6 +36,15 @@ class HandTracker:
         self.current_frame = None
         self.frame_lock = threading.Lock()
         
+        # Persistent hand tracking
+        self.tracked_hands = {}  # persistent_id -> hand_data
+        self.next_hand_id = 0
+        self.max_tracking_distance = 0.15  # Max distance to consider same hand
+        
+        # Gesture tracking
+        self.previous_gestures = {}  # hand_id -> gesture_name
+        self.gesture_hold_time = {}  # hand_id -> timestamp
+        
     def start(self, camera_index: int = 0):
         """Start the hand tracking system"""
         if self.running:
@@ -106,29 +115,45 @@ class HandTracker:
         debug_frame = frame.copy()
         
         current_hands = []
+        detected_hands = []
+        
         if results.multi_hand_landmarks:
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # Extract hand data with confidence
                 hand_data = self._extract_hand_data(hand_landmarks, frame.shape)
-                hand_data['hand_id'] = idx
                 
                 # Add confidence data
                 confidence_data = self._calculate_confidence(hand_landmarks, results, idx)
                 hand_data['confidence'] = confidence_data
                 
-                current_hands.append(hand_data)
+                detected_hands.append(hand_data)
                 
-                # Draw landmarks and connections
-                self.mp_drawing.draw_landmarks(
-                    debug_frame, 
-                    hand_landmarks, 
-                    self.mp_hands.HAND_CONNECTIONS,
-                    self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                    self.mp_drawing_styles.get_default_hand_connections_style()
-                )
-                
-                # Draw bounding box
-                self._draw_hand_bounding_box(debug_frame, hand_landmarks, idx)
+        # Assign persistent IDs based on position tracking
+        current_hands = self._assign_persistent_ids(detected_hands)
+        
+        # Process gestures and drawing for tracked hands
+        for hand_data in current_hands:
+            hand_id = hand_data['hand_id']
+            
+            # Detect thumbs up/down gesture and emit separate events
+            gesture = self._detect_thumbs_gesture(hand_data)
+            self._emit_gesture_events(hand_id, gesture)
+            
+            # Draw landmarks and connections (need to find corresponding MediaPipe landmarks)
+            if results.multi_hand_landmarks:
+                # Find the closest MediaPipe detection to draw
+                closest_idx = self._find_closest_mediapipe_detection(hand_data, results.multi_hand_landmarks, frame.shape)
+                if closest_idx is not None:
+                    self.mp_drawing.draw_landmarks(
+                        debug_frame, 
+                        results.multi_hand_landmarks[closest_idx], 
+                        self.mp_hands.HAND_CONNECTIONS,
+                        self.mp_drawing_styles.get_default_hand_landmarks_style(),
+                        self.mp_drawing_styles.get_default_hand_connections_style()
+                    )
+                    
+                    # Draw bounding box
+                    self._draw_hand_bounding_box(debug_frame, results.multi_hand_landmarks[closest_idx], hand_id)
         
         # Add debug overlay
         cv2.putText(debug_frame, f"Hands: {len(current_hands)}", (10, 30), 
@@ -199,6 +224,90 @@ class HandTracker:
             }
         }
     
+    def _assign_persistent_ids(self, detected_hands) -> List[Dict]:
+        """Assign persistent IDs to detected hands based on position tracking"""
+        if not detected_hands:
+            # No hands detected, clear all tracked hands
+            self.tracked_hands.clear()
+            return []
+        
+        # Calculate distances between detected hands and previously tracked hands
+        assignments = {}  # detected_idx -> persistent_id
+        used_persistent_ids = set()
+        
+        # First pass: assign detected hands to closest tracked hands within threshold
+        for det_idx, detected_hand in enumerate(detected_hands):
+            best_persistent_id = None
+            best_distance = float('inf')
+            
+            for persistent_id, tracked_hand in self.tracked_hands.items():
+                if persistent_id in used_persistent_ids:
+                    continue
+                    
+                # Calculate distance between palm centers
+                dx = detected_hand['palm_center']['x'] - tracked_hand['palm_center']['x']
+                dy = detected_hand['palm_center']['y'] - tracked_hand['palm_center']['y']
+                distance = (dx*dx + dy*dy) ** 0.5
+                
+                if distance < self.max_tracking_distance and distance < best_distance:
+                    best_distance = distance
+                    best_persistent_id = persistent_id
+            
+            if best_persistent_id is not None:
+                assignments[det_idx] = best_persistent_id
+                used_persistent_ids.add(best_persistent_id)
+        
+        # Second pass: assign new IDs to unassigned detected hands
+        for det_idx, detected_hand in enumerate(detected_hands):
+            if det_idx not in assignments:
+                # Create new persistent ID
+                assignments[det_idx] = self.next_hand_id
+                self.next_hand_id += 1
+        
+        # Update tracked hands with current frame data
+        new_tracked_hands = {}
+        result_hands = []
+        
+        for det_idx, detected_hand in enumerate(detected_hands):
+            persistent_id = assignments[det_idx]
+            
+            # Add persistent ID to hand data
+            detected_hand['hand_id'] = persistent_id
+            
+            # Store in tracked hands
+            new_tracked_hands[persistent_id] = detected_hand.copy()
+            result_hands.append(detected_hand)
+        
+        self.tracked_hands = new_tracked_hands
+        return result_hands
+    
+    def _find_closest_mediapipe_detection(self, hand_data, mediapipe_landmarks, frame_shape) -> Optional[int]:
+        """Find the MediaPipe detection closest to our tracked hand for drawing"""
+        if not mediapipe_landmarks:
+            return None
+        
+        best_idx = None
+        best_distance = float('inf')
+        
+        for idx, landmarks in enumerate(mediapipe_landmarks):
+            # Calculate palm center from MediaPipe landmarks
+            wrist = landmarks.landmark[0]
+            palm_x = (wrist.x + landmarks.landmark[5].x + landmarks.landmark[9].x + 
+                     landmarks.landmark[13].x + landmarks.landmark[17].x) / 5
+            palm_y = (wrist.y + landmarks.landmark[5].y + landmarks.landmark[9].y + 
+                     landmarks.landmark[13].y + landmarks.landmark[17].y) / 5
+            
+            # Calculate distance to our tracked hand
+            dx = palm_x - hand_data['palm_center']['x']
+            dy = palm_y - hand_data['palm_center']['y']
+            distance = (dx*dx + dy*dy) ** 0.5
+            
+            if distance < best_distance:
+                best_distance = distance
+                best_idx = idx
+        
+        return best_idx
+    
     def _calculate_confidence(self, hand_landmarks, results, hand_idx) -> Dict:
         """Calculate confidence metrics for hand detection"""
         landmarks = hand_landmarks.landmark
@@ -257,6 +366,96 @@ class HandTracker:
             'stability': round(stability_score, 3),
             'quality': 'high' if overall_confidence > 0.8 else 'medium' if overall_confidence > 0.6 else 'low'
         }
+    
+    def _detect_thumbs_gesture(self, hand_data) -> str:
+        """Detect thumbs up/down gesture based on hand landmarks"""
+        landmarks = hand_data['landmarks']
+        
+        # MediaPipe hand landmark indices
+        # Thumb: 0(wrist) -> 1 -> 2 -> 3 -> 4(tip)
+        # Index: 5 -> 6 -> 7 -> 8(tip)
+        # Middle: 9 -> 10 -> 11 -> 12(tip)
+        # Ring: 13 -> 14 -> 15 -> 16(tip)
+        # Pinky: 17 -> 18 -> 19 -> 20(tip)
+        
+        thumb_tip = landmarks[4]    # Thumb tip
+        thumb_mcp = landmarks[2]    # Thumb MCP joint
+        
+        index_tip = landmarks[8]
+        middle_tip = landmarks[12]
+        ring_tip = landmarks[16]
+        pinky_tip = landmarks[20]
+        
+        # Calculate if thumb is extended (tip above MCP joint)
+        thumb_extended = thumb_tip['y'] < thumb_mcp['y']
+        
+        # Calculate average Y position of other fingertips
+        other_fingers_y = (index_tip['y'] + middle_tip['y'] + ring_tip['y'] + pinky_tip['y']) / 4
+        
+        # Check if other fingers are curled (tips below their MCP joints)
+        # Use MCP joints (landmarks 5, 9, 13, 17) instead of PIP for more reliable detection
+        index_curled = index_tip['y'] > landmarks[5]['y']  # tip below MCP
+        middle_curled = middle_tip['y'] > landmarks[9]['y']
+        ring_curled = ring_tip['y'] > landmarks[13]['y']
+        pinky_curled = pinky_tip['y'] > landmarks[17]['y']
+        
+        # More lenient: require only 2 out of 4 fingers to be curled
+        fingers_curled = sum([index_curled, middle_curled, ring_curled, pinky_curled]) >= 2
+        
+        # Determine gesture
+        if thumb_extended and fingers_curled:
+            # Check if thumb is significantly above or below other fingers
+            thumb_distance = abs(thumb_tip['y'] - other_fingers_y)
+            
+            if thumb_distance > 0.05:  # Threshold for significant separation (more sensitive)
+                if thumb_tip['y'] < other_fingers_y:
+                    return 'thumbs_up'
+                else:
+                    return 'thumbs_down'
+        
+        return 'none'
+    
+    def _emit_gesture_events(self, hand_id: int, current_gesture: str):
+        """Emit gesture events when gesture state changes"""
+        previous_gesture = self.previous_gestures.get(hand_id, 'none')
+        current_time = time.time()
+        
+        if current_gesture in ['thumbs_up', 'thumbs_down']:
+            if hand_id in self.gesture_hold_time:
+                # Check if gesture has been held long enough (0.2 seconds)
+                hold_duration = current_time - self.gesture_hold_time[hand_id]
+                if hold_duration < 0.2:
+                    return  # Not stable enough yet
+                
+                # Emit event only if gesture changed from previous
+                if previous_gesture != current_gesture:
+                    event_type = HandTrackingEvents.THUMBS_UP if current_gesture == 'thumbs_up' else HandTrackingEvents.THUMBS_DOWN
+                    
+                    self.event_bus.emit(Event(
+                        type=event_type,
+                        data={
+                            "hand_id": hand_id,
+                            "gesture": current_gesture,
+                            "confidence": "high",
+                            "hold_duration": hold_duration
+                        },
+                        timestamp=datetime.now(),
+                        source="hand_tracker"
+                    ))
+                    
+                    self.previous_gestures[hand_id] = current_gesture
+            else:
+                # Start new hold timer for this gesture
+                self.gesture_hold_time[hand_id] = current_time
+        else:
+            # Reset timer with tolerance to prevent flickering
+            if hand_id in self.gesture_hold_time:
+                hold_duration = current_time - self.gesture_hold_time[hand_id]
+                if hold_duration > 0.1:  # Only reset after brief delay
+                    del self.gesture_hold_time[hand_id]
+                    self.previous_gestures[hand_id] = current_gesture
+            else:
+                self.previous_gestures[hand_id] = current_gesture
         
     def _draw_hand_bounding_box(self, frame, hand_landmarks, hand_id):
         """Draw bounding box around detected hand"""
