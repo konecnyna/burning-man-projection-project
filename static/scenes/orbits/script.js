@@ -68,6 +68,7 @@ var camera, scene, renderer, vrrenderer, composer, hueValues = [];
 var renderCanvas, vrHMD, vrHMDSensor;
 
 var mouseX = 0, mouseY = 0;
+var activeHandId = null; // Track specific hand ID
 var renderTargetWidth = window.innerWidth;
 var renderTargetHeight = window.innerHeight;
 
@@ -526,7 +527,20 @@ socket.on('connect', () => {
 socket.on('event', (event) => {
   if ((event.type === 'hand_moved' || event.type === 'hand_detected' || event.type === 'frame_processed') && event.data.hands && event.data.hands.length > 0) {
     try {
-      const hand = event.data.hands[0]; // Use first detected hand
+      // Use persistent hand ID tracking
+      const hands = event.data.hands;
+      let hand = null;
+      
+      if (activeHandId !== null) {
+        // Look for the hand with the same ID we were tracking
+        hand = hands.find(h => h.hand_id === activeHandId);
+      }
+      
+      if (!hand) {
+        // If we don't have an active hand or can't find it, use the first hand
+        hand = hands[0];
+        activeHandId = hand.hand_id;
+      }
       if (hand.palm_center) {
         // Convert normalized coordinates to screen coordinates
         let posX = hand.palm_center.x * window.innerWidth;
@@ -539,5 +553,7 @@ socket.on('event', (event) => {
     } catch (e) {
       console.trace(e);
     }
+  } else if (event.type === 'hand_lost') {
+    activeHandId = null;
   }
 });

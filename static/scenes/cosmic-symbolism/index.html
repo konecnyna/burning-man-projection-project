@@ -22,6 +22,7 @@
 
     let currentSpeed = -1;
     let targetSpeed = -1;
+    let activeHandId = null; // Track specific hand ID
     const smoothingFactor = 0.15; // Higher = more responsive, lower = smoother
 
     function mapPercentageToRange(percentage) {
@@ -100,10 +101,24 @@
       });
 
     function handleHandTracking(hands) {
-      if (!hands || hands.length === 0) return;
+      if (!hands || hands.length === 0) {
+        activeHandId = null;
+        return;
+      }
       
-      // Use the first hand for scroll control
-      const hand = hands[0];
+      // Use persistent hand ID tracking
+      let hand = null;
+      
+      if (activeHandId !== null) {
+        // Look for the hand with the same ID we were tracking
+        hand = hands.find(h => h.hand_id === activeHandId);
+      }
+      
+      if (!hand) {
+        // If we don't have an active hand or can't find it, use the first hand
+        hand = hands[0];
+        activeHandId = hand.hand_id;
+      }
       if (hand.palm_center) {
         const speed = mapPercentageToRange(hand.palm_center.y);
         setTargetSpeed(speed);
