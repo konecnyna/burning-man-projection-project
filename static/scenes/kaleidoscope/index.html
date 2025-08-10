@@ -57,6 +57,8 @@ window.onmousemove = function(e) {
 // Hand tracking variables
 let lastHandPos = { x: 0.5, y: 0.5 };
 let activeHandId = null;
+let smoothedHandVelocity = { x: 0, y: 0 };
+let handSmoothingFactor = 0.85; // Higher = more smoothing (0-1)
 
 // Setup WebSocket connection
 const socket = io();
@@ -182,9 +184,17 @@ function loop() {
 			}
 		}
 	}
-	// update pattern offset
-	offset.x = (offset.x - 1 * sin(angle / 2)) % img.width;
-	offset.y = (offset.y - 1 * cos(angle / 2)) % img.height;
+	// update pattern offset - slowed down default animation
+	offset.x = (offset.x - 0.3 * sin(angle / 2)) % img.width;
+	offset.y = (offset.y - 0.3 * cos(angle / 2)) % img.height;
+	
+	// Apply smoothed hand velocity for continuous movement
+	offset.x += smoothedHandVelocity.x;
+	offset.y += smoothedHandVelocity.y;
+	
+	// Gradually decay the smoothed velocity
+	smoothedHandVelocity.x *= 0.95;
+	smoothedHandVelocity.y *= 0.95;
 
 	// loop
 	requestAnimationFrame(loop);
@@ -233,9 +243,13 @@ function handleHandTracking(hands) {
 		const deltaX = currentPos.x - lastHandPos.x;
 		const deltaY = currentPos.y - lastHandPos.y;
 		
-		// Apply movement to kaleidoscope offset
-		offset.x += img.width * deltaX * 2; // Multiply by 2 for more sensitivity
-		offset.y += img.height * deltaY * 2;
+		// Apply smoothing to hand velocity for more fluid movement
+		const targetVelocityX = img.width * deltaX * 0.8; // Reduced sensitivity from 2 to 0.8
+		const targetVelocityY = img.height * deltaY * 0.8;
+		
+		// Smooth the velocity changes
+		smoothedHandVelocity.x = smoothedHandVelocity.x * handSmoothingFactor + targetVelocityX * (1 - handSmoothingFactor);
+		smoothedHandVelocity.y = smoothedHandVelocity.y * handSmoothingFactor + targetVelocityY * (1 - handSmoothingFactor);
 		
 		// Update last position
 		lastHandPos = currentPos;
