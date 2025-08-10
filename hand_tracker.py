@@ -36,6 +36,10 @@ class HandTracker:
         self.current_frame = None
         self.frame_lock = threading.Lock()
         
+        # Gesture tracking
+        self.previous_gestures = {}  # hand_id -> gesture_name
+        self.gesture_hold_time = {}  # hand_id -> timestamp
+        
     def start(self, camera_index: int = 0):
         """Start the hand tracking system"""
         if self.running:
@@ -115,6 +119,10 @@ class HandTracker:
                 # Add confidence data
                 confidence_data = self._calculate_confidence(hand_landmarks, results, idx)
                 hand_data['confidence'] = confidence_data
+                
+                # Detect thumbs up/down gesture and emit separate events
+                gesture = self._detect_thumbs_gesture(hand_data)
+                self._emit_gesture_events(idx, gesture)
                 
                 current_hands.append(hand_data)
                 
@@ -257,6 +265,96 @@ class HandTracker:
             'stability': round(stability_score, 3),
             'quality': 'high' if overall_confidence > 0.8 else 'medium' if overall_confidence > 0.6 else 'low'
         }
+    
+    def _detect_thumbs_gesture(self, hand_data) -> str:
+        """Detect thumbs up/down gesture based on hand landmarks"""
+        landmarks = hand_data['landmarks']
+        
+        # MediaPipe hand landmark indices
+        # Thumb: 0(wrist) -> 1 -> 2 -> 3 -> 4(tip)
+        # Index: 5 -> 6 -> 7 -> 8(tip)
+        # Middle: 9 -> 10 -> 11 -> 12(tip)
+        # Ring: 13 -> 14 -> 15 -> 16(tip)
+        # Pinky: 17 -> 18 -> 19 -> 20(tip)
+        
+        thumb_tip = landmarks[4]    # Thumb tip
+        thumb_mcp = landmarks[2]    # Thumb MCP joint
+        
+        index_tip = landmarks[8]
+        middle_tip = landmarks[12]
+        ring_tip = landmarks[16]
+        pinky_tip = landmarks[20]
+        
+        # Calculate if thumb is extended (tip above MCP joint)
+        thumb_extended = thumb_tip['y'] < thumb_mcp['y']
+        
+        # Calculate average Y position of other fingertips
+        other_fingers_y = (index_tip['y'] + middle_tip['y'] + ring_tip['y'] + pinky_tip['y']) / 4
+        
+        # Check if other fingers are curled (tips below their MCP joints)
+        # Use MCP joints (landmarks 5, 9, 13, 17) instead of PIP for more reliable detection
+        index_curled = index_tip['y'] > landmarks[5]['y']  # tip below MCP
+        middle_curled = middle_tip['y'] > landmarks[9]['y']
+        ring_curled = ring_tip['y'] > landmarks[13]['y']
+        pinky_curled = pinky_tip['y'] > landmarks[17]['y']
+        
+        # More lenient: require only 2 out of 4 fingers to be curled
+        fingers_curled = sum([index_curled, middle_curled, ring_curled, pinky_curled]) >= 2
+        
+        # Determine gesture
+        if thumb_extended and fingers_curled:
+            # Check if thumb is significantly above or below other fingers
+            thumb_distance = abs(thumb_tip['y'] - other_fingers_y)
+            
+            if thumb_distance > 0.05:  # Threshold for significant separation (more sensitive)
+                if thumb_tip['y'] < other_fingers_y:
+                    return 'thumbs_up'
+                else:
+                    return 'thumbs_down'
+        
+        return 'none'
+    
+    def _emit_gesture_events(self, hand_id: int, current_gesture: str):
+        """Emit gesture events when gesture state changes"""
+        previous_gesture = self.previous_gestures.get(hand_id, 'none')
+        current_time = time.time()
+        
+        if current_gesture in ['thumbs_up', 'thumbs_down']:
+            if hand_id in self.gesture_hold_time:
+                # Check if gesture has been held long enough (0.2 seconds)
+                hold_duration = current_time - self.gesture_hold_time[hand_id]
+                if hold_duration < 0.2:
+                    return  # Not stable enough yet
+                
+                # Emit event only if gesture changed from previous
+                if previous_gesture != current_gesture:
+                    event_type = HandTrackingEvents.THUMBS_UP if current_gesture == 'thumbs_up' else HandTrackingEvents.THUMBS_DOWN
+                    
+                    self.event_bus.emit(Event(
+                        type=event_type,
+                        data={
+                            "hand_id": hand_id,
+                            "gesture": current_gesture,
+                            "confidence": "high",
+                            "hold_duration": hold_duration
+                        },
+                        timestamp=datetime.now(),
+                        source="hand_tracker"
+                    ))
+                    
+                    self.previous_gestures[hand_id] = current_gesture
+            else:
+                # Start new hold timer for this gesture
+                self.gesture_hold_time[hand_id] = current_time
+        else:
+            # Reset timer with tolerance to prevent flickering
+            if hand_id in self.gesture_hold_time:
+                hold_duration = current_time - self.gesture_hold_time[hand_id]
+                if hold_duration > 0.1:  # Only reset after brief delay
+                    del self.gesture_hold_time[hand_id]
+                    self.previous_gestures[hand_id] = current_gesture
+            else:
+                self.previous_gestures[hand_id] = current_gesture
         
     def _draw_hand_bounding_box(self, frame, hand_landmarks, hand_id):
         """Draw bounding box around detected hand"""

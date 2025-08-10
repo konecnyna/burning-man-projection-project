@@ -1100,6 +1100,7 @@
         this.idleTimer = null;
         this.idleWarningTimer = null;
         this.idleWarningVisible = false;
+        this.idleHandConfidenceDetectionLevel = .68
 
         // Scene definitions for mode-specific scenes
         this.idleScene = {
@@ -1239,7 +1240,8 @@
         const wasDetected = this.appState.get('handsDetected');
 
         // Filter out low-confidence hands before determining detection state
-        const highConfidenceHands = hands.filter(hand => hand.confidence.overall >= .65);
+        
+        const highConfidenceHands = hands.filter(hand => hand.confidence.overall >= this.idleHandConfidenceDetectionLevel);
         const nowDetected = highConfidenceHands.length > 0;
 
         // Reset idle timer whenever hands are present (continuous tracking)
@@ -2096,7 +2098,7 @@
 
           // Subscribe only to hand tracking events (no scene events)
           const eventsToSubscribe = [
-            'hand_moved', 'hand_detected', 'hand_lost', 'frame_processed'
+            'hand_moved', 'hand_detected', 'hand_lost', 'frame_processed', 'thumbs_up', 'thumbs_down'
           ];
           console.log('[App] Subscribing to events:', eventsToSubscribe);
           this.socket.emit('subscribe', {
@@ -2140,6 +2142,16 @@
 
           case 'frame_processed':
             this.appState.setState({ fps: Math.round(event.data.fps) });
+            break;
+
+          case 'thumbs_up':
+            console.log('[App] Thumbs up gesture detected', event.data);
+            this.sceneManager.callSceneHandler('onThumbsUp', event.data);
+            break;
+
+          case 'thumbs_down':
+            console.log('[App] Thumbs down gesture detected', event.data);
+            this.sceneManager.callSceneHandler('onThumbsDown', event.data);
             break;
         }
 
