@@ -11,7 +11,7 @@
   <div class="scene welcome-scene">
     <div class="terminal-frame">
       <div class="terminal-header">
-        <div class="terminal-title">ATLANTIS HAND TRACKING INTERFACE v4.20.69
+        <div class="terminal-title">ATLANTIS PORTAL INTERFACE v4.20.69
           <br/>
           <span class="terminal-author">by Dr. Boom Boom PhD</span>
         </div>
@@ -40,9 +40,9 @@
          ╚═╝╚═════╝  ╚═════╝     ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝     ╚═════╝ 
           </div>
           <div class="system-status">
-            <span class="status-line">&gt; TRACKING SYSTEM ONLINE</span>
-            <span class="status-line">&gt; GESTURE RECOGNITION: ACTIVE</span>
-            <span class="status-line">&gt; READY FOR INPUT...</span>
+            <span class="status-line">&gt; TRACKING SYSTEM: <b><em> ONLINE</em></b></span>
+            <span class="status-line">&gt; GESTURE RECOGNITION: <b><em>ACTIVE</em></b></span>
+            <span class="status-line">&gt; AWAITING INPUT: <span class="signal-indicator">●</span></span>
           </div>
         </div>
 
@@ -247,11 +247,11 @@
       -webkit-user-select: none;
       -moz-user-select: none;
       -ms-user-select: none;
-      animation: pipboy-attention 4s ease-in-out infinite;
+      /* animation controlled by JavaScript */
     }
 
     #instruction1 {
-      animation-delay: 0s;
+      /* animation controlled by JavaScript */
     }
 
     #instruction1::before {
@@ -262,11 +262,11 @@
       width: 100%;
       height: 100%;
       background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.1), transparent);
-      animation: scan-sweep-1 8s ease-in-out infinite;
+      animation: scan-sweep-1 8s ease-in-out infinite;      
     }
 
     #instruction2 {
-      animation-delay: 1.3s;
+      /* animation controlled by JavaScript */
     }
 
     #instruction2::before {
@@ -281,7 +281,11 @@
     }
 
     #instruction3 {
-      animation-delay: 2.6s;
+      /* animation controlled by JavaScript */
+    }
+
+    .instruction-module.animating {
+      animation: pipboy-attention 8s ease-in-out;
     }
 
     #instruction3::before {
@@ -622,36 +626,42 @@
 
     @keyframes pipboy-attention {
       0% {
+        background: rgba(0, 255, 65, 0.05);
         box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
         border-color: #00ff41;
         transform: scale(1);
       }
       
       15% {
+        background: rgba(0, 255, 65, 0.1);
         box-shadow: 0 0 15px rgba(0, 255, 65, 0.6), 0 0 25px rgba(0, 255, 65, 0.3);
         border-color: #00ff88;
-        transform: scale(1.02);
+        transform: translateY(-2px) scale(1.01);
       }
       
       20% {
+        background: rgba(0, 255, 65, 0.15);
         box-shadow: 0 0 20px rgba(0, 255, 65, 0.8), 0 0 30px rgba(0, 255, 65, 0.5);
         border-color: #00ff41;
-        transform: scale(1);
+        transform: translateY(-3px) scale(1.02);
       }
       
       25% {
-        box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
+        background: rgba(0, 255, 65, 0.08);
+        box-shadow: 0 0 10px rgba(0, 255, 65, 0.4);
         border-color: #00dd33;
-        transform: scale(1.01);
+        transform: translateY(-1px) scale(1.005);
       }
       
       30% {
+        background: rgba(0, 255, 65, 0.2);
         box-shadow: 0 0 25px rgba(0, 255, 65, 0.9), 0 0 35px rgba(0, 255, 65, 0.6);
         border-color: #00ff41;
-        transform: scale(1);
+        transform: translateY(-5px) scale(1.02);
       }
       
       100% {
+        background: rgba(0, 255, 65, 0.05);
         box-shadow: 0 0 5px rgba(0, 255, 65, 0.3);
         border-color: #00ff41;
         transform: scale(1);
@@ -816,12 +826,57 @@
       }
     }
 
-    // Initialize cursor when page loads
-    document.addEventListener('DOMContentLoaded', initializeHandCursor);
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeHandCursor);
-    } else {
+    // Animation control
+    let animationTimers = [];
+    
+    function startInstructionAnimations() {
+      const modules = [
+        { id: 'instruction1', delay: 0 },
+        { id: 'instruction2', delay: 3000 }, // 3 seconds
+        { id: 'instruction3', delay: 6000 }  // 6 seconds
+      ];
+      
+      modules.forEach(({ id, delay }) => {
+        const timer = setTimeout(() => {
+          const module = document.getElementById(id);
+          if (module) {
+            module.classList.add('animating');
+            
+            // Remove the class after animation completes to restart the cycle
+            setTimeout(() => {
+              module.classList.remove('animating');
+              // Restart after a brief pause
+              setTimeout(() => {
+                if (module) module.classList.add('animating');
+              }, 2000);
+            }, 8000); // 8s animation duration
+          }
+        }, delay);
+        
+        animationTimers.push(timer);
+      });
+    }
+    
+    function stopInstructionAnimations() {
+      animationTimers.forEach(timer => clearTimeout(timer));
+      animationTimers = [];
+      
+      document.querySelectorAll('.instruction-module').forEach(module => {
+        module.classList.remove('animating');
+      });
+    }
+
+    // Initialize when page loads
+    function initializePage() {
       initializeHandCursor();
+      startInstructionAnimations();
+    }
+    
+    document.addEventListener('DOMContentLoaded', initializePage);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializePage);
+    } else {
+      initializePage();
     }
 
     // Subscribe to hand tracking events
