@@ -1239,6 +1239,14 @@
         const wasDetected = this.appState.get('handsDetected');
         const nowDetected = hands.length > 0;
 
+        // Reset idle timer whenever hands are present (continuous tracking)
+        if (nowDetected) {
+          const currentMode = this.appState.get('currentMode');
+          if (currentMode === 'active' || currentMode === 'onboarding') {
+            this.resetIdleTimer();
+          }
+        }
+
         // Only update detection-related state, not hands array to avoid recursion
         if (wasDetected !== nowDetected) {
           console.log(`[ModeManager] Hand detection changed: ${wasDetected} -> ${nowDetected}`);
