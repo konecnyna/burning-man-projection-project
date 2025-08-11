@@ -815,7 +815,7 @@
           totalScenes: 0,
 
           // Idle management
-          idleTimeoutMs: 15000,
+          idleTimeoutMs: 30_000,
           idleTimeoutStartTime: null,
 
           // Debug state
@@ -1536,14 +1536,14 @@
             html_file: 'scenes/tie-dye/index.html',
             background_color: '#000000'
           },
-          {
-            id: 'psychedelic_waves',
-            name: 'Psychedelic Waves',
-            description: 'WebGL shader-based wave visualization controlled by hand movements',
-            duration: this.quickScene,
-            html_file: 'scenes/psychedelic-waves/index.html',
-            background_color: '#000000'
-          },
+          // {
+          //   id: 'psychedelic_waves',
+          //   name: 'Psychedelic Waves',
+          //   description: 'WebGL shader-based wave visualization controlled by hand movements',
+          //   duration: this.quickScene,
+          //   html_file: 'scenes/psychedelic-waves/index.html',
+          //   background_color: '#000000'
+          // },
           {
             id: 'wireframe_geometry',
             name: 'Wireframe Geometry',
@@ -1556,7 +1556,7 @@
             id: 'kaleidoscope',
             name: 'Kaleidoscope',
             description: 'Interactive kaleidoscope with hand-controlled pattern movement',
-            duration: this.defaultDuration,
+            duration: this.popularScene,
             html_file: 'scenes/kaleidoscope/index.html',
             background_color: '#000000'
           },
