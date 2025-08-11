@@ -442,7 +442,8 @@
     .controls-hud-hidden .debug-video,
     .controls-hud-hidden .manual-controls,
     .controls-hud-hidden .parent-overlay,
-    .controls-hud-hidden .idle-warning {
+    .controls-hud-hidden .idle-warning,
+    .controls-hud-hidden .toast-notification {
       display: none !important;
     }
 
@@ -490,6 +491,47 @@
       50% {
         box-shadow: 0 0 30px var(--pipboy-orange-glow), 0 0 40px rgba(255, 170, 60, 0.2), inset 0 0 20px rgba(255, 170, 60, 0.2);
       }
+    }
+
+    .toast-notification {
+      position: fixed;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 51, 20, 0.95);
+      border: 2px solid var(--pipboy-green);
+      border-radius: 8px;
+      box-shadow:
+        0 0 20px rgba(0, 255, 65, 0.5),
+        inset 0 0 15px rgba(0, 255, 65, 0.1);
+      padding: 12px 20px;
+      z-index: 65;
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--pipboy-green);
+      text-shadow: 0 0 8px var(--pipboy-green);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      min-width: 200px;
+      text-align: center;
+    }
+
+    .toast-notification.visible {
+      opacity: 1;
+      visibility: visible;
+      top: 20px;
+    }
+
+    .toast-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .toast-icon {
+      font-size: 1.2rem;
+      animation: pulse 2s ease-in-out infinite;
     }
 
     @keyframes warning-flash {
@@ -743,7 +785,15 @@
       <div class="warning-content">
         <span class="warning-icon">⚠</span>
         <span class="warning-text">No hands detected. Entering idle mode in <span
-            id="idleWarningCountdown">3</span>s</span>
+            id="idleWarningCountdown">--</span>s</span>
+      </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast-notification hud-element" id="toastNotification">
+      <div class="toast-content">
+        <span class="toast-icon" id="toastIcon">✓</span>
+        <span class="toast-text" id="toastText">Notification message</span>
       </div>
     </div>
 
@@ -1491,8 +1541,8 @@
         this.countdownTimer = null;
         this.currentSceneIframe = null;
         this.quickScene = 25
-        this.defaultDuration = 45
-        this.popularScene = 75
+        this.defaultDuration = 25
+        this.popularScene = 25
 
         // Scene configurations
         this.scenes = [
@@ -1623,6 +1673,12 @@
           clearInterval(this.countdownTimer);
           this.countdownTimer = null;
         }
+        
+        // Immediately update countdown display to show "--"
+        const countdownElement = document.getElementById('sceneCountdown');
+        if (countdownElement) {
+          countdownElement.textContent = 'Next: --';
+        }
       }
 
       scheduleNextScene() {
@@ -1673,7 +1729,7 @@
         const currentScene = this.appState.get('currentScene');
         const sceneStartTime = this.appState.get('sceneStartTime');
 
-        if (!currentScene || !sceneStartTime || currentScene.duration === 0) {
+        if (!currentScene || !sceneStartTime || currentScene.duration === 0 || this.modeManager.getCurrentMode() !== 'active') {
           const countdownElement = document.getElementById('sceneCountdown');
           if (countdownElement) {
             countdownElement.textContent = 'Next: --';
@@ -1691,6 +1747,12 @@
           } else {
             const minutes = Math.floor(remaining / 60);
             const seconds = Math.floor(remaining % 60);
+
+            if (seconds == 5) {
+              if (this.app && this.app.showToast) {
+                this.app.showToast(`Changing scenes in 5 seconds`, 5000, '🔄');
+              }
+            }
 
             if (minutes > 0) {
               countdownElement.textContent = `Next: ${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -2721,6 +2783,11 @@
 
           // Set current scene
           this.currentScene = scene;
+          
+          // Show toast notification for scene change in active mode
+          if (this.modeManager && this.modeManager.getCurrentMode() === 'active' && scene.duration > 0) {
+            this.showToast(`Now playing: ${scene.name || scene.id}`, 2000, '🎨');
+          }
 
           // Handle complete HTML page scenes as iframes
           if (scene.id === 'fluidsim' || scene.id === 'cosmic_symbolism' || scene.id === 'psychedelic_waves' || scene.id === 'tie_dye' || scene.id === 'orbits' || scene.id === 'idle' || scene.id === 'onboarding') {
@@ -2797,61 +2864,6 @@
         }
       }
 
-      startSceneCountdown() {
-        // Clear any existing countdown timer
-        if (this.sceneCountdownTimer) {
-          clearInterval(this.sceneCountdownTimer);
-        }
-
-        // Set scene start time
-        this.sceneStartTime = Date.now();
-
-        // Log scene info for debugging
-        if (this.currentScene) {
-          console.log('[JS] Starting countdown for scene:', this.currentScene.id, 'duration:', this.currentScene.duration);
-        }
-
-        // Start countdown timer (update every second)
-        this.sceneCountdownTimer = setInterval(() => {
-          this.updateSceneCountdown();
-        }, 1000);
-
-        // Initial update
-        this.updateSceneCountdown();
-      }
-
-      updateSceneCountdown() {
-        const countdownElement = document.getElementById('sceneCountdown');
-        if (!this.currentScene || !this.sceneStartTime || this.mode !== 'active') {
-          countdownElement.textContent = 'Next: --';
-          return;
-        }
-
-        // Get scene duration - should always be specified
-        if (!this.currentScene.duration) {
-          throw Error('[JS] Scene missing duration:', this.currentScene);
-          return;
-        }
-
-        const sceneDuration = this.currentScene.duration;
-
-        // Calculate elapsed time
-        const elapsed = (Date.now() - this.sceneStartTime) / 1000;
-        const remaining = Math.max(0, sceneDuration - elapsed);
-
-        if (remaining <= 0) {
-          countdownElement.textContent = 'Next: Now';
-        } else {
-          const minutes = Math.floor(remaining / 60);
-          const seconds = Math.floor(remaining % 60);
-
-          if (minutes > 0) {
-            countdownElement.textContent = `Next: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-          } else {
-            countdownElement.textContent = `Next: ${seconds}s`;
-          }
-        }
-      }
 
       updateIdleWarning() {
         const idleWarning = document.getElementById('idleWarning');
@@ -3031,7 +3043,6 @@
 
       startInIdleMode() {
         console.log('[JS] Starting in idle mode');
-        this.mode = 'idle';
         this.loadIdleScene();
       }
 
@@ -3157,6 +3168,49 @@
           // For now, just a placeholder
         }, 1000);
       }
+
+      // Toast notification functions
+      showToast(message, duration = 3000, icon = '✓') {
+        const toast = document.getElementById('toastNotification');
+        const toastText = document.getElementById('toastText');
+        const toastIcon = document.getElementById('toastIcon');
+
+        if (!toast || !toastText || !toastIcon) {
+          console.warn('[Toast] Toast elements not found');
+          return;
+        }
+
+        // Set content
+        toastText.textContent = message;
+        toastIcon.textContent = icon;
+
+        // Clear any existing timeout
+        if (this.toastTimeout) {
+          clearTimeout(this.toastTimeout);
+        }
+
+        // Show toast
+        toast.classList.add('visible');
+
+        // Auto-hide after duration
+        this.toastTimeout = setTimeout(() => {
+          this.hideToast();
+        }, duration);
+
+        console.log('[Toast] Showing:', message);
+      }
+
+      hideToast() {
+        const toast = document.getElementById('toastNotification');
+        if (toast) {
+          toast.classList.remove('visible');
+        }
+
+        if (this.toastTimeout) {
+          clearTimeout(this.toastTimeout);
+          this.toastTimeout = null;
+        }
+      }
     }
 
     // Global functions for manual controls
@@ -3191,6 +3245,15 @@
         console.log('Emitted toggle_auto_cycle event');
       } else {
         console.error('Socket not available');
+      }
+    }
+
+    // Global toast function
+    function showToast(message, duration = 3000, icon = '✓') {
+      if (window.app && window.app.showToast) {
+        window.app.showToast(message, duration, icon);
+      } else {
+        console.warn('[Toast] App not available');
       }
     }
 
