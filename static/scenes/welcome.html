@@ -9,6 +9,7 @@
 
 <body>
   <div class="scene welcome-scene">
+    <div class="hud-warning" id="hudWarning">Next: --</div>
     <div class="terminal-frame">
       <div class="terminal-header">
         <div class="terminal-title">ATLANTIS PORTAL INTERFACE v4.20.69
@@ -440,6 +441,30 @@
       animation: pulse-attention 3s ease-in-out infinite;
     }
 
+    .hud-warning {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 0, 0, 0.1);
+      border: 2px solid #ff0000;
+      border-radius: 5px;
+      padding: 10px 15px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #ff0000;
+      text-shadow: 0 0 10px #ff0000;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+    }
+
+    .hud-warning.visible {
+      opacity: 1;
+      animation: hud-blink 0.5s ease-in-out infinite alternate;
+    }
+
     /* Hand cursor */
     .hand-cursor {
       position: fixed;
@@ -736,6 +761,21 @@
       }
     }
 
+    @keyframes hud-blink {
+      0% {
+        opacity: 1;
+        transform: scale(1);
+        text-shadow: 0 0 10px #ff0000;
+        box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+      }
+      100% {
+        opacity: 0.3;
+        transform: scale(1.05);
+        text-shadow: 0 0 20px #ff0000, 0 0 30px #ff0000;
+        box-shadow: 0 0 30px rgba(255, 0, 0, 0.6);
+      }
+    }
+
     /* Responsive design */
     @media (max-width: 768px) {
       .terminal-frame {
@@ -778,7 +818,7 @@
     let handCursor = null;
     let activeHandId = null;
     let autoStartTimer = null;
-    let autoStartTime = 30;
+    let autoStartTime = 45;
     let autoStartCountdown = null;
 
     // Setup WebSocket connection
@@ -895,6 +935,16 @@
         timerText.textContent = `AUTO-START IN ${autoStartCountdown}`;
       }
 
+      // Show HUD warning when 5 seconds or less remain
+      const hudWarning = document.getElementById('hudWarning');
+      if (hudWarning) {
+        if (autoStartCountdown <= 5 && autoStartCountdown > 0) {
+          hudWarning.classList.add('visible');
+        } else {
+          hudWarning.classList.remove('visible');
+        }
+      }
+
       if (autoStartCountdown > 0) {
         autoStartCountdown--;
         autoStartTimer = setTimeout(() => updateAutoTimer(), 1000);
@@ -908,6 +958,12 @@
       if (autoStartTimer) {
         clearTimeout(autoStartTimer);
         autoStartTimer = null;
+      }
+      
+      // Hide HUD warning when timer stops
+      const hudWarning = document.getElementById('hudWarning');
+      if (hudWarning) {
+        hudWarning.classList.remove('visible');
       }
     }
 
@@ -1048,13 +1104,6 @@
       if (signalText) {
         signalText.textContent = 'PRESENCE DETECTED';
       }
-      
-      // Stop auto-timer when hand is detected
-      stopAutoTimer();
-      const timerText = document.getElementById('autoTimerText');
-      if (timerText) {
-        timerText.style.display = 'none';
-      }
     }
 
     function handleHandLost() {
@@ -1076,13 +1125,6 @@
 
       // Stop countdown if active
       stopCountdown();
-      
-      // Restart auto-timer when hand is lost
-      const timerText = document.getElementById('autoTimerText');
-      if (timerText) {
-        timerText.style.display = 'inline';
-      }
-      startAutoTimer();
     }
 
     function startCountdown() {
