@@ -211,6 +211,30 @@ class HandTracker:
             'z': (wrist['z'] + landmarks[5]['z'] + landmarks[9]['z'] + landmarks[13]['z'] + landmarks[17]['z']) / 5
         }
         
+        # Calculate distance from camera using MediaPipe's z-coordinate
+        # MediaPipe z represents depth relative to the wrist in the same scale as x and y
+        # Negative z values mean closer to camera, positive values mean further
+        # Convert to a more intuitive distance metric (0 = very close, 1 = far)
+        wrist_z = wrist['z']
+        palm_z = palm_center['z']
+        
+        # Use palm center z as the primary distance metric
+        # Add offset to make values more intuitive (closer to 0 = closer to camera)
+        base_distance = abs(palm_z)
+        
+        # Normalize distance to 0-1 range (0 = very close, 1 = far)
+        # MediaPipe z typically ranges from -0.3 to 0.3 for normal hand distances
+        normalized_distance = min(1.0, max(0.0, (base_distance + 0.1) / 0.4))
+        
+        # Calculate additional distance metrics
+        distance_metrics = {
+            'palm_distance': round(normalized_distance, 3),
+            'wrist_distance': round(min(1.0, max(0.0, (abs(wrist_z) + 0.1) / 0.4)), 3),
+            'raw_palm_z': round(palm_z, 4),
+            'raw_wrist_z': round(wrist_z, 4),
+            'distance_quality': 'close' if normalized_distance < 0.3 else 'medium' if normalized_distance < 0.7 else 'far'
+        }
+        
         return {
             'landmarks': landmarks,
             'palm_center': palm_center,
@@ -221,7 +245,8 @@ class HandTracker:
                 'middle': middle_tip,
                 'ring': ring_tip,
                 'pinky': pinky_tip
-            }
+            },
+            'distance': distance_metrics
         }
     
     def _assign_persistent_ids(self, detected_hands) -> List[Dict]:
