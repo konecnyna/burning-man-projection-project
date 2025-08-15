@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finger Paint</title>
+  <script src="/static/socket.io.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background: #000;
+      color: #00ff41;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .paint-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f23 100%);
+    }
+
+    #paintCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+      background: transparent;
+    }
+
+    .hand-indicator {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #00ff41;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 5;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 10px rgba(0, 255, 65, 0.6);
+      transition: all 0.1s ease;
+      border: 2px solid rgba(0, 255, 65, 0.3);
+    }
+
+    .hand-indicator.drawing {
+      background: #ff4444;
+      box-shadow: 0 0 15px rgba(255, 68, 68, 0.8);
+      width: 24px;
+      height: 24px;
+      border: 2px solid rgba(255, 68, 68, 0.5);
+    }
+
+    .gesture-feedback {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 255, 65, 0.1);
+      border: 1px solid #00ff41;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 16px;
+      backdrop-filter: blur(5px);
+      z-index: 10;
+    }
+
+    .instructions {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 255, 65, 0.1);
+      border: 1px solid #00ff41;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 12px;
+      backdrop-filter: blur(5px);
+      max-width: 200px;
+      z-index: 10;
+    }
+
+    .instructions h3 {
+      color: #00ff41;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .instructions ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .instructions li {
+      margin: 4px 0;
+      color: #aaa;
+    }
+
+    .instructions li:before {
+      content: "→ ";
+      color: #00ff41;
+    }
+
+    .debug-info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0, 255, 65, 0.05);
+      border: 1px solid rgba(0, 255, 65, 0.3);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      backdrop-filter: blur(5px);
+      max-width: 300px;
+      font-family: monospace;
+      z-index: 10;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="paint-container">
+    <canvas id="paintCanvas"></canvas>
+    
+    <div class="instructions">
+      <h3>How to Paint</h3>
+      <ul>
+        <li>Point with INDEX finger to draw</li>
+        <li>Make a fist to stop drawing</li>
+        <li>Open hand (3+ fingers) to stop</li>
+        <li>Move hand to paint strokes</li>
+      </ul>
+    </div>
+
+    <div class="gesture-feedback" id="gestureStatus">
+      Hold up your hand to start painting!
+    </div>
+
+    <div class="debug-info" id="debugInfo">
+      Debug info will appear here
+    </div>
+  </div>
+
+  <script>
+    class FingerPaint {
+      constructor() {
+        this.canvas = document.getElementById('paintCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.socket = null;
+        this.isDrawing = false;
+        this.currentColor = '#00ff41';
+        this.brushSize = 8;
+        this.lastX = 0;
+        this.lastY = 0;
+        
+        // Hand tracking state
+        this.handData = [];
+        this.handIndicators = new Map();
+        
+        this.init();
+      }
+
+      init() {
+        this.setupCanvas();
+        this.connectWebSocket();
+      }
+
+      setupCanvas() {
+        this.resizeCanvas();
+        window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Set up canvas for smooth drawing
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        this.ctx.imageSmoothingEnabled = true;
+      }
+
+      resizeCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        
+        // Reset canvas properties after resize
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        this.ctx.imageSmoothingEnabled = true;
+      }
+
+      connectWebSocket() {
+        this.socket = io();
+        
+        this.socket.on('connect', () => {
+          console.log('Connected to WebSocket');
+          // Subscribe to hand tracking events
+          this.socket.emit('subscribe', {
+            events: ['hand_detected', 'hand_lost', 'hand_moved', 'frame_processed']
+          });
+        });
+
+        this.socket.on('event', (eventData) => {
+          this.handleHandEvent(eventData);
+        });
+
+        this.socket.on('disconnect', () => {
+          console.log('Disconnected from WebSocket');
+        });
+      }
+
+      handleHandEvent(eventData) {
+        if (eventData.type === 'frame_processed') {
+          this.handData = eventData.data.hands || [];
+          this.updateHandIndicators();
+          this.processHandGestures();
+        }
+      }
+
+      updateHandIndicators() {
+        // Clear existing indicators
+        this.handIndicators.forEach(indicator => {
+          if (indicator.parentNode) {
+            indicator.parentNode.removeChild(indicator);
+          }
+        });
+        this.handIndicators.clear();
+
+        // Create indicators for current hands
+        this.handData.forEach((hand, index) => {
+          const indicator = document.createElement('div');
+          indicator.className = 'hand-indicator';
+          indicator.id = `hand-${hand.hand_id || index}`;
+          
+          // Use index finger tip for pointing, fallback to palm center
+          let x, y;
+          if (hand.fingertips && hand.fingertips.index) {
+            x = hand.fingertips.index.x * this.canvas.width;
+            y = hand.fingertips.index.y * this.canvas.height;
+          } else if (hand.landmarks && hand.landmarks[8]) {
+            // Use MediaPipe index finger tip landmark directly
+            x = hand.landmarks[8].x * this.canvas.width;
+            y = hand.landmarks[8].y * this.canvas.height;
+          } else {
+            // Fallback to palm center
+            x = hand.palm_center.x * this.canvas.width;
+            y = hand.palm_center.y * this.canvas.height;
+          }
+          
+          indicator.style.left = x + 'px';
+          indicator.style.top = y + 'px';
+          
+          document.body.appendChild(indicator);
+          this.handIndicators.set(hand.hand_id || index, indicator);
+        });
+      }
+
+      processHandGestures() {
+        let drawingHand = null;
+        let gestureStatus = "Hold up your hand to start painting!";
+        let debugInfo = [];
+        
+        for (const hand of this.handData) {
+          const fingerCount = this.countExtendedFingers(hand);
+          const handId = hand.hand_id || 0;
+          const indicator = this.handIndicators.get(handId);
+          
+          debugInfo.push(`Hand ${handId}: ${fingerCount} fingers extended`);
+          
+          // Simple logic: 1 finger = draw, anything else = stop
+          if (fingerCount === 1) {
+            drawingHand = hand;
+            gestureStatus = "Drawing with one finger ✍️";
+            if (indicator) {
+              indicator.classList.add('drawing');
+            }
+            break; // Use first single finger hand found
+          } else if (fingerCount === 0) {
+            gestureStatus = "Fist detected - Stopped drawing ✊";
+            if (indicator) {
+              indicator.classList.remove('drawing');
+            }
+          } else if (fingerCount >= 2) {
+            gestureStatus = `${fingerCount} fingers - Stopped drawing ✋`;
+            if (indicator) {
+              indicator.classList.remove('drawing');
+            }
+          }
+        }
+
+        // Update UI
+        document.getElementById('gestureStatus').textContent = gestureStatus;
+        document.getElementById('debugInfo').innerHTML = 
+          `Hands: ${this.handData.length}<br>` +
+          (debugInfo.join('<br>') || 'No hands detected') +
+          `<br>Drawing: ${this.isDrawing ? 'YES' : 'NO'}`;
+
+        // Handle drawing
+        if (drawingHand) {
+          this.handleDrawing(drawingHand);
+        } else {
+          this.stopDrawing();
+        }
+      }
+
+      countExtendedFingers(hand) {
+        if (!hand.landmarks || hand.landmarks.length < 21) {
+          return 0;
+        }
+
+        const landmarks = hand.landmarks;
+        let extendedCount = 0;
+
+        // MediaPipe hand landmark indices
+        // Fingertips: thumb=4, index=8, middle=12, ring=16, pinky=20
+        // Joints: thumb=3, index=6, middle=10, ring=14, pinky=18
+        
+        const fingers = [
+          { tip: 4, joint: 3 },   // Thumb
+          { tip: 8, joint: 6 },   // Index  
+          { tip: 12, joint: 10 }, // Middle
+          { tip: 16, joint: 14 }, // Ring
+          { tip: 20, joint: 18 }  // Pinky
+        ];
+
+        for (let i = 0; i < fingers.length; i++) {
+          const tip = landmarks[fingers[i].tip];
+          const joint = landmarks[fingers[i].joint];
+          
+          if (i === 0) {
+            // Thumb: check if tip is to the right/left of joint (extended sideways)
+            const tipDistance = Math.abs(tip.x - landmarks[0].x); // Distance from wrist
+            const jointDistance = Math.abs(joint.x - landmarks[0].x);
+            if (tipDistance > jointDistance * 1.2) {
+              extendedCount++;
+            }
+          } else {
+            // Other fingers: check if tip is above joint (extended upward)
+            if (tip.y < joint.y - 0.03) { // Y decreases upward, with threshold
+              extendedCount++;
+            }
+          }
+        }
+
+        return extendedCount;
+      }
+
+      handleDrawing(hand) {
+        // Get drawing position from index finger tip or palm center
+        let x, y;
+        if (hand.fingertips && hand.fingertips.index) {
+          x = hand.fingertips.index.x * this.canvas.width;
+          y = hand.fingertips.index.y * this.canvas.height;
+        } else if (hand.landmarks && hand.landmarks[8]) {
+          // Use MediaPipe index finger tip landmark directly
+          x = hand.landmarks[8].x * this.canvas.width;
+          y = hand.landmarks[8].y * this.canvas.height;
+        } else {
+          // Fallback to palm center
+          x = hand.palm_center.x * this.canvas.width;
+          y = hand.palm_center.y * this.canvas.height;
+        }
+
+        if (!this.isDrawing) {
+          // Start new stroke
+          this.isDrawing = true;
+          this.lastX = x;
+          this.lastY = y;
+          
+          // Draw initial dot
+          this.ctx.beginPath();
+          this.ctx.arc(x, y, this.brushSize / 2, 0, Math.PI * 2);
+          this.ctx.fillStyle = this.currentColor;
+          this.ctx.fill();
+        } else {
+          // Continue stroke - only draw if there's meaningful movement
+          const dx = x - this.lastX;
+          const dy = y - this.lastY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 2) { // Minimum movement threshold
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.lastX, this.lastY);
+            this.ctx.lineTo(x, y);
+            this.ctx.strokeStyle = this.currentColor;
+            this.ctx.lineWidth = this.brushSize;
+            this.ctx.stroke();
+            
+            this.lastX = x;
+            this.lastY = y;
+          }
+        }
+      }
+
+      stopDrawing() {
+        this.isDrawing = false;
+      }
+
+      clearCanvas() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+    }
+
+    // Initialize the finger paint app
+    window.addEventListener('load', () => {
+      new FingerPaint();
+    });
+
+    // Add keyboard shortcut for clearing (for testing)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'c' || e.key === 'C') {
+        const app = window.fingerPaintApp;
+        if (app) app.clearCanvas();
+      }
+    });
+  </script>
+</body>
+
+</html>
