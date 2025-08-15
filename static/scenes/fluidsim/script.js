@@ -14,7 +14,6 @@ const socket = io();
 
 // Subscribe to hand tracking events
 socket.on('connect', () => {
-  console.log('Connected to server');
   // Subscribe to hand tracking events
   socket.emit('subscribe', {
     events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
@@ -87,13 +86,11 @@ socket.on('event', (data) => {
           p.down = false; // Release the pointer
         }
       });
-      console.log('Hands lost, releasing hand pointers');
     }
     
     // Handle scene events
     if (data.type === 'scene_changed' && data.data.scene && data.data.scene.id === 'fluidsim') {
       // Scene activated - reinitialize if needed
-      console.log('Fluid simulation scene activated');
     }
   } catch (e) {
     console.error('Error processing hand tracking event:', e, data);

@@ -95,7 +95,6 @@ function setup() {
 	];
 	const randomImage = images[Math.floor(Math.random() * images.length)];
 	img.src = randomImage;
-	console.log('Loading kaleidoscope image:', randomImage);
 	
 	img.onload = function() {
 		pattern = ctx.createPattern(img, "repeat");
@@ -103,7 +102,6 @@ function setup() {
 	};
 	img.onerror = function() {
 		// Fallback: create a procedural pattern if image fails to load
-		console.log('Image failed to load, creating fallback pattern');
 		createFallbackPattern();
 		loop();
 	};
@@ -258,7 +256,6 @@ function handleHandTracking(hands) {
 
 // Setup WebSocket event handlers
 socket.on('connect', () => {
-	console.log('Kaleidoscope scene connected to server');
 	socket.emit('subscribe', {
 		events: ['hand_moved', 'hand_detected', 'frame_processed']
 	});
@@ -274,7 +271,6 @@ socket.on('event', (event) => {
 	}
 	
 	if (event.type === 'scene_changed' && event.data.scene && event.data.scene.id === 'kaleidoscope') {
-		console.log('Kaleidoscope scene activated');
 	}
 });
 

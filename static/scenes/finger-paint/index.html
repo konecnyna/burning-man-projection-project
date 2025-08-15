@@ -232,7 +232,6 @@
         this.socket = io();
         
         this.socket.on('connect', () => {
-          console.log('Connected to WebSocket');
           this.socket.emit('subscribe', {
             events: ['hand_detected', 'hand_lost', 'hand_moved', 'frame_processed']
           });
@@ -243,7 +242,6 @@
         });
 
         this.socket.on('disconnect', () => {
-          console.log('Disconnected from WebSocket');
         });
       }
 

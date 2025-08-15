@@ -128,7 +128,6 @@ function domIsReady() {
 
   // Setup WebSocket event handlers
   socket.on('connect', () => {
-    console.log('Psychedelic waves scene connected to server');
     // Subscribe to hand tracking events
     socket.emit('subscribe', {
       events: ['hand_moved', 'hand_detected', 'frame_processed']

@@ -25,15 +25,12 @@ class HandTrackingKiosk:
         
     def start(self):
         """Start the hand tracking kiosk application"""
-        print("Starting Hand Tracking Kiosk...")
-        
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
         try:
             # Start web server
-            print(f"Starting web server on port {self.port}...")
             self.web_app, self.socketio, self.server_thread = run_web_app(
                 self.event_bus, 
                 self.hand_tracker,
@@ -47,7 +44,6 @@ class HandTrackingKiosk:
             time.sleep(2)
             
             # Start hand tracking
-            print("Starting hand tracking...")
             self.hand_tracker.start()
             
             # Give hand tracking time to initialize
@@ -55,14 +51,11 @@ class HandTrackingKiosk:
             
             # Create webview window (unless headless)
             if not self.headless:
-                print("Creating application window...")
                 self.create_window()
             else:
-                print("Running in headless mode - no window will be created")
                 self.run_headless()
             
         except Exception as e:
-            print(f"Error starting application: {e}")
             self.stop()
             sys.exit(1)
             
@@ -84,10 +77,10 @@ class HandTrackingKiosk:
             )
             
             # Start webview (this blocks until window is closed)
-            webview.start(debug=True)
+            webview.start(debug=False)
             
         except Exception as e:
-            print(f"Error creating window: {e}")
+            pass
         finally:
             # Clean shutdown when window closes
             self.stop()
@@ -97,7 +90,6 @@ class HandTrackingKiosk:
         if self.running:
             return
             
-        print("Stopping Hand Tracking Kiosk...")
         self.running = True
             
         # Stop hand tracking
@@ -105,35 +97,24 @@ class HandTrackingKiosk:
             self.hand_tracker.stop()
             
         # Note: Flask-SocketIO server will stop when main thread ends
-        print("Application stopped.")
         
     def run_headless(self):
         """Run in headless mode - keep the application running without webview"""
         try:
-            print("Application running in headless mode...")
-            print(f"Web server available at http://localhost:{self.port}")
-            print("Press Ctrl+C to exit")
-            
             # Keep the main thread alive
             while not self.running:
                 time.sleep(1)
                 
         except KeyboardInterrupt:
-            print("\nShutdown requested by user")
             self.stop()
         
     def _signal_handler(self, signum, frame):
         """Handle system signals for graceful shutdown"""
-        print(f"Received signal {signum}, shutting down...")
         self.stop()
         sys.exit(0)
 
 def main():
     """Main entry point"""
-    print("=" * 50)
-    print("Hand Tracking Kiosk v1.0")
-    print("=" * 50)
-    
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Hand Tracking Kiosk')
     parser.add_argument('--kiosk', action='store_true', help='Run in kiosk mode')
@@ -143,29 +124,14 @@ def main():
     
     args = parser.parse_args()
     
-    if args.kiosk:
-        print("Running in KIOSK MODE")
-        # In kiosk mode, you might want to:
-        # - Set fullscreen=True and frameless=True in create_window()
-        # - Disable window controls
-        # - Add auto-restart logic
-    
-    if args.headless:
-        print("Running in HEADLESS MODE")
-    
-    if args.production:
-        print("Running in PRODUCTION MODE - Dev controls hidden")
-    
     # Create and start the application
     app = HandTrackingKiosk(headless=args.headless, production_mode=args.production, port=args.port)
     
     try:
         app.start()
     except KeyboardInterrupt:
-        print("\nShutdown requested by user")
         app.stop()
     except Exception as e:
-        print(f"Fatal error: {e}")
         app.stop()
         sys.exit(1)
 

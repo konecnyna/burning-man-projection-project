@@ -714,7 +714,6 @@ fill="#00ff41" stroke="none">
       ];
       
       new TypingAnimation(typedTextElement, phrases, 120);
-      console.log('Typing animation initialized with', phrases.length, 'phrases');
     }
   }
 
@@ -733,7 +732,6 @@ fill="#00ff41" stroke="none">
   if (window.sceneHandlers) {
     window.sceneHandlers.idle = {
       onInit: function () {
-        console.log('Idle scene initialized');
         // Reinitialize particles if needed
         if (document.getElementById('particleCanvas') && !cometParticles) {
           setTimeout(() => {
@@ -744,7 +742,6 @@ fill="#00ff41" stroke="none">
       },
 
       onHandDetected: function (hands) {
-        console.log('Idle scene: Hand detected, should exit idle mode');
         // The scene manager will handle exiting idle mode
       },
 

@@ -517,7 +517,6 @@ function scaleByPixelRatio(input) {
 
 // Subscribe to hand tracking events
 socket.on('connect', () => {
-  console.log('Orbits scene connected to server');
   socket.emit('subscribe', {
     events: ['hand_moved', 'hand_detected', 'frame_processed']
   });

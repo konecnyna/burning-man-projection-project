@@ -802,7 +802,6 @@
   <script src="/static/socket.io.js"></script>
   <script>
     // Welcome scene with direct WebSocket connection
-    console.log('Welcome scene loaded');
 
     // Check if this is running in an iframe
     const isIframe = window !== window.parent;
@@ -996,7 +995,6 @@
 
     // Subscribe to hand tracking events
     socket.on('connect', () => {
-      console.log('Connected to server');
       // Subscribe to hand tracking events
       socket.emit('subscribe', {
         events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']

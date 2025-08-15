@@ -69,7 +69,7 @@ class EventBus:
                     try:
                         handler(event)
                     except Exception as e:
-                        print(f"Error in event handler: {e}")
+                        pass
 
     def unsubscribe(self, event_type: str, handler: Callable):
         """Remove subscription"""
