@@ -1150,7 +1150,7 @@
         this.idleTimer = null;
         this.idleWarningTimer = null;
         this.idleWarningVisible = false;
-        this.idleHandConfidenceDetectionLevel = .68
+        this.idleHandConfidenceDetectionLevel = .75
 
         // Scene definitions for mode-specific scenes
         this.idleScene = {
@@ -1691,6 +1691,12 @@
       scheduleNextScene() {
         const currentScene = this.appState.get('currentScene');
         if (!currentScene || currentScene.duration === 0) return;
+
+        // Clear any existing timer first
+        if (this.cycleTimer) {
+          clearTimeout(this.cycleTimer);
+          this.cycleTimer = null;
+        }
 
         this.cycleTimer = setTimeout(() => {
           this.nextScene();
@@ -2238,7 +2244,7 @@
       // Process hand tracking data and update state
       processHandEvent(hands) {
         // Filter out low-confidence hands to maintain consistency with idle detection
-        const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .65);
+        const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .7);
         // Update hands state - this will trigger ModeManager via subscription
         this.appState.setState({ hands: filteredHands });
       }
