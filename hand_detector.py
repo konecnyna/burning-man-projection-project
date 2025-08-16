@@ -13,7 +13,7 @@ class HandDetector:
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
-            max_num_hands=4,
+            max_num_hands=2,
             min_detection_confidence=0.6,
             min_tracking_confidence=0.2,
             model_complexity=0

@@ -314,7 +314,7 @@ class HandTracker:
         
         # 1. Landmark visibility score (average of all landmark visibility scores)
         visibility_scores = [lm.visibility for lm in landmarks if hasattr(lm, 'visibility')]
-        avg_visibility = sum(visibility_scores) / len(visibility_scores) if visibility_scores else 0.8
+        avg_visibility = sum(visibility_scores) / len(visibility_scores) if visibility_scores else 0.95
         
         # 2. Landmark presence score (how many landmarks have reasonable coordinates)
         valid_landmarks = 0
@@ -325,7 +325,7 @@ class HandTracker:
         presence_score = valid_landmarks / total_landmarks if total_landmarks > 0 else 0.0
         
         # 3. Hand classification confidence (if available)
-        classification_score = 0.8  # Default score
+        classification_score = 0.95  # Higher default score
         if hasattr(results, 'multi_handedness') and results.multi_handedness:
             if hand_idx < len(results.multi_handedness):
                 handedness = results.multi_handedness[hand_idx]
@@ -348,15 +348,37 @@ class HandTracker:
                 movement = (dx*dx + dy*dy) ** 0.5
                 
                 # Convert movement to stability score (less movement = higher stability)
-                stability_score = max(0.0, 1.0 - (movement * 10))  # Scale movement
+                stability_score = max(0.0, 1.0 - (movement * 8))  # Reduced sensitivity
         
-        # 5. Overall confidence (weighted average)
-        overall_confidence = (
-            avg_visibility * 0.3 +
-            presence_score * 0.3 +
-            classification_score * 0.2 +
-            stability_score * 0.2
-        )
+        # 5. Overall confidence calculation with better score distribution
+        # Use MediaPipe's actual confidence if available, otherwise compute our own
+        mediapipe_confidence = 0.0
+        if hasattr(results, 'multi_handedness') and results.multi_handedness:
+            if hand_idx < len(results.multi_handedness):
+                handedness = results.multi_handedness[hand_idx]
+                if hasattr(handedness, 'classification') and handedness.classification:
+                    mediapipe_confidence = handedness.classification[0].score
+        
+        # Blend MediaPipe confidence with our metrics, weighted toward MediaPipe
+        if mediapipe_confidence > 0:
+            overall_confidence = (
+                mediapipe_confidence * 0.6 +  # Trust MediaPipe's confidence more
+                presence_score * 0.2 +
+                avg_visibility * 0.1 +
+                stability_score * 0.1
+            )
+        else:
+            # Fallback to our own calculation with adjusted weights
+            overall_confidence = (
+                presence_score * 0.4 +
+                avg_visibility * 0.3 +
+                stability_score * 0.2 +
+                classification_score * 0.1
+            )
+        
+        # Apply confidence boost for high-quality detections
+        if presence_score > 0.95 and avg_visibility > 0.9:
+            overall_confidence = min(1.0, overall_confidence * 1.15)
         
         return {
             'overall': round(overall_confidence, 3),
@@ -364,7 +386,8 @@ class HandTracker:
             'presence': round(presence_score, 3),
             'classification': round(classification_score, 3),
             'stability': round(stability_score, 3),
-            'quality': 'high' if overall_confidence > 0.8 else 'medium' if overall_confidence > 0.6 else 'low'
+            'mediapipe': round(mediapipe_confidence, 3),
+            'quality': 'high' if overall_confidence > 0.85 else 'medium' if overall_confidence > 0.7 else 'low'
         }
     
     def _detect_thumbs_gesture(self, hand_data) -> str:
