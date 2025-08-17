@@ -191,7 +191,7 @@
                 const overallConfidence = confidence.overall || 0.0;
                 const quality = confidence.quality || 'unknown';
                 
-                           'Confidence:', overallConfidence, 
+                           'Detection Level:', overallConfidence, 
                            'Quality:', quality,
                            'Visibility:', confidence.visibility,
                            'Stability:', confidence.stability);
@@ -351,9 +351,8 @@
                 
                 // Clamp paddle position
                 playerPaddle.position.y = Math.max(-(arenaHeight/2) + paddleHalfHeight, Math.min((arenaHeight/2) - paddleHalfHeight, playerPaddle.position.y));
-                
-                           'Hand Y:', handY.toFixed(3), 
-                           'Confidence:', overallConfidence.toFixed(3));
+                        'Hand Y:', handY.toFixed(3), 
+                        'Confidence:', overallConfidence.toFixed(3);
             }
         }
         

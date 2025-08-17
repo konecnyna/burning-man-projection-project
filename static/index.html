@@ -767,7 +767,7 @@
         <span id="connectionText">Disconnected</span>
       </div>
       <div class="status-item">
-        <span id="fpsCounter">FPS: 0</span>
+        <span id="confidenceCounter">Confidence: 0%</span>
       </div>
       <div class="status-item">
         <span id="handCounter">Hands: 0</span>
@@ -840,7 +840,7 @@
         this.state = {
           // Core application state
           isConnected: false,
-          fps: 0,
+          confidence: 0,
           eventCount: 0,
 
           // Mode state
@@ -2124,8 +2124,8 @@
           this.updateStatusBar();
         });
 
-        // Subscribe to FPS updates
-        this.appState.subscribe('fps', () => {
+        // Subscribe to confidence updates
+        this.appState.subscribe('confidence', () => {
           this.updateStatusBar();
         });
 
@@ -2185,7 +2185,12 @@
             break;
 
           case 'frame_processed':
-            this.appState.setState({ fps: Math.round(event.data.fps) });
+            // Calculate highest hand confidence
+            let maxConfidence = 0;
+            if (event.data.hands && event.data.hands.length > 0) {
+              maxConfidence = Math.max(...event.data.hands.map(hand => (hand.confidence?.overall || 0) * 100));
+            }
+            this.appState.setState({ confidence: Math.round(maxConfidence) });
             break;
 
           case 'thumbs_up':
@@ -2789,7 +2794,7 @@
       updateStatusBar() {
         const state = this.appState.getState();
 
-        document.getElementById('fpsCounter').textContent = `FPS: ${state.fps}`;
+        document.getElementById('confidenceCounter').textContent = `Confidence: ${state.confidence}%`;
         document.getElementById('handCounter').textContent = `Hands: ${state.hands.length}`;
         document.getElementById('currentScene').textContent =
           `Scene: ${state.currentScene ? state.currentScene.name : 'Loading'}`;
