@@ -30,7 +30,7 @@ fi
 
 # Launch the application in production mode
 echo "Launching ATLANTIS in production mode..."
-python3 main.py --production
+python3 main.py --production --port 5001
 
 # Deactivate virtual environment on exit
 deactivate
