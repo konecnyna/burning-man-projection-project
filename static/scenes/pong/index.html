@@ -131,7 +131,6 @@
         const socket = io();
 
         socket.on('connect', () => {
-            console.log('[Pong] Connected to server');
             socket.emit('subscribe', {
                 events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
             });
@@ -150,13 +149,11 @@
                 
                 // Handle hand detection/loss events
                 if (data.type === 'hand_detected') {
-                    console.log('[Pong] Hand detected');
                     isHandDetected = true;
                     handIndicator.classList.add('visible');
                 }
                 
                 if (data.type === 'hand_lost') {
-                    console.log('[Pong] Hand lost');
                     isHandDetected = false;
                     handIndicator.classList.remove('visible');
                 }
@@ -194,8 +191,7 @@
                 const overallConfidence = confidence.overall || 0.0;
                 const quality = confidence.quality || 'unknown';
                 
-                console.log('[Pong] Hand Y:', handY.toFixed(3), 
-                           'Confidence:', overallConfidence, 
+                           'Detection Level:', overallConfidence, 
                            'Quality:', quality,
                            'Visibility:', confidence.visibility,
                            'Stability:', confidence.stability);
@@ -327,7 +323,6 @@
                 
                 // Only use high-confidence hand data for paddle control
                 if (overallConfidence < 0.3) {
-                    console.log('[Pong] Low confidence hand data, skipping paddle update:', overallConfidence);
                     return;
                 }
                 
@@ -356,10 +351,8 @@
                 
                 // Clamp paddle position
                 playerPaddle.position.y = Math.max(-(arenaHeight/2) + paddleHalfHeight, Math.min((arenaHeight/2) - paddleHalfHeight, playerPaddle.position.y));
-                
-                console.log('[Pong] Player paddle Y:', playerPaddle.position.y.toFixed(2), 
-                           'Hand Y:', handY.toFixed(3), 
-                           'Confidence:', overallConfidence.toFixed(3));
+                        'Hand Y:', handY.toFixed(3), 
+                        'Confidence:', overallConfidence.toFixed(3);
             }
         }
         
@@ -475,7 +468,6 @@
         }
 
         function resetGame() {
-            console.log('[Pong] Resetting game...');
             
             // Clear timers
             if (resetTimer) {
@@ -508,7 +500,6 @@
             // Update scoreboard
             updateScoreboard();
 
-            console.log('[Pong] Game reset complete');
         }
 
         // --- EVENT LISTENERS ---

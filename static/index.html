@@ -767,7 +767,7 @@
         <span id="connectionText">Disconnected</span>
       </div>
       <div class="status-item">
-        <span id="fpsCounter">FPS: 0</span>
+        <span id="confidenceCounter">Confidence: 0%</span>
       </div>
       <div class="status-item">
         <span id="handCounter">Hands: 0</span>
@@ -840,7 +840,7 @@
         this.state = {
           // Core application state
           isConnected: false,
-          fps: 0,
+          confidence: 0,
           eventCount: 0,
 
           // Mode state
@@ -985,7 +985,6 @@
           const response = await fetch('/api/production-mode');
           const data = await response.json();
           this.productionMode = data.production_mode;
-          console.log(`[HUDManager] Production mode: ${this.productionMode}`);
 
           // Apply production mode styles immediately
           this.applyProductionModeStyles();
@@ -1005,12 +1004,10 @@
               element.classList.add('production-hidden');
             }
           });
-          console.log('[HUDManager] Applied production mode - hiding dev controls');
         }
       }
 
       show(reason = 'unknown') {
-        console.log(`[HUDManager] Showing HUD (reason: ${reason})`);
 
         // Show HUD elements when not in idle mode, but respect debug settings
         const appContainer = document.querySelector('.app-container');
@@ -1033,7 +1030,6 @@
       }
 
       hide(reason = 'unknown') {
-        console.log(`[HUDManager] Hiding HUD (reason: ${reason})`);
 
         // Hide ALL HUD elements
         const appContainer = document.querySelector('.app-container');
@@ -1049,12 +1045,10 @@
       }
 
       hideForMode(mode) {
-        console.log(`[HUDManager] Hiding HUD for mode: ${mode}`);
         this.hide(`mode-${mode}`);
       }
 
       showForMode(mode) {
-        console.log(`[HUDManager] Showing HUD for mode: ${mode}`);
 
         // Different modes might have different HUD visibility rules
         switch (mode) {
@@ -1087,7 +1081,6 @@
       }
 
       showOverlay(title, description, extraContent) {
-        console.log(`[HUDManager] Showing overlay: ${title}`, title, description, extraContent);
 
         const overlay = document.getElementById('parentOverlay');
         const overlayTitle = document.getElementById('overlayTitle');
@@ -1125,7 +1118,6 @@
       }
 
       hideOverlay() {
-        console.log('[HUDManager] Hiding overlay');
 
         const overlay = document.getElementById('parentOverlay');
         if (overlay) {
@@ -1210,7 +1202,6 @@
       initializeCurrentMode() {
         const currentMode = this.appState.get('currentMode');
         this.transitionTo(currentMode);
-        console.log(`[ModeManager] Initializing current mode: ${currentMode}`);
 
         const modeConfig = this.modes[currentMode];
         if (modeConfig && modeConfig.onEnter) {
@@ -1222,7 +1213,6 @@
       transitionTo(newMode) {
         const currentMode = this.appState.get('currentMode');
         if (currentMode === newMode) {
-          console.log(`[ModeManager] Already in ${newMode} mode`);
           return;
         }
 
@@ -1236,7 +1226,6 @@
           return;
         }
 
-        console.log(`[ModeManager] Transitioning from ${currentMode} to ${newMode}`);
 
         // Trigger glitch transition effect
         this.triggerGlitchTransition(() => {
@@ -1304,7 +1293,6 @@
 
         // Only update detection-related state, not hands array to avoid recursion
         if (wasDetected !== nowDetected) {
-          console.log(`[ModeManager] Hand detection changed: ${wasDetected} -> ${nowDetected}`);
           this.appState.setState({
             handsDetected: nowDetected,
             lastHandDetectedTime: nowDetected ? Date.now() : this.appState.get('lastHandDetectedTime')
@@ -1315,28 +1303,22 @@
 
       onHandDetectionChanged(detected) {
         const currentMode = this.appState.get('currentMode');
-        console.log(`[ModeManager] onHandDetectionChanged: detected=${detected}, currentMode=${currentMode}`);
 
         if (detected) {
           // Hand detected - handle mode transitions
           if (currentMode === 'idle') {
-            console.log('[ModeManager] Hand detected in idle mode, transitioning to onboarding');
             this.transitionTo('onboarding');
           } else if (currentMode === 'active') {
-            console.log('[ModeManager] Hand detected in active mode, resetting idle timer');
             this.resetIdleTimer();
           } else if (currentMode === 'onboarding') {
-            console.log('[ModeManager] Hand detected in onboarding mode, resetting idle timer');
             this.resetIdleTimer();
           }
           this.hideIdleWarning();
         } else {
           // Hand lost - start idle timer if in active or onboarding mode
           if (currentMode === 'active') {
-            console.log('[ModeManager] Hand lost in active mode, starting idle timer');
             this.startIdleTimer();
           } else if (currentMode === 'onboarding') {
-            console.log('[ModeManager] Hand lost in onboarding mode, starting idle timer');
             this.startIdleTimer();
           }
         }
@@ -1344,7 +1326,6 @@
 
       // Mode enter/exit handlers
       onEnterIdle() {
-        console.log('[ModeManager] Entering idle mode');
         this.clearIdleTimer();
         this.hideIdleWarning();
         this.hudManager.hideForMode('idle');
@@ -1362,11 +1343,9 @@
       }
 
       onExitIdle() {
-        console.log('[ModeManager] Exiting idle mode');
       }
 
       onEnterOnboarding() {
-        console.log('[ModeManager] Entering onboarding mode');
         this.clearIdleTimer();
         this.hideIdleWarning();
         this.hudManager.showForMode('onboarding');
@@ -1380,13 +1359,11 @@
 
         // Load onboarding scene
         if (this.loadSceneCallback) {
-          console.log('[ModeManager] Loading onboarding scene:', this.onboardingScene);
           this.loadSceneCallback(this.onboardingScene);
         }
       }
 
       onExitOnboarding() {
-        console.log('[ModeManager] Exiting onboarding mode');
 
         // Show HUD when exiting onboarding mode
         const appContainer = document.querySelector('.app-container');
@@ -1396,22 +1373,18 @@
       }
 
       onEnterActive() {
-        console.log('[ModeManager] Entering active mode');
         this.startIdleTimer();
       }
 
       onExitActive() {
-        console.log('[ModeManager] Exiting active mode');
         this.clearIdleTimer();
         this.hideIdleWarning();
       }
 
       onEnterTransitioning() {
-        console.log('[ModeManager] Entering transitioning mode');
       }
 
       onExitTransitioning() {
-        console.log('[ModeManager] Exiting transitioning mode');
       }
 
       // Complete onboarding and move to active mode
@@ -1428,10 +1401,8 @@
         const idleTimeoutMs = this.appState.get('idleTimeoutMs');
         this.appState.setState({ idleTimeoutStartTime: Date.now() });
 
-        console.log(`[ModeManager] Starting idle timer: ${idleTimeoutMs}ms`);
 
         this.idleTimer = setTimeout(() => {
-          console.log('[ModeManager] Idle timeout reached');
           this.transitionTo('idle');
         }, idleTimeoutMs);
 
@@ -1445,7 +1416,6 @@
       resetIdleTimer() {
         const currentMode = this.appState.get('currentMode');
         if (currentMode === 'active' || currentMode === 'onboarding') {
-          console.log(`[ModeManager] Resetting idle timer for ${currentMode} mode`);
           this.startIdleTimer();
         }
       }
@@ -1465,7 +1435,6 @@
       // Idle warning management
       showIdleWarning() {
         if (!this.idleWarningVisible) {
-          console.log('[ModeManager] Showing idle warning');
           const idleWarning = document.getElementById('idleWarning');
           if (idleWarning) {
             idleWarning.classList.add('visible');
@@ -1477,7 +1446,6 @@
 
       hideIdleWarning() {
         if (this.idleWarningVisible) {
-          console.log('[ModeManager] Hiding idle warning');
           const idleWarning = document.getElementById('idleWarning');
           if (idleWarning) {
             idleWarning.classList.remove('visible');
@@ -1546,6 +1514,14 @@
 
         // Scene configurations
         this.scenes = [  
+           {
+            id: 'kaleidoscope',
+            name: 'Kaleidoscope',
+            description: 'Interactive kaleidoscope with hand-controlled pattern movement',
+            duration: this.popularScene,
+            html_file: 'scenes/kaleidoscope/index.html',
+            background_color: '#000000'
+          },
           {
             id: 'orbits',
             name: 'Orbits',
@@ -1633,7 +1609,6 @@
 
       // Handle mode changes
       onModeChanged(mode) {
-        console.log(`[SceneManager] Mode changed to: ${mode}`);
 
         switch (mode) {
           case 'idle':
@@ -1652,17 +1627,14 @@
 
       // Load specific scene types - these are now handled by ModeManager
       loadIdleScene() {
-        console.log('[SceneManager] Idle scene loading is now handled by ModeManager');
         this.stopSceneCycling();
       }
 
       loadOnboardingScene() {
-        console.log('[SceneManager] Onboarding scene loading is now handled by ModeManager');
         this.stopSceneCycling();
       }
 
       startSceneCycling() {
-        console.log('[SceneManager] Starting scene cycling');
         this.stopSceneCycling();
 
         // Start with first scene
@@ -1779,7 +1751,6 @@
       // Load a scene
       async loadScene(scene) {
         try {
-          console.log('[SceneManager] Loading scene:', scene.id);
 
           // Clean up previous scene
           if (this.appState.get('currentScene')) {
@@ -1888,7 +1859,6 @@
         // Idle scene handler
         this.sceneHandlers.idle = {
           onInit: function () {
-            console.log('[SceneHandler] Idle scene initialized');
           },
           onHandDetected: function (hands) {
             // Mode manager will handle transition
@@ -1909,7 +1879,6 @@
           isHovering: false,
 
           onInit: function () {
-            console.log('[SceneHandler] Onboarding scene initialized');
             // Create hand cursor
             this.handCursor = document.createElement('div');
             this.handCursor.className = 'hand-cursor';
@@ -1993,7 +1962,6 @@
           startCountdown: function () {
             if (this.isHovering) return;
 
-            console.log('[SceneHandler] Starting onboarding countdown');
             this.isHovering = true;
             this.countdownStartTime = Date.now();
 
@@ -2036,7 +2004,6 @@
           },
 
           completeCountdown: function () {
-            console.log('[SceneHandler] Onboarding countdown complete');
             this.stopCountdown();
             // Trigger transition to active mode
             modeManager.completeOnboarding();
@@ -2138,7 +2105,6 @@
         this.initializeDebugPoints();
 
         // Start in idle mode
-        console.log('[App] Starting application in idle mode');
       }
 
       // Setup subscriptions to state changes
@@ -2158,8 +2124,8 @@
           this.updateStatusBar();
         });
 
-        // Subscribe to FPS updates
-        this.appState.subscribe('fps', () => {
+        // Subscribe to confidence updates
+        this.appState.subscribe('confidence', () => {
           this.updateStatusBar();
         });
 
@@ -2176,21 +2142,18 @@
 
       initializeSocket() {
         this.socket.on('connect', () => {
-          console.log('[App] Connected to server');
           this.appState.setState({ isConnected: true });
 
           // Subscribe only to hand tracking events (no scene events)
           const eventsToSubscribe = [
             'hand_moved', 'hand_detected', 'hand_lost', 'frame_processed', 'thumbs_up', 'thumbs_down'
           ];
-          console.log('[App] Subscribing to events:', eventsToSubscribe);
           this.socket.emit('subscribe', {
             events: eventsToSubscribe
           });
         });
 
         this.socket.on('disconnect', () => {
-          console.log('[App] Disconnected from server');
           this.appState.setState({ isConnected: false });
         });
 
@@ -2212,19 +2175,22 @@
             break;
 
           case 'hand_detected':
-            console.log('[App] Hand detected event received');
             this.processHandEvent(event.data.hands);
             this.sceneManager.callSceneHandler('onHandDetected', event.data.hands);
             break;
 
           case 'hand_lost':
-            console.log('[App] Hand lost event received');
             this.processHandEvent(event.data.hands);
             this.sceneManager.callSceneHandler('onHandLost');
             break;
 
           case 'frame_processed':
-            this.appState.setState({ fps: Math.round(event.data.fps) });
+            // Calculate highest hand confidence
+            let maxConfidence = 0;
+            if (event.data.hands && event.data.hands.length > 0) {
+              maxConfidence = Math.max(...event.data.hands.map(hand => (hand.confidence?.overall || 0) * 100));
+            }
+            this.appState.setState({ confidence: Math.round(maxConfidence) });
             break;
 
           case 'thumbs_up':
@@ -2266,12 +2232,10 @@
         // Idle scene handler
         this.sceneHandlers.idle = {
           onInit: function () {
-            console.log('Idle scene initialized');
             app.modeManager.hudManager.hideForMode('idle');
           },
 
           onHandDetected: function (hands) {
-            console.log('Idle scene: Hand detected, should exit idle mode');
             // The scene manager will handle exiting idle mode via events
           },
 
@@ -2280,7 +2244,6 @@
           },
 
           onHandLost: function () {
-            console.log('Idle scene: Hand lost');
           }
         };
 
@@ -2292,7 +2255,6 @@
           isHovering: false,
 
           onInit: function () {
-            console.log('Onboarding scene onInit called!');
             // Create hand cursor
             app.sceneHandlers.onboarding.handCursor = document.createElement('div');
             app.sceneHandlers.onboarding.handCursor.className = 'hand-cursor';
@@ -2310,11 +2272,9 @@
                             display: none;
                         `;
             document.body.appendChild(app.sceneHandlers.onboarding.handCursor);
-            console.log('Onboarding scene cursor initialized:', app.sceneHandlers.onboarding.handCursor);
           },
 
           onHandMove: function (hands) {
-            console.log('Onboarding scene onHandMove called with hands:', hands.length);
             // Highlight instruction modules based on hand position
             const modules = document.querySelectorAll('.instruction-module');
             modules.forEach(module => module.classList.remove('active'));
@@ -2323,16 +2283,13 @@
               const hand = hands[0]; // Use first hand
               const palmX = hand.palm_center.x;
               const palmY = hand.palm_center.y;
-              console.log('Hand position:', palmX, palmY);
 
               // Show and position hand cursor
               if (app.sceneHandlers.onboarding.handCursor) {
                 app.sceneHandlers.onboarding.handCursor.style.display = 'block';
                 app.sceneHandlers.onboarding.handCursor.style.left = (palmX * window.innerWidth) + 'px';
                 app.sceneHandlers.onboarding.handCursor.style.top = (palmY * window.innerHeight) + 'px';
-                console.log('Updated cursor position');
               } else {
-                console.log('Hand cursor not found!');
               }
 
               // Check if hand is over any instruction module
@@ -2385,7 +2342,6 @@
           startCountdown: function () {
             if (app.sceneHandlers.onboarding.isHovering) return;
 
-            console.log('Starting countdown...');
             app.sceneHandlers.onboarding.isHovering = true;
             app.sceneHandlers.onboarding.countdownStartTime = Date.now();
 
@@ -2433,7 +2389,6 @@
           },
 
           completeCountdown: function () {
-            console.log('Countdown complete! Starting scene cycling...');
             app.sceneHandlers.onboarding.stopCountdown();
 
             // Start the scene system after welcome screen
@@ -2443,7 +2398,6 @@
           stopCountdown: function () {
             if (!app.sceneHandlers.onboarding.isHovering) return;
 
-            console.log('Stopping countdown...');
             app.sceneHandlers.onboarding.isHovering = false;
 
             // Clear timer
@@ -2478,7 +2432,6 @@
           },
 
           onHandDetected: function (hands) {
-            console.log('Onboarding scene: Hand detected');
             // Update signal status
             const signalText = document.querySelector('.signal-text');
             if (signalText) {
@@ -2508,7 +2461,6 @@
           onDestroy: function () {
             // Clean up hand cursor when leaving welcome scene
             if (app.sceneHandlers.onboarding.handCursor) {
-              console.log('Removing welcome scene hand cursor');
               app.sceneHandlers.onboarding.handCursor.remove();
               app.sceneHandlers.onboarding.handCursor = null;
             }
@@ -2519,11 +2471,9 @@
             // Also clean up any other hand cursors that might exist
             const existingCursors = document.querySelectorAll('.hand-cursor');
             existingCursors.forEach(cursor => {
-              console.log('Removing existing hand cursor:', cursor);
               cursor.remove();
             });
 
-            console.log('Onboarding scene cleaned up');
           }
         };
 
@@ -2535,7 +2485,6 @@
           isHovering: false,
 
           onInit: function () {
-            console.log('Welcome scene onInit called!');
             // Create hand cursor
             app.sceneHandlers.welcome.handCursor = document.createElement('div');
             app.sceneHandlers.welcome.handCursor.className = 'hand-cursor';
@@ -2553,11 +2502,9 @@
                             display: none;
                         `;
             document.body.appendChild(app.sceneHandlers.welcome.handCursor);
-            console.log('Welcome scene cursor initialized:', app.sceneHandlers.welcome.handCursor);
           },
 
           onHandMove: function (hands) {
-            console.log('Welcome scene onHandMove called with hands:', hands.length);
             // Highlight instruction modules based on hand position
             const modules = document.querySelectorAll('.instruction-module');
             modules.forEach(module => module.classList.remove('active'));
@@ -2566,16 +2513,13 @@
               const hand = hands[0]; // Use first hand
               const palmX = hand.palm_center.x;
               const palmY = hand.palm_center.y;
-              console.log('Hand position:', palmX, palmY);
 
               // Show and position hand cursor
               if (app.sceneHandlers.welcome.handCursor) {
                 app.sceneHandlers.welcome.handCursor.style.display = 'block';
                 app.sceneHandlers.welcome.handCursor.style.left = (palmX * window.innerWidth) + 'px';
                 app.sceneHandlers.welcome.handCursor.style.top = (palmY * window.innerHeight) + 'px';
-                console.log('Updated cursor position');
               } else {
-                console.log('Hand cursor not found!');
               }
 
               // Check if hand is over any instruction module
@@ -2603,7 +2547,6 @@
           },
 
           onHandDetected: function (hands) {
-            console.log('Welcome scene: Hand detected');
             // Update signal text to show hand detected
             const signalText = document.querySelector('.signal-text');
             if (signalText) {
@@ -2612,7 +2555,6 @@
           },
 
           onHandLost: function () {
-            console.log('Welcome scene: Hand lost');
             const signalText = document.querySelector('.signal-text');
             if (signalText) {
               signalText.textContent = 'SIGNAL DETECTED';
@@ -2627,7 +2569,6 @@
           onDestroy: function () {
             // Clean up hand cursor when leaving welcome scene
             if (app.sceneHandlers.welcome.handCursor) {
-              console.log('Removing welcome scene hand cursor');
               app.sceneHandlers.welcome.handCursor.remove();
               app.sceneHandlers.welcome.handCursor = null;
             }
@@ -2635,21 +2576,17 @@
             // Also clean up any other hand cursors that might exist
             const existingCursors = document.querySelectorAll('.hand-cursor');
             existingCursors.forEach(cursor => {
-              console.log('Removing existing hand cursor:', cursor);
               cursor.remove();
             });
 
-            console.log('Welcome scene cleaned up');
           }
         };
 
         // Wireframe Geometry scene handler
         this.sceneHandlers.wireframe_geometry = {
           onInit: function () {
-            console.log('[SceneHandler] Wireframe Geometry scene initialized');
           },
           onHandDetected: function (hands) {
-            console.log('[SceneHandler] Hand detected in wireframe geometry scene, forwarding to iframe');
             // Forward to iframe
             if (sceneManager.currentSceneIframe) {
               sceneManager.currentSceneIframe.postMessage({
@@ -2676,17 +2613,14 @@
             }
           },
           onCleanup: function () {
-            console.log('Wireframe Geometry scene cleaned up');
           }
         };
 
         // Pong scene handler
         this.sceneHandlers.pong = {
           onInit: function () {
-            console.log('[SceneHandler] Pong scene initialized');
           },
           onHandDetected: function (hands) {
-            console.log('[SceneHandler] Hand detected in pong scene, forwarding to iframe');
             // Forward to iframe
             if (sceneManager.currentSceneIframe) {
               sceneManager.currentSceneIframe.postMessage({
@@ -2705,7 +2639,6 @@
             }
           },
           onHandLost: function () {
-            console.log('[SceneHandler] Hand lost in pong scene, forwarding to iframe');
             // Forward to iframe
             if (sceneManager.currentSceneIframe) {
               sceneManager.currentSceneIframe.postMessage({
@@ -2715,7 +2648,6 @@
             }
           },
           onCleanup: function () {
-            console.log('Pong scene cleaned up');
           }
         };
       }
@@ -2785,7 +2717,6 @@
 
       async loadScene(scene) {
         try {
-          console.log('Loading scene:', scene);
 
           // Clean up previous scene
           if (this.currentScene) {
@@ -2830,7 +2761,6 @@
           console.error('Error loading scene:', error);
         }
 
-        console.log("current scene: ", this.currentScene)
       }
 
       callSceneHandler(method, ...args) {
@@ -2864,7 +2794,7 @@
       updateStatusBar() {
         const state = this.appState.getState();
 
-        document.getElementById('fpsCounter').textContent = `FPS: ${state.fps}`;
+        document.getElementById('confidenceCounter').textContent = `Confidence: ${state.confidence}%`;
         document.getElementById('handCounter').textContent = `Hands: ${state.hands.length}`;
         document.getElementById('currentScene').textContent =
           `Scene: ${state.currentScene ? state.currentScene.name : 'Loading'}`;
@@ -2896,12 +2826,10 @@
 
         // Log the countdown every second
         const remainingSeconds = Math.floor(remaining);
-        //console.log(`[JS] Idle timeout countdown: ${remainingSeconds}s remaining (${remaining.toFixed(1)}s precise)`);
 
         if (remaining <= 5 && remaining > 0) {
           // Show warning when under 3 seconds
           if (!this.idleWarningVisible) {
-            console.log('[JS] Showing idle warning - under 3 seconds');
             idleWarning.classList.add('visible');
             this.idleWarningVisible = true;
           }
@@ -2909,7 +2837,6 @@
         } else {
           // Hide warning when over 3 seconds or at 0
           if (this.idleWarningVisible) {
-            console.log('[JS] Hiding idle warning - over 3 seconds or timeout reached');
             idleWarning.classList.remove('visible');
             this.idleWarningVisible = false;
           }
@@ -3036,7 +2963,6 @@
             this.updateDebugPanel();
           })
           .catch(error => {
-            console.log('No debug settings found, using defaults');
             this.updateDebugPanel();
           });
       }
@@ -3060,7 +2986,6 @@
       }
 
       resetIdleTimer() {
-        console.log('[JS] Resetting idle timer');
         if (this.idleTimer) {
           clearTimeout(this.idleTimer);
         }
@@ -3074,7 +2999,6 @@
       }
 
       enterIdleMode() {
-        console.log('[JS] Entering idle mode - ending session');
         this.mode = 'idle';
         this.idleTimeoutStartTime = null;
 
@@ -3096,7 +3020,6 @@
       }
 
       exitIdleMode() {
-        console.log('[JS] Exiting idle mode - starting onboarding mode');
         this.mode = 'onboarding';
         if (this.idleTimer) {
           clearTimeout(this.idleTimer);
@@ -3113,7 +3036,6 @@
       }
 
       pauseSceneSystem() {
-        console.log('[JS] Pausing scene system');
         // Tell the backend to pause scene cycling
         if (this.socket) {
           this.socket.emit('pause_scene_cycling');
@@ -3121,7 +3043,6 @@
       }
 
       restartSceneSystem() {
-        console.log('[JS] Restarting scene system');
         // Tell the backend to restart scene cycling
         if (this.socket) {
           this.socket.emit('restart_scene_cycling');
@@ -3130,17 +3051,14 @@
 
       // These methods are now handled by ModeManager
       loadIdleScene() {
-        console.log('[JS] Loading idle scene - delegating to ModeManager');
         this.modeManager.transitionTo('idle');
       }
 
       loadOnboardingScene() {
-        console.log('[JS] Loading onboarding scene - delegating to ModeManager');
         this.modeManager.transitionTo('onboarding');
       }
 
       loadWelcomeScene() {
-        console.log('[JS] Loading welcome scene');
         const welcomeScene = {
           id: 'welcome',
           name: 'Welcome Scene',
@@ -3153,7 +3071,6 @@
       }
 
       showOnboardingScreen() {
-        console.log('[JS] Showing onboarding screen for new session');
         this.modeManager.hudManager.showForMode('onboarding');
         this.sessionWelcomeShown = true;
         this.loadOnboardingScene();
@@ -3161,7 +3078,6 @@
       }
 
       exitOnboardingMode() {
-        console.log('[JS] Exiting onboarding mode - starting active mode');
         this.mode = 'active';
 
         // Start the scene system after onboarding
@@ -3169,7 +3085,6 @@
       }
 
       showWelcomeScreen() {
-        console.log('[JS] Showing welcome screen for new session');
         this.sessionWelcomeShown = true;
         this.loadWelcomeScene();
         this.modeManager.hudManager.showForMode('onboarding');
@@ -3234,7 +3149,6 @@
     }
 
     function nextScene() {
-      console.log('[UI] Next scene button clicked');
       if (window.app && window.app.sceneManager) {
         window.app.sceneManager.nextScene();
       } else {
@@ -3243,7 +3157,6 @@
     }
 
     function previousScene() {
-      console.log('[UI] Previous scene button clicked');
       if (window.app && window.app.sceneManager) {
         window.app.sceneManager.previousScene();
       } else {
@@ -3252,10 +3165,8 @@
     }
 
     function toggleAutoCycle() {
-      console.log('Toggle auto-cycle button clicked');
       if (window.app && window.app.socket) {
         window.app.socket.emit('toggle_auto_cycle');
-        console.log('Emitted toggle_auto_cycle event');
       } else {
         console.error('Socket not available');
       }
@@ -3300,7 +3211,6 @@
       window.addEventListener('message', (event) => {
         if (event.data.type === 'transition_to_active') {
           // Handle transition from onboarding to active mode
-          console.log('Transitioning from onboarding to active mode');
           if (window.app && window.app.modeManager) {
             window.app.modeManager.transitionTo('active');
           }
@@ -3314,7 +3224,6 @@
             }
           }
         } else if (event.data.type === 'iframe_ready') {
-          console.log('Iframe ready:', event.data.scene);
         }
       });
     });

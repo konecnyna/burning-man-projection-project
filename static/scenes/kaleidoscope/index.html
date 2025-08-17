@@ -16,15 +16,25 @@ canvas {
 </head>
 <body>
 <!-- partial:index.partial.html -->
-<canvas id="c" width="1800" height="934"></canvas>
+<canvas id="c"></canvas>
 <!-- partial -->
   <script>
   let canvas = document.getElementById("c");
 let ctx = canvas.getContext("2d", { alpha: false });
-let w = (canvas.width = window.innerWidth);
-let h = (canvas.height = window.innerHeight);
+// Limit canvas size to 720p max for performance
+const maxWidth = 1280;
+const maxHeight = 720;
+let w = canvas.width = Math.min(window.innerWidth, maxWidth);
+let h = canvas.height = Math.min(window.innerHeight, maxHeight);
 let w2 = w / 2,
 	h2 = h / 2;
+
+// Scale canvas to fill screen if limited
+if (window.innerWidth > maxWidth || window.innerHeight > maxHeight) {
+	canvas.style.width = window.innerWidth + 'px';
+	canvas.style.height = window.innerHeight + 'px';
+	canvas.style.imageRendering = 'auto';
+}
 const PI = Math.PI;
 const sin = Math.sin;
 const cos = Math.cos;
@@ -41,10 +51,21 @@ let pattern;
 let offset = { x: 50, y: 10 };
 
 window.onresize = function() {
-	w = canvas.width = window.innerWidth;
-	h = canvas.height = window.innerHeight;
+	// Limit canvas size to 1920x1080 max for performance
+	w = canvas.width = Math.min(window.innerWidth, maxWidth);
+	h = canvas.height = Math.min(window.innerHeight, maxHeight);
 	w2 = w / 2;
 	h2 = h / 2;
+	
+	// Scale canvas to fill screen if limited
+	if (window.innerWidth > maxWidth || window.innerHeight > maxHeight) {
+		canvas.style.width = window.innerWidth + 'px';
+		canvas.style.height = window.innerHeight + 'px';
+		canvas.style.imageRendering = 'auto';
+	} else {
+		canvas.style.width = w + 'px';
+		canvas.style.height = h + 'px';
+	}
 };
 // Keep original mouse events
 window.onmousemove = function(e) {
@@ -244,8 +265,8 @@ function handleHandTracking(hands) {
 		const deltaY = currentPos.y - lastHandPos.y;
 		
 		// Apply smoothing to hand velocity for more fluid movement
-		const targetVelocityX = img.width * deltaX * 0.8; // Reduced sensitivity from 2 to 0.8
-		const targetVelocityY = img.height * deltaY * 0.8;
+		const targetVelocityX = img.width * deltaX * 2.0; // Increased sensitivity
+		const targetVelocityY = img.height * deltaY * 2.0;
 		
 		// Smooth the velocity changes
 		smoothedHandVelocity.x = smoothedHandVelocity.x * handSmoothingFactor + targetVelocityX * (1 - handSmoothingFactor);

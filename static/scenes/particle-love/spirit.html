@@ -510,7 +510,6 @@
         
         // WebSocket event handlers
         socket.on('connect', () => {
-            console.log('The Spirit scene connected to server');
             socket.emit('subscribe', {
                 events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
             });

@@ -257,7 +257,6 @@
 
     // Subscribe to hand tracking events
     socket.on('connect', () => {
-      console.log('[WireframeGeometry] Connected to server');
       // Subscribe to hand tracking events
       socket.emit('subscribe', {
         events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
@@ -324,7 +323,6 @@
 
       switch (eventData.type) {
         case 'hand_detected':
-          console.log('[WireframeGeometry] Hand detected (mousedown - start camera rotation)');
           isHandDetected = true;
           handIndicator.classList.add('visible');
           
@@ -339,12 +337,10 @@
             handIndicator.style.top = `${detectedPos.y - 10}px`;
             
             // Start camera rotation (like mousedown on canvas)
-            console.log('[WireframeGeometry] Starting camera rotation at:', detectedPos.x, detectedPos.y);
             isHandDragging = true;
             
             // Disable auto-rotation while hand is controlling
             controls.autoRotate = false;
-            console.log('[WireframeGeometry] Disabled auto-rotation for hand control');
             
             // Trigger pulse effect too
             triggerPulse(detectedPos.x, detectedPos.y);
@@ -352,24 +348,20 @@
           break;
 
         case 'hand_lost':
-          console.log('[WireframeGeometry] Hand lost (mouseup - end camera rotation)');
           isHandDetected = false;
           activeHandId = null;
           handIndicator.classList.remove('visible');
           
           // End camera rotation
           if (isHandDragging) {
-            console.log('[WireframeGeometry] Ending camera rotation');
             isHandDragging = false;
             
             // Re-enable auto-rotation
             controls.autoRotate = true;
-            console.log('[WireframeGeometry] Re-enabled auto-rotation');
           }
           
           // Trigger pulse on mouseup
           if (currentHandPosition.x > 0 && currentHandPosition.y > 0) {
-            console.log('[WireframeGeometry] Hand mouseup - triggering pulse');
             triggerPulse(currentHandPosition.x, currentHandPosition.y);
           }
           break;
@@ -395,7 +387,6 @@
               const deltaX = movedPos.x - lastHandPosition.x;
               const deltaY = movedPos.y - lastHandPosition.y;
               
-              console.log('[WireframeGeometry] Hand dragging camera - delta:', deltaX, deltaY);
               
               // Temporarily disable auto-rotation while hand dragging
               const wasAutoRotating = controls.autoRotate;
@@ -430,7 +421,6 @@
               // Make camera look at target
               camera.lookAt(controls.target);
               
-              console.log('[WireframeGeometry] Camera rotated - theta:', spherical.theta, 'phi:', spherical.phi);
               
               // Update last position for next frame
               lastHandPosition = { x: movedPos.x, y: movedPos.y };
@@ -732,7 +722,6 @@
       controlsPanel.style.opacity = '0.9';
     });
     document.addEventListener('mousemove', (e) => {
-      console.log("000000000000000>",isDragging)
       if (!isDragging) return;
       e.preventDefault();
       
