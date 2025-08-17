@@ -1,5 +1,4 @@
-/*@import url(http://fonts.googleapis.com/css?family=Open+Sans:400,700);
-*/
+@import url("../../../fonts/open-sans.css");
 #social
 {
   position: absolute;
@@ -30,7 +29,7 @@
 }
 /*
 .st_facebook_custom{
-  background: url("http://i.stack.imgur.com/br4Br.png") no-repeat scroll left top transparent;
+  background: url("../../../images/texture.png") no-repeat scroll left top transparent;
   padding:86px 236px 36px 36px;
 }*/
 
