@@ -314,7 +314,7 @@ class HandTracker:
         
         # 1. Landmark visibility score (average of all landmark visibility scores)
         visibility_scores = [lm.visibility for lm in landmarks if hasattr(lm, 'visibility')]
-        avg_visibility = sum(visibility_scores) / len(visibility_scores) if visibility_scores else 0.8
+        avg_visibility = sum(visibility_scores) / len(visibility_scores) if visibility_scores else 0.95
         
         # 2. Landmark presence score (how many landmarks have reasonable coordinates)
         valid_landmarks = 0
@@ -325,7 +325,7 @@ class HandTracker:
         presence_score = valid_landmarks / total_landmarks if total_landmarks > 0 else 0.0
         
         # 3. Hand classification confidence (if available)
-        classification_score = 0.8  # Default score
+        classification_score = 0.95  # Higher default score
         if hasattr(results, 'multi_handedness') and results.multi_handedness:
             if hand_idx < len(results.multi_handedness):
                 handedness = results.multi_handedness[hand_idx]
@@ -348,24 +348,69 @@ class HandTracker:
                 movement = (dx*dx + dy*dy) ** 0.5
                 
                 # Convert movement to stability score (less movement = higher stability)
-                stability_score = max(0.0, 1.0 - (movement * 10))  # Scale movement
+                stability_score = max(0.0, 1.0 - (movement * 8))  # Reduced sensitivity
         
-        # 5. Overall confidence (weighted average)
-        overall_confidence = (
-            avg_visibility * 0.3 +
-            presence_score * 0.3 +
-            classification_score * 0.2 +
-            stability_score * 0.2
-        )
+        # 5. Distance score (closer hands get higher confidence)
+        # Use average Z coordinate of key landmarks as distance proxy
+        key_landmarks_z = [landmarks[0].z, landmarks[9].z, landmarks[5].z, landmarks[17].z]  # wrist, middle, index, pinky base
+        avg_z = sum(key_landmarks_z) / len(key_landmarks_z)
         
-        return {
+        # MediaPipe Z is relative depth (negative = closer to camera)
+        # Convert to distance score: closer (more negative) = higher score
+        # Typical range: -0.1 (very close) to 0.05 (far away)
+        distance_score = max(0.0, min(1.0, 1.0 + (avg_z * 6)))  # Scale and invert
+        
+        # Boost for very close hands
+        if avg_z < -0.08:  # Very close
+            distance_score = min(1.0, distance_score * 1.2)
+        
+        # 6. Overall confidence calculation with distance weighting
+        # Use MediaPipe's actual confidence if available, otherwise compute our own
+        mediapipe_confidence = 0.0
+        if hasattr(results, 'multi_handedness') and results.multi_handedness:
+            if hand_idx < len(results.multi_handedness):
+                handedness = results.multi_handedness[hand_idx]
+                if hasattr(handedness, 'classification') and handedness.classification:
+                    mediapipe_confidence = handedness.classification[0].score
+        
+        # Blend MediaPipe confidence with our metrics, heavily weighting distance
+        if mediapipe_confidence > 0:
+            overall_confidence = (
+                mediapipe_confidence * 0.35 +  # MediaPipe base confidence
+                distance_score * 0.45 +       # Heavily weight distance (closer = better)
+                presence_score * 0.1 +
+                avg_visibility * 0.05 +
+                stability_score * 0.05
+            )
+        else:
+            # Fallback to our own calculation with heavy distance weighting
+            overall_confidence = (
+                distance_score * 0.45 +       # Distance is dominant factor
+                presence_score * 0.25 +
+                avg_visibility * 0.2 +
+                stability_score * 0.1
+            )
+        
+        # Apply confidence boost for close, high-quality detections
+        if distance_score > 0.8 and presence_score > 0.95:
+            overall_confidence = min(1.0, overall_confidence * 1.1)
+        
+        confidence_result = {
             'overall': round(overall_confidence, 3),
             'visibility': round(avg_visibility, 3),
             'presence': round(presence_score, 3),
             'classification': round(classification_score, 3),
             'stability': round(stability_score, 3),
-            'quality': 'high' if overall_confidence > 0.8 else 'medium' if overall_confidence > 0.6 else 'low'
+            'mediapipe': round(mediapipe_confidence, 3),
+            'distance': round(distance_score, 3),
+            'avg_z': round(avg_z, 4),
+            'quality': 'high' if overall_confidence > 0.85 else 'medium' if overall_confidence > 0.7 else 'low'
         }
+        
+        # Temporary debug logging for confidence analysis
+        print(f"[CONFIDENCE DEBUG] Hand {hand_idx}: overall={confidence_result['overall']:.3f}, distance={confidence_result['distance']:.3f} (z={confidence_result['avg_z']:.4f}), mediapipe={confidence_result['mediapipe']:.3f}")
+        
+        return confidence_result
     
     def _detect_thumbs_gesture(self, hand_data) -> str:
         """Detect thumbs up/down gesture based on hand landmarks"""

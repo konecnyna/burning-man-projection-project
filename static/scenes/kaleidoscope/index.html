@@ -50,16 +50,29 @@ let pattern;
 let offset = { x: 50, y: 10 };
 
 window.onresize = function() {
-	w = canvas.width = window.innerWidth;
-	h = canvas.height = window.innerHeight;
-	w2 = w / 2;
-	h2 = h / 2;
+	// Get device pixel ratio for proper canvas scaling
+	const dpr = window.devicePixelRatio || 1;
+	
+	// Set CSS size
+	canvas.style.width = window.innerWidth + 'px';
+	canvas.style.height = window.innerHeight + 'px';
+	
+	// Set actual canvas resolution (scaled for device pixel ratio)
+	w = canvas.width = window.innerWidth * dpr;
+	h = canvas.height = window.innerHeight * dpr;
+	
+	// Scale context to match device pixel ratio
+	ctx.scale(dpr, dpr);
+	
+	// Use CSS dimensions for calculations
+	w2 = window.innerWidth / 2;
+	h2 = window.innerHeight / 2;
 };
 // Keep original mouse events
 window.onmousemove = function(e) {
 	if (img) {
-		offset.x += img.width * (e.movementX / w);
-		offset.y += img.height * (e.movementY / h);
+		offset.x += img.width * (e.movementX / window.innerWidth);
+		offset.y += img.height * (e.movementY / window.innerHeight);
 	}
 };
 
@@ -128,7 +141,7 @@ function loop(currentTime) {
 	
 	// Use fillRect instead of clearRect for better performance
 	ctx.fillStyle = '#000';
-	ctx.fillRect(0, 0, w, h);
+	ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
 	// Pre-calculate constants outside the loop
 	const a = PI / 3;

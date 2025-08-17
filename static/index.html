@@ -1142,7 +1142,7 @@
         this.idleTimer = null;
         this.idleWarningTimer = null;
         this.idleWarningVisible = false;
-        this.idleHandConfidenceDetectionLevel = .68
+        this.idleHandConfidenceDetectionLevel = .75
 
         // Scene definitions for mode-specific scenes
         this.idleScene = {
@@ -1532,7 +1532,7 @@
           },
           {
             id: 'pong',
-            name: 'Hand Tracking Pong',
+            name: 'Dong Pong',
             description: 'Classic Pong game controlled by hand Y-axis movement',
             duration: this.popularScene,
             html_file: 'scenes/pong/index.html',
@@ -1570,14 +1570,14 @@
           //   html_file: 'scenes/psychedelic-waves/index.html',
           //   background_color: '#000000'
           // },
-          {
-            id: 'wireframe_geometry',
-            name: 'Wireframe Geometry',
-            description: 'Interactive morphing wireframe geometry with hand-triggered pulses',
-            duration: this.quickScene,
-            html_file: 'scenes/wireframe-geometry/index.html',
-            background_color: '#000000'
-          },
+          // {
+          //   id: 'wireframe_geometry',
+          //   name: 'Wireframe Geometry',
+          //   description: 'Interactive morphing wireframe geometry with hand-triggered pulses',
+          //   duration: this.quickScene,
+          //   html_file: 'scenes/wireframe-geometry/index.html',
+          //   background_color: '#000000'
+          // },
           {
             id: 'kaleidoscope',
             name: 'Kaleidoscope',
@@ -1663,6 +1663,12 @@
       scheduleNextScene() {
         const currentScene = this.appState.get('currentScene');
         if (!currentScene || currentScene.duration === 0) return;
+
+        // Clear any existing timer first
+        if (this.cycleTimer) {
+          clearTimeout(this.cycleTimer);
+          this.cycleTimer = null;
+        }
 
         this.cycleTimer = setTimeout(() => {
           this.nextScene();
@@ -2183,10 +2189,12 @@
             break;
 
           case 'thumbs_up':
+            console.log('[App] Thumbs up gesture detected', event.data);
             this.sceneManager.callSceneHandler('onThumbsUp', event.data);
             break;
 
           case 'thumbs_down':
+            console.log('[App] Thumbs down gesture detected', event.data);
             this.sceneManager.callSceneHandler('onThumbsDown', event.data);
             break;
         }
@@ -2197,7 +2205,7 @@
       // Process hand tracking data and update state
       processHandEvent(hands) {
         // Filter out low-confidence hands to maintain consistency with idle detection
-        const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .65);
+        const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .7);
         // Update hands state - this will trigger ModeManager via subscription
         this.appState.setState({ hands: filteredHands });
       }
@@ -2968,6 +2976,7 @@
       }
 
       startInIdleMode() {
+        console.log('[JS] Starting in idle mode');
         this.loadIdleScene();
       }
 
@@ -3111,6 +3120,7 @@
           this.hideToast();
         }, duration);
 
+        console.log('[Toast] Showing:', message);
       }
 
       hideToast() {
