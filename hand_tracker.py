@@ -39,7 +39,7 @@ class HandTracker:
         # Persistent hand tracking
         self.tracked_hands = {}  # persistent_id -> hand_data
         self.next_hand_id = 0
-        self.max_tracking_distance = 0.15  # Max distance to consider same hand
+        self.max_tracking_distance = 0.08  # Max distance to consider same hand (reduced for better tracking)
         
         # Gesture tracking
         self.previous_gestures = {}  # hand_id -> gesture_name
@@ -350,19 +350,31 @@ class HandTracker:
                 # Convert movement to stability score (less movement = higher stability)
                 stability_score = max(0.0, 1.0 - (movement * 8))  # Reduced sensitivity
         
-        # 5. Distance score (closer hands get higher confidence)
-        # Use average Z coordinate of key landmarks as distance proxy
-        key_landmarks_z = [landmarks[0].z, landmarks[9].z, landmarks[5].z, landmarks[17].z]  # wrist, middle, index, pinky base
-        avg_z = sum(key_landmarks_z) / len(key_landmarks_z)
+        # 5. Distance score based on hand size (closer hands appear larger)
+        # Calculate hand span using key landmarks
+        wrist = landmarks[0]
+        thumb_tip = landmarks[4]
+        index_tip = landmarks[8]
+        middle_tip = landmarks[12]
+        pinky_tip = landmarks[20]
         
-        # MediaPipe Z is relative depth (negative = closer to camera)
-        # Convert to distance score: closer (more negative) = higher score
-        # Typical range: -0.1 (very close) to 0.05 (far away)
-        distance_score = max(0.0, min(1.0, 1.0 + (avg_z * 6)))  # Scale and invert
+        # Calculate hand span (diagonal distance from wrist to middle finger tip)
+        hand_span = ((middle_tip.x - wrist.x)**2 + (middle_tip.y - wrist.y)**2) ** 0.5
         
-        # Boost for very close hands
-        if avg_z < -0.08:  # Very close
-            distance_score = min(1.0, distance_score * 1.2)
+        # Calculate hand width (thumb tip to pinky tip)
+        hand_width = ((thumb_tip.x - pinky_tip.x)**2 + (thumb_tip.y - pinky_tip.y)**2) ** 0.5
+        
+        # Use average of span and width as size metric
+        hand_size = (hand_span + hand_width) / 2
+        
+        # Convert hand size to distance score
+        # Typical hand size range: 0.15 (close) to 0.05 (far)
+        # Larger size = closer = higher score
+        distance_score = max(0.0, min(1.0, (hand_size - 0.05) / 0.10))
+        
+        # Boost for very large hands (very close)
+        if hand_size > 0.12:
+            distance_score = min(1.0, distance_score * 1.1)
         
         # 6. Overall confidence calculation with distance weighting
         # Use MediaPipe's actual confidence if available, otherwise compute our own
@@ -403,7 +415,7 @@ class HandTracker:
             'stability': round(stability_score, 3),
             'mediapipe': round(mediapipe_confidence, 3),
             'distance': round(distance_score, 3),
-            'avg_z': round(avg_z, 4),
+            'hand_size': round(hand_size, 4),
             'quality': 'high' if overall_confidence > 0.85 else 'medium' if overall_confidence > 0.7 else 'low'
         }
         
