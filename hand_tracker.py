@@ -407,9 +407,6 @@ class HandTracker:
             'quality': 'high' if overall_confidence > 0.85 else 'medium' if overall_confidence > 0.7 else 'low'
         }
         
-        # Temporary debug logging for confidence analysis
-        print(f"[CONFIDENCE DEBUG] Hand {hand_idx}: overall={confidence_result['overall']:.3f}, distance={confidence_result['distance']:.3f} (z={confidence_result['avg_z']:.4f}), mediapipe={confidence_result['mediapipe']:.3f}")
-        
         return confidence_result
     
     def _detect_thumbs_gesture(self, hand_data) -> str:
