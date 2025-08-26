@@ -72,7 +72,7 @@ class HandTrackingKiosk:
                 fullscreen=True,
                 minimized=False,
                 on_top=False,
-                shadow=True,
+                # shadow=True,
                 frameless=True 
             )
             
@@ -80,6 +80,7 @@ class HandTrackingKiosk:
             webview.start(debug=False)
             
         except Exception as e:
+            print(f"ERROR: Failed to create webview window: {e}")
             pass
         finally:
             # Clean shutdown when window closes
