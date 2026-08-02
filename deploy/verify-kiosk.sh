@@ -105,12 +105,41 @@ sect "Offline compliance"
 
 if [ -x "$REPO_DIR/deploy/check-offline.sh" ]; then
     if "$REPO_DIR/deploy/check-offline.sh" >/dev/null 2>&1; then
-        pass "nothing served reaches the network"
+        pass "static scan: nothing served references the network"
     else
-        fail "offline violations present" "run ./deploy/check-offline.sh for detail"
+        fail "static scan found violations" "run ./deploy/check-offline.sh for detail"
     fi
 else
     warn "deploy/check-offline.sh missing or not executable"
+fi
+
+# Runtime enforcement: the browser refuses off-box loads because Flask sends a
+# same-origin-only CSP on every response.
+csp_header=$(curl -fsSI -m 5 "http://localhost:$PORT/" 2>/dev/null \
+             | tr -d '\r' | grep -i '^content-security-policy:' || true)
+if [ -n "$csp_header" ]; then
+    if echo "$csp_header" | grep -q "default-src 'self'"; then
+        pass "CSP served: browser blocks off-box loads"
+    else
+        fail "CSP header present but not same-origin-only" "check CSP_DIRECTIVES in web_app.py"
+    fi
+else
+    fail "no Content-Security-Policy header on /" "external resources would not be blocked at runtime"
+fi
+
+# Any violation means something actually tried to reach the network.
+csp_json=$(curl -fsS -m 5 "http://localhost:$PORT/api/csp-violations" 2>/dev/null || true)
+if [ -n "$csp_json" ]; then
+    csp_count=$(echo "$csp_json" \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin).get("count",0))' 2>/dev/null || echo "?")
+    if [ "$csp_count" = "0" ]; then
+        pass "no blocked off-box loads recorded this run"
+    else
+        fail "$csp_count blocked off-box load(s) recorded" \
+             "curl -s localhost:$PORT/api/csp-violations | python3 -m json.tool"
+    fi
+else
+    warn "could not read /api/csp-violations" "app may not be running yet"
 fi
 
 # ---------------------------------------------------------------- boot chain

@@ -212,10 +212,29 @@ Bound to `localhost` only.
 | `/` | GET | Serves `static/index.html` |
 | `/scenes/<path>` | GET | Scene files from `static/scenes/` |
 | `/static/<path>` | GET | Static assets |
-| `/health` | GET | `{"status": "healthy", "timestamp": ...}` |
+| `/health` | GET | `{"status", "timestamp", "csp_violations"}` |
 | `/api/production-mode` | GET | Reflects the `--production` flag |
 | `/api/debug-settings` | GET/POST | Reads/writes `debug_settings.json` |
 | `/video_feed` | GET | MJPEG stream of the annotated debug frame, ~30 FPS |
+| `/csp-report` | POST | Browser posts blocked off-box loads here |
+| `/api/csp-violations` | GET/DELETE | Inspect or reset blocked off-box loads |
+
+### Offline enforcement
+
+An `@app.after_request` hook attaches a same-origin-only
+`Content-Security-Policy` to **every** response, scene iframes included, so the
+browser refuses off-box loads outright rather than hanging on DNS. Directives
+are in `CSP_DIRECTIVES` at the top of `web_app.py`.
+
+`'unsafe-inline'` and `'unsafe-eval'` are allowed — scenes are self-contained
+HTML with inline scripts, and some vendored libraries build functions
+dynamically. Neither relaxes origin restrictions, which is the part that
+matters here.
+
+Violations are POSTed by the browser to `/csp-report`, kept in a 200-entry ring
+buffer, printed to stderr, and surfaced via `/api/csp-violations` and the
+`csp_violations` count on `/health`. That makes offline compliance verifiable
+at runtime without disconnecting the machine.
 
 WebSocket messages: `connect`, `disconnect`, `subscribe` (`{events: [...]}`),
 `unsubscribe`, `get_recent_events`. Each client joins a room keyed by its socket

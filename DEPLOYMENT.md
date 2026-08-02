@@ -50,11 +50,37 @@ removing a system-domain LaunchDaemon.
 
 ### Offline is the first principle
 
-The installation has no internet. Provision **everything** while you still have
-a network — in particular the venv, because `start-atlantis.sh` deliberately
-does **not** `pip install` at startup. Offline, pip blocks on PyPI and retries
-for minutes, and under `KeepAlive` that becomes a silent restart loop. The
-launcher fails immediately with an actionable message instead.
+Enforced in two layers, so it is a property of the system rather than a
+convention:
+
+1. **The browser cannot load off-box.** Flask sends a same-origin-only
+   `Content-Security-Policy` on every response, scene iframes included
+   (`CSP_DIRECTIVES` in `web_app.py`). No DNS hang is possible — the request is
+   never made. Blocked attempts are POSTed to `/csp-report`, kept in a ring
+   buffer, and printed to stderr into `logs/kiosk.err.log`.
+2. **Static scanning** catches remote references before they ship —
+   `./deploy/check-offline.sh`.
+
+Both run inside `./deploy/verify-kiosk.sh`.
+
+#### Verifying offline behaviour without unplugging anything
+
+Let the kiosk run until every scene has cycled — about 4 min 15 s — then:
+
+```bash
+curl -s localhost:5001/api/csp-violations | python3 -m json.tool
+```
+
+`count: 0` means nothing tried to reach the network across a full cycle. Any
+entry names the blocked URL, the directive, and the source file and line.
+`/health` carries the same count for a quick look.
+
+#### Provision while you still have a network
+
+`start-atlantis.sh` deliberately does **not** `pip install` at startup. Offline,
+pip blocks on PyPI and retries for minutes, and under `KeepAlive` that becomes
+a silent restart loop. The launcher fails immediately with an actionable
+message instead.
 
 ```bash
 # While online

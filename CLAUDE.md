@@ -37,9 +37,15 @@ These are non-negotiable and break the installation if violated.
    Every library, font, and image must be vendored locally and referenced
    relatively. No CDN links, no Google Fonts, no analytics, no social widgets.
 
+   The browser enforces this at runtime: Flask attaches a same-origin-only
+   Content-Security-Policy to every response (`CSP_DIRECTIVES` in
+   `web_app.py`), so a scene physically cannot load off-box. Blocked attempts
+   are logged to `/csp-report` and surfaced at `/api/csp-violations`.
+
    **Never assert offline-safety — check it:**
    ```bash
-   ./deploy/check-offline.sh
+   ./deploy/check-offline.sh                                  # static scan
+   curl -s localhost:5001/api/csp-violations | python3 -m json.tool   # runtime
    ```
    Run it after touching anything under `static/`. If a vendored bundle
    contains unavoidable remote URLs, neutralize its entry points and record

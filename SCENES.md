@@ -287,7 +287,30 @@ Rules:
 - Scene-specific vendored libraries live inside the scene's own directory.
 - Every `src`/`href` must resolve to a file that exists in the repo.
 
-### Check it — don't eyeball it
+### The browser enforces this at runtime
+
+Flask sends a same-origin-only `Content-Security-Policy` on **every** response,
+including scene iframes (`CSP_DIRECTIVES` in `web_app.py`). A scene physically
+cannot load anything off-box — the browser refuses before any request is made,
+so there is no DNS hang. Instead you get an immediate, logged, local failure.
+
+Blocked loads are POSTed by the browser to `/csp-report`, recorded in a ring
+buffer, and printed to stderr (so they land in `logs/kiosk.err.log`):
+
+```bash
+curl -s localhost:5001/api/csp-violations | python3 -m json.tool
+curl -s localhost:5001/health      # includes a csp_violations count
+```
+
+`'unsafe-inline'` and `'unsafe-eval'` are permitted because scenes are
+self-contained HTML with inline scripts and some vendored libraries build
+functions dynamically. Neither weakens the part that matters — every directive
+is same-origin only, so inline code still cannot reach off-box.
+
+**This means you can verify offline behaviour without unplugging anything.**
+Let the kiosk cycle every scene, then check the violation count is zero.
+
+### Check it statically too — don't eyeball it
 
 ```bash
 ./deploy/check-offline.sh              # exit 0 = clean

@@ -4,9 +4,51 @@ import threading
 import cv2
 import json
 import os
+from collections import deque
 from datetime import datetime
 from typing import Dict, Set
 from event_system import Event, EventBus, HandTrackingEvents
+
+# --------------------------------------------------------------------------
+# Offline enforcement.
+#
+# The installation has no internet. This Content-Security-Policy is sent on
+# every response, so the browser itself refuses to load anything off-box no
+# matter what a scene asks for. A remote reference becomes an immediate,
+# logged, local failure instead of a DNS hang that looks like a frozen scene.
+#
+# 'unsafe-inline' and 'unsafe-eval' are required: scenes are self-contained
+# HTML with inline <script>/<style>, and some vendored libraries build
+# functions dynamically. Neither weakens the part that matters here — origins.
+# Every directive is same-origin only, so inline code still cannot fetch
+# anything remote.
+#
+# Keep connect-src explicit about localhost so socket.io's WebSocket upgrade
+# is allowed across browser versions that treat ws: as distinct from 'self'.
+# --------------------------------------------------------------------------
+CSP_DIRECTIVES = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' ws://localhost:* wss://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*",
+    "frame-src 'self'",
+    "child-src 'self' blob:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'none'",
+    "report-uri /csp-report",
+]
+CONTENT_SECURITY_POLICY = "; ".join(CSP_DIRECTIVES)
+
+# Ring buffer of CSP violations reported by the browser. This is the runtime
+# proof that offline operation holds: if it stays empty while every scene has
+# cycled, nothing tried to reach the network.
+CSP_VIOLATIONS = deque(maxlen=200)
+CSP_VIOLATIONS_LOCK = threading.Lock()
 
 class WebSocketManager:
     def __init__(self, event_bus: EventBus, socketio: SocketIO):
@@ -65,7 +107,70 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
     socketio = SocketIO(app, cors_allowed_origins="*")
     
     ws_manager = WebSocketManager(event_bus, socketio)
-    
+
+    @app.after_request
+    def apply_offline_csp(response):
+        """Block every off-box load at the browser level.
+
+        Applied to all responses, including scene iframes, so a scene cannot
+        opt out of it.
+        """
+        response.headers['Content-Security-Policy'] = CONTENT_SECURITY_POLICY
+        return response
+
+    @app.route('/csp-report', methods=['POST'])
+    def csp_report():
+        """Record a CSP violation reported by the browser.
+
+        Any entry here means something tried to load off-box and was blocked.
+        Offline that would have been a hang; this makes it visible and local.
+        """
+        try:
+            payload = request.get_json(force=True, silent=True) or {}
+        except Exception:
+            payload = {}
+
+        report = payload.get('csp-report', payload)
+        entry = {
+            'timestamp': datetime.now().isoformat(),
+            'blocked_uri': report.get('blocked-uri', 'unknown'),
+            'violated_directive': report.get('violated-directive',
+                                             report.get('effective-directive', 'unknown')),
+            'document_uri': report.get('document-uri', 'unknown'),
+            'source_file': report.get('source-file'),
+            'line_number': report.get('line-number'),
+        }
+
+        with CSP_VIOLATIONS_LOCK:
+            CSP_VIOLATIONS.append(entry)
+
+        # Goes to the LaunchAgent's captured stderr, so it lands in
+        # logs/kiosk.err.log alongside everything else.
+        print(
+            "[CSP VIOLATION] blocked={blocked_uri} directive={violated_directive} "
+            "doc={document_uri} src={source_file}:{line_number}".format(**entry),
+            flush=True,
+        )
+        return ('', 204)
+
+    @app.route('/api/csp-violations', methods=['GET'])
+    def get_csp_violations():
+        """Inspect blocked off-box loads. Used by deploy/verify-kiosk.sh."""
+        with CSP_VIOLATIONS_LOCK:
+            violations = list(CSP_VIOLATIONS)
+        return jsonify({
+            'count': len(violations),
+            'violations': violations,
+            'policy': CONTENT_SECURITY_POLICY,
+        })
+
+    @app.route('/api/csp-violations', methods=['DELETE'])
+    def clear_csp_violations():
+        """Reset the buffer, so a verification run starts from a clean slate."""
+        with CSP_VIOLATIONS_LOCK:
+            CSP_VIOLATIONS.clear()
+        return jsonify({'success': True, 'count': 0})
+
     @app.route('/')
     def index():
         # Use Flask's send_from_directory for proper static file handling
@@ -84,7 +189,14 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
     
     @app.route('/health')
     def health():
-        return {'status': 'healthy', 'timestamp': datetime.now().isoformat()}
+        with CSP_VIOLATIONS_LOCK:
+            csp_count = len(CSP_VIOLATIONS)
+        return {
+            'status': 'healthy',
+            'timestamp': datetime.now().isoformat(),
+            # Non-zero means something tried to load off-box and was blocked.
+            'csp_violations': csp_count,
+        }
     
     @app.route('/api/production-mode')
     def get_production_mode():
