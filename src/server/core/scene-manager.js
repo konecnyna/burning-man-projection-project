@@ -31,27 +31,27 @@ const scenes = {
       "supported_people": "💁‍♂️",
       "additional_instructions": []
     },
-  },
-  tieDye: {
-    id: "tie_dye", url: '/app/scenes/tie-dye/index.html', instructions: ["Move your hands slowly (palms out) to make tie dye"], name: "Tie Dye", isActive: true, meta: {
-      "supported_people": "💁‍♂️",
-      "additional_instructions": []
-    }
-  },
-  neonPaint: {
-    id: "neon_pain", url: '/app/scenes/neon-white-board/index.html', instructions: ["Move your hands slowly (palms out) to make tie dye"], name: "Neon Paint", isActive: true, meta: {
-      "supported_people": "💁‍♂️",
-      "additional_instructions": ["Make a fist to paint"]
-    },
-    handCursors: true,
-  },
-  psychedelicWaves: {
-    id: "psychedelic_waves", url: '/app/scenes/psychedelic-waves/index.html', instructions: ["Move your hands slowly (palms out) to make waves"], name: "Psychedelic Waves", isActive: true, meta: {
-      "supported_people": "💁‍♂️",
-      "additional_instructions": []
-    },
-    handCursors: false,
   }
+  // tieDye: {
+  //   id: "tie_dye", url: '/app/scenes/tie-dye/index.html', instructions: ["Move your hands slowly (palms out) to make tie dye"], name: "Tie Dye", isActive: true, meta: {
+  //     "supported_people": "💁‍♂️",
+  //     "additional_instructions": []
+  //   }
+  // },
+  // neonPaint: {
+  //   id: "neon_pain", url: '/app/scenes/neon-white-board/index.html', instructions: ["Move your hands slowly (palms out) to make tie dye"], name: "Neon Paint", isActive: true, meta: {
+  //     "supported_people": "💁‍♂️",
+  //     "additional_instructions": ["Make a fist to paint"]
+  //   },
+  //   handCursors: true,
+  // },
+  // psychedelicWaves: {
+  //   id: "psychedelic_waves", url: '/app/scenes/psychedelic-waves/index.html', instructions: ["Move your hands slowly (palms out) to make waves"], name: "Psychedelic Waves", isActive: true, meta: {
+  //     "supported_people": "💁‍♂️",
+  //     "additional_instructions": []
+  //   },
+  //   handCursors: false,
+  // }
 };
 
 class SceneManager {

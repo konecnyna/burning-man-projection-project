@@ -14,8 +14,9 @@ function executeCommand(command, silent = false) {
 
 function launchServer() {
   console.log('Starting global server');
+
   // Use spawn instead of exec to start the server
-  const server = spawn('/opt/homebrew/bin/node', ['src/server/server.js']);
+  const server = spawn('/opt/homebrew/bin/node', ['/Users/atlantis/code/burning-man-2024/src/server/server.js']);
   server.stdout.on('data', (data) => {
     console.log(data.toString());
   });
@@ -78,12 +79,12 @@ async function main() {
 
     launchServer();
 
-    await sleep(1000)
+    await sleep(5000)
 
     await launchChrome();
 
     // Hide the mouse cursor
-    await hideMouseCursor();
+    //await hideMouseCursor();
 
 
     await sleep(10000)

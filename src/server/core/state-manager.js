@@ -1,7 +1,7 @@
 const { scenes } = require("./scene-manager");
 
 const CAMERA_URL = 0;
-const DEFAULT_SCENE_TIME = 3;
+const DEFAULT_SCENE_TIME = 1;
 
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -19,7 +19,7 @@ module.exports = class StateManager {
       isMockMode: false,
       rtspUrl: CAMERA_URL,
       detectionMode: "passive",
-      currentScene: scenes.passive,
+      currentScene: scenes.fluidSim,
       nextSceneTime: this.getFutureDate(),
       scenes: scenes,
     };
@@ -42,7 +42,7 @@ module.exports = class StateManager {
 
     this.passiveModeTimer = setTimeout(() => {
       this.updateStateAndBroadcast({ detectionMode: "passive", currentScene: scenes.passive });
-    }, 10 * 60 * 1000);
+    }, 45 * 1000);
   }
 
   isInActiveMode() {

@@ -12,7 +12,7 @@ class OpenCvEventBus {
   }
 
   start() {
-    const args = ['main.py'];
+    const args = ['/Users/atlantis/code/burning-man-2024/src/cv/main.py'];
     if (this.state.isMockMode) {
       args.push("--mock-mode");
     }
@@ -30,7 +30,7 @@ class OpenCvEventBus {
     }
 
     console.log(`Starting script: python3 ${args.join(" ")}`);
-    this.pythonProcess = spawn('python3', args, { cwd: path.join(__dirname, '../../cv') });
+    this.pythonProcess = spawn('/usr/bin/python3', args, { cwd: path.join(__dirname, '../../cv') });
 
     this.pythonProcess.stdout.on('data', (data) => {
       try {
@@ -56,7 +56,7 @@ class OpenCvEventBus {
       this.io.emit('pythonClose', { code });
 
       if (code > 0) {
-        console.log(`🚨🚨🚨🚨🚨\nPython script crashed. Retrying in 10 seconds...\n🚨🚨🚨🚨🚨`);
+        console.log(`🚨🚨🚨🚨🚨\nPython script crashed. Retrying in 10 seconds...\n${code}\n🚨🚨🚨🚨🚨`);
         this.restartTimeout = setTimeout(() => this.start(), this.restartDelay);
       }
     });

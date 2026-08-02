@@ -31,8 +31,8 @@ def main(args):
         
         
         # Less important tasks
-        # if frame_count % 15 == 0:
-            # simple_face_detection.subscribe(img=frame)
+        if frame_count % 15 == 0:
+            simple_face_detection.subscribe(img=frame)
 
         if frame_count % 60 == 0:
             motion_detector.subscribe(img=frame)

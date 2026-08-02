@@ -9,6 +9,7 @@ const sceneChangeTimer = document.getElementById('sceneChangeTimer');
 const resetTimerBtn = document.getElementById('reset_timer');
 const nextSceneBtn = document.getElementById('next_scene');
 const setModePassiveBtn = document.getElementById("set_mode_passive");
+const resetBtn = document.getElementById('reset_computer_btn');
 
 const connectionBanner = document.getElementById('connectionBanner');
 socket.on('connect', () => {
@@ -33,7 +34,9 @@ function initializeEventListeners() {
     socket.emit('admin_event', { event: "change_scene", payload: {} });
   })
 
-
+  resetBtn.addEventListener("click", () => {
+    socket.emit('admin_event', { event: "reset_server", payload: {} });
+  })
   socket.on('state_changed', (data) => {
     updateState(JSON.parse(data));
   });

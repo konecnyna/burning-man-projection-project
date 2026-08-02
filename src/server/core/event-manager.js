@@ -1,4 +1,18 @@
 const { SceneManager } = require("./scene-manager");
+const { exec } = require('child_process');
+
+
+// Function to execute shell commands
+function executeCommand(command, silent = false) {
+  return new Promise((resolve, reject) => {
+    exec(command, (error, stdout, stderr) => {
+      if (error && !silent) {
+        console.trace(error)
+      }
+      resolve(stdout.trim());
+    });
+  });
+}
 
 
 
@@ -46,10 +60,12 @@ module.exports = class EventManager {
           break;
 
         case "set_detection_mode":
-          payload.mode === "active" 
-            ? this.stateManager.setActiveMode() 
+          payload.mode === "active"
+            ? this.stateManager.setActiveMode()
             : this.stateManager.setPassiveMode()
-          
+          break;
+        case "reset_server":
+          executeCommand("/opt/homebrew/bin/pm2 restart all")
           break;
       }
     });
