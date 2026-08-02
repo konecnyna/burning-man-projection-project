@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking Kiosk</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='./style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Hand Tracking Kiosk</h1>
+        
+        <div class="tracking-area" id="trackingArea">
+            <!-- Interaction zones -->
+            <div class="interaction-zone" id="zone1" style="top: 10%; left: 10%; width: 30%; height: 30%;"></div>
+            <div class="interaction-zone" id="zone2" style="top: 10%; right: 10%; width: 30%; height: 30%;"></div>
+            <div class="interaction-zone" id="zone3" style="bottom: 10%; left: 50%; width: 30%; height: 30%; transform: translateX(-50%);"></div>
+            
+            <!-- Hand cursors and fingertips will be added dynamically -->
+        </div>
+        
+        <div class="status disconnected" id="status">
+            Disconnected
+        </div>
+        
+        <div class="debug-info" id="debugInfo">
+            FPS: 0<br>
+            Hands: 0<br>
+            Events: 0
+        </div>
+    </div>
+
+    <script src="/static/libs/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

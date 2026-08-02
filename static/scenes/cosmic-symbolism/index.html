@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>COSMIC SYMBOLISM FLY-THROUGH</title>
+  <script src="/static/socket.io.js"></script>
+  <link rel="stylesheet" type="text/css" media="all" href="./content/zoom.css">
+  <script src="./content/jquery.min.js"></script>
+  <script src="./content/libs.js"></script>
+  <script src="./content/coffeelib.js"></script>
+
+</head>
+
+<body>
+  <div id="testElement">Scroll here</div>
+
+  <canvas id="stage" class="stage" width="1800" height="935" style="opacity: 1;"></canvas>
+  <script>
+    const socket = io();
+    const element = document.getElementById("stage")
+
+
+    let currentSpeed = -1;
+    let targetSpeed = -1;
+    let activeHandId = null; // Track specific hand ID
+    const smoothingFactor = 0.15; // Higher = more responsive, lower = smoother
+
+    function mapPercentageToRange(percentage) {
+      const minValue = -50; // Reduced range for smoother control
+      const maxValue = 50;
+      return minValue + percentage * (maxValue - minValue);
+    }
+
+    function lerp(start, end, factor) {
+      return start + (end - start) * factor;
+    }
+
+    function smoothUpdate() {
+      // Smooth interpolation towards target speed
+      currentSpeed = lerp(currentSpeed, targetSpeed, smoothingFactor);
+      
+      // Apply scroll with smoothed speed
+      if (Math.abs(currentSpeed - targetSpeed) > 0.1) {
+        scroll_speed_manual_control = currentSpeed;
+        
+        element.dispatchEvent(new WheelEvent('wheel', {
+          bubbles: false,
+          cancelable: false,
+          clientX: 1200,
+          clientY: 100,
+          deltaX: 0,
+          deltaY: currentSpeed,
+          deltaZ: 0,
+          deltaMode: 0,
+          screenX: 100,
+          screenY: 100,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+          metaKey: false
+        }));
+      }
+      
+      requestAnimationFrame(smoothUpdate);
+    }
+
+    function setTargetSpeed(speed) {
+      targetSpeed = speed;
+    }
+
+    // Subscribe to hand tracking events
+    socket.on('connect', () => {
+      socket.emit('subscribe', {
+        events: ['hand_moved', 'hand_detected', 'hand_lost', 'frame_processed']
+      });
+    });
+
+    
+
+    socket.on('event', (data) => {
+      
+        try {
+          if (data.type === 'hand_moved' && data.data.hands) {
+            handleHandTracking(data.data.hands);
+          }
+          
+          // Also handle frame_processed events which contain hand data
+          if (data.type === 'frame_processed' && data.data.hands) {
+            handleHandTracking(data.data.hands);
+          }
+          
+          // Handle hand detection/loss events
+          if (data.type === 'hand_lost') {
+            // Smoothly return to idle speed when hands are lost
+            setTargetSpeed(-1);
+          }
+          
+        } catch (e) {
+          console.error('Error processing hand tracking event:', e, data);
+        }
+      });
+
+    function handleHandTracking(hands) {
+      if (!hands || hands.length === 0) {
+        activeHandId = null;
+        return;
+      }
+      
+      // Use persistent hand ID tracking
+      let hand = null;
+      
+      if (activeHandId !== null) {
+        // Look for the hand with the same ID we were tracking
+        hand = hands.find(h => h.hand_id === activeHandId);
+      }
+      
+      if (!hand) {
+        // If we don't have an active hand or can't find it, use the first hand
+        hand = hands[0];
+        activeHandId = hand.hand_id;
+      }
+      if (hand.palm_center) {
+        const speed = mapPercentageToRange(hand.palm_center.y);
+        setTargetSpeed(speed);
+      }
+    }
+
+
+    // Start the smooth animation loop
+    smoothUpdate();
+  </script>
+</body>
+
+</html>

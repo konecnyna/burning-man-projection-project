@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  
+  <title>Atlantis Kaleidoscope</title>
+  <script src="/static/socket.io.js"></script>
+  <style>
+  body {
+	overflow: hidden;
+	margin: 0;
+}
+canvas {
+	position: absolute;
+}
+  </style>
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<canvas id="c"></canvas>
+<!-- partial -->
+  <script>
+  let canvas = document.getElementById("c");
+let ctx = canvas.getContext("2d", { alpha: false });
+// Limit canvas size to 720p max for performance
+const maxWidth = 1280;
+const maxHeight = 720;
+let w = canvas.width = Math.min(window.innerWidth, maxWidth);
+let h = canvas.height = Math.min(window.innerHeight, maxHeight);
+let w2 = w / 2,
+	h2 = h / 2;
+
+// Scale canvas to fill screen if limited
+if (window.innerWidth > maxWidth || window.innerHeight > maxHeight) {
+	canvas.style.width = window.innerWidth + 'px';
+	canvas.style.height = window.innerHeight + 'px';
+	canvas.style.imageRendering = 'auto';
+}
+const PI = Math.PI;
+const sin = Math.sin;
+const cos = Math.cos;
+const tan = Math.tan;
+const floor = Math.floor;
+const PI2 = PI * 2;
+
+const angle = PI / 6;
+const height = 200;
+const side = height * tan(angle);
+
+let img;
+let pattern;
+let offset = { x: 50, y: 10 };
+
+window.onresize = function() {
+	// Limit canvas size to 1920x1080 max for performance
+	w = canvas.width = Math.min(window.innerWidth, maxWidth);
+	h = canvas.height = Math.min(window.innerHeight, maxHeight);
+	w2 = w / 2;
+	h2 = h / 2;
+	
+	// Scale canvas to fill screen if limited
+	if (window.innerWidth > maxWidth || window.innerHeight > maxHeight) {
+		canvas.style.width = window.innerWidth + 'px';
+		canvas.style.height = window.innerHeight + 'px';
+		canvas.style.imageRendering = 'auto';
+	} else {
+		canvas.style.width = w + 'px';
+		canvas.style.height = h + 'px';
+	}
+};
+// Keep original mouse events
+window.onmousemove = function(e) {
+	if (img) {
+		offset.x += img.width * (e.movementX / w);
+		offset.y += img.height * (e.movementY / h);
+	}
+};
+
+// Hand tracking variables
+let lastHandPos = { x: 0.5, y: 0.5 };
+let activeHandId = null;
+let smoothedHandVelocity = { x: 0, y: 0 };
+let handSmoothingFactor = 0.85; // Higher = more smoothing (0-1)
+
+// Setup WebSocket connection
+const socket = io();
+
+function createFallbackPattern() {
+	// Create a canvas for procedural pattern
+	const patternCanvas = document.createElement('canvas');
+	patternCanvas.width = 256;
+	patternCanvas.height = 256;
+	const patternCtx = patternCanvas.getContext('2d');
+	
+	// Create a colorful geometric pattern
+	patternCtx.fillStyle = '#000';
+	patternCtx.fillRect(0, 0, 256, 256);
+	
+	for (let i = 0; i < 20; i++) {
+		patternCtx.fillStyle = `hsl(${i * 18}, 70%, 50%)`;
+		patternCtx.beginPath();
+		patternCtx.arc(128 + Math.cos(i) * 50, 128 + Math.sin(i) * 50, 20, 0, PI2);
+		patternCtx.fill();
+	}
+	
+	pattern = ctx.createPattern(patternCanvas, "repeat");
+	img = { width: 256, height: 256 }; // Mock img object for offset calculations
+}
+
+function setup() {
+	img = new Image();
+	// Randomly choose from local kaleidoscope images
+	const images = [
+		"/static/scenes/kaleidoscope/images/cosmic.jpg",
+		"/static/scenes/kaleidoscope/images/seamless-flowers.svg", 
+		"/static/scenes/kaleidoscope/images/tomorrow-today.jpg"
+	];
+	const randomImage = images[Math.floor(Math.random() * images.length)];
+	img.src = randomImage;
+	console.log('Loading kaleidoscope image:', randomImage);
+	
+	img.onload = function() {
+		pattern = ctx.createPattern(img, "repeat");
+		loop();
+	};
+	img.onerror = function() {
+		// Fallback: create a procedural pattern if image fails to load
+		console.log('Image failed to load, creating fallback pattern');
+		createFallbackPattern();
+		loop();
+	};
+}
+
+function loop() {
+	ctx.clearRect(0, 0, w, h);
+
+	for (let yi = 0; (yi - 1) * height < h2; yi++) {
+		for (let xi = 0; (xi - 1) * side < w2; xi++) {
+			let a = PI / 3;
+			a = [0, 5 * a, 2 * a, 3 * a, 4 * a, a];
+			let angleOffsetX = [0, -side, side, 0, -side, side];
+			let angleOffsetY = [0, 0, height, height, height, 0];
+			let ai = (yi % 2 == 0 ? xi : xi + 3) % 6;
+
+			let x = xi * side;
+			let y = yi * height;
+
+			if (yi * height < h2) {
+				drawTriangle(
+					w2 + x + angleOffsetX[ai],
+					h2 + y + angleOffsetY[ai],
+					1,
+					a[ai]
+				);
+				drawTriangle(
+					w2 + x + angleOffsetX[ai],
+					h2 + y + angleOffsetY[ai],
+					-1,
+					a[ai]
+				);
+			}
+
+			if (xi != 0) {
+				drawTriangle(
+					w2 - angleOffsetX[ai] - x,
+					h2 + angleOffsetY[ai] + y,
+					1,
+					-a[ai]
+				);
+				drawTriangle(
+					w2 - angleOffsetX[ai] - x,
+					h2 + angleOffsetY[ai] + y,
+					-1,
+					-a[ai]
+				);
+			}
+
+			if (yi != 0) {
+				drawTriangle(
+					w2 + x + angleOffsetX[ai],
+					h2 - y + angleOffsetY[ai],
+					1,
+					a[ai]
+				);
+				drawTriangle(
+					w2 + x + angleOffsetX[ai],
+					h2 - y + angleOffsetY[ai],
+					-1,
+					a[ai]
+				);
+			}
+
+			if (yi != 0 && xi != 0) {
+				drawTriangle(
+					w2 - x - angleOffsetX[ai],
+					h2 - y + angleOffsetY[ai],
+					1,
+					-a[ai]
+				);
+				drawTriangle(
+					w2 - x - angleOffsetX[ai],
+					h2 - y + angleOffsetY[ai],
+					-1,
+					-a[ai]
+				);
+			}
+		}
+	}
+	// update pattern offset - slowed down default animation
+	offset.x = (offset.x - 0.3 * sin(angle / 2)) % img.width;
+	offset.y = (offset.y - 0.3 * cos(angle / 2)) % img.height;
+	
+	// Apply smoothed hand velocity for continuous movement
+	offset.x += smoothedHandVelocity.x;
+	offset.y += smoothedHandVelocity.y;
+	
+	// Gradually decay the smoothed velocity
+	smoothedHandVelocity.x *= 0.95;
+	smoothedHandVelocity.y *= 0.95;
+
+	// loop
+	requestAnimationFrame(loop);
+}
+
+function drawTriangle(posX, posY, scaleX, angle) {
+	ctx.translate(posX, posY);
+	ctx.rotate(angle);
+	ctx.scale(scaleX, 1);
+	ctx.translate(offset.x, offset.y);
+
+	ctx.beginPath();
+	ctx.moveTo(0 - offset.x, 0 - offset.y);
+	ctx.lineTo(0 - offset.x, height - offset.y);
+	ctx.lineTo(side - offset.x, height - offset.y);
+	ctx.lineTo(0 - offset.x, 0 - offset.y);
+	ctx.fillStyle = pattern;
+	ctx.fill();
+
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// Hand tracking event handlers
+function handleHandTracking(hands) {
+	if (!hands || hands.length === 0) return;
+	
+	let hand = null;
+	
+	// Use persistent hand ID tracking
+	if (activeHandId !== null) {
+		hand = hands.find(h => h.hand_id === activeHandId);
+	}
+	
+	if (!hand) {
+		hand = hands[0];
+		activeHandId = hand.hand_id;
+	}
+	
+	if (hand && hand.palm_center && img) {
+		const currentPos = {
+			x: hand.palm_center.x,
+			y: hand.palm_center.y
+		};
+		
+		// Calculate movement delta
+		const deltaX = currentPos.x - lastHandPos.x;
+		const deltaY = currentPos.y - lastHandPos.y;
+		
+		// Apply smoothing to hand velocity for more fluid movement
+		const targetVelocityX = img.width * deltaX * 2.0; // Increased sensitivity
+		const targetVelocityY = img.height * deltaY * 2.0;
+		
+		// Smooth the velocity changes
+		smoothedHandVelocity.x = smoothedHandVelocity.x * handSmoothingFactor + targetVelocityX * (1 - handSmoothingFactor);
+		smoothedHandVelocity.y = smoothedHandVelocity.y * handSmoothingFactor + targetVelocityY * (1 - handSmoothingFactor);
+		
+		// Update last position
+		lastHandPos = currentPos;
+	}
+}
+
+// Setup WebSocket event handlers
+socket.on('connect', () => {
+	console.log('Kaleidoscope scene connected to server');
+	socket.emit('subscribe', {
+		events: ['hand_moved', 'hand_detected', 'frame_processed']
+	});
+});
+
+socket.on('event', (event) => {
+	if ((event.type === 'hand_moved' || event.type === 'hand_detected' || event.type === 'frame_processed') && event.data.hands) {
+		try {
+			handleHandTracking(event.data.hands);
+		} catch (error) {
+			console.error('Error processing hand tracking event:', error);
+		}
+	}
+	
+	if (event.type === 'scene_changed' && event.data.scene && event.data.scene.id === 'kaleidoscope') {
+		console.log('Kaleidoscope scene activated');
+	}
+});
+
+setup();
+  </script>
+
+
+
+</body></html>

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finger Paint</title>
+  <script src="/static/socket.io.js"></script>
+  <style>
+    @import url('/static/fonts/fonts.css');
+
+    :root {
+      --pipboy-green: #00ff41;
+      --pipboy-green-dark: #00dd33;
+      --pipboy-orange: rgb(255, 170, 60);
+      --pipboy-orange-glow: rgba(255, 170, 60, 0.5);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Share Tech Mono', 'Courier New', 'Monaco', 'Menlo', monospace;
+      background: #000;
+      color: var(--pipboy-green);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .paint-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #001100;
+      background: radial-gradient(circle at center, #001100 0%, #000 100%);
+    }
+
+    #paintCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+      background: transparent;
+    }
+
+    .hand-indicator {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: var(--pipboy-green);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 5;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 10px var(--pipboy-green);
+      transition: all 0.1s ease;
+      border: 2px solid rgba(0, 255, 65, 0.3);
+    }
+
+    .hand-indicator.drawing {
+      background: var(--pipboy-orange);
+      box-shadow: 0 0 15px var(--pipboy-orange);
+      width: 24px;
+      height: 24px;
+      border: 2px solid rgba(255, 170, 60, 0.5);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .gesture-feedback {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 255, 65, 0.1);
+      border: 2px solid var(--pipboy-green);
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.3), inset 0 0 20px rgba(0, 255, 65, 0.1);
+      padding: 15px 25px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--pipboy-green);
+      text-shadow: 0 0 10px var(--pipboy-green);
+      backdrop-filter: blur(5px);
+      z-index: 10;
+      animation: pulse-attention 3s ease-in-out infinite;
+    }
+
+    /* Screen effects */
+    .scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(transparent 50%, rgba(0, 255, 65, 0.03) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .screen-flicker {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 255, 65, 0.02);
+      pointer-events: none;
+      z-index: 999;
+      animation: flicker 0.15s infinite linear alternate;
+    }
+
+    /* Animations */
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      50% {
+        opacity: 0.7;
+        transform: translate(-50%, -50%) scale(1.1);
+      }
+    }
+
+    @keyframes pulse-attention {
+      0% {
+        opacity: 1;
+        text-shadow: 0 0 10px var(--pipboy-green);
+        transform: translateX(-50%) scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        text-shadow: 0 0 20px var(--pipboy-green), 0 0 30px var(--pipboy-green);
+        transform: translateX(-50%) scale(1.02);
+      }
+      100% {
+        opacity: 1;
+        text-shadow: 0 0 10px var(--pipboy-green);
+        transform: translateX(-50%) scale(1);
+      }
+    }
+
+    @keyframes flicker {
+      0% {
+        opacity: 0.98;
+      }
+      100% {
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="paint-container">
+    <canvas id="paintCanvas"></canvas>
+    
+    <div class="gesture-feedback" id="gestureStatus">
+      POINT WITH ONE FINGER TO PAINT
+    </div>
+
+    <div class="scanlines"></div>
+    <div class="screen-flicker"></div>
+  </div>
+
+  <script>
+    class FingerPaint {
+      constructor() {
+        this.canvas = document.getElementById('paintCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.socket = null;
+        this.isDrawing = false;
+        this.brushSize = 8;
+        this.lastX = 0;
+        this.lastY = 0;
+        
+        // Rainbow color state
+        this.hue = 0;
+        this.hueSpeed = 2; // How fast the hue changes
+        
+        // Hand tracking state
+        this.handData = [];
+        this.handIndicators = new Map();
+        
+        this.init();
+      }
+
+      init() {
+        this.setupCanvas();
+        this.connectWebSocket();
+      }
+
+      setupCanvas() {
+        this.resizeCanvas();
+        window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Set up canvas for smooth drawing
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.globalCompositeOperation = 'source-over';
+      }
+
+      resizeCanvas() {
+        // Store current drawing before resize
+        const imageData = this.canvas.width && this.canvas.height ? 
+          this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height) : null;
+        
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        
+        // Restore canvas properties after resize
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.globalCompositeOperation = 'source-over';
+        
+        // Restore the drawing if it existed
+        if (imageData) {
+          this.ctx.putImageData(imageData, 0, 0);
+        }
+      }
+
+      connectWebSocket() {
+        this.socket = io();
+        
+        this.socket.on('connect', () => {
+          console.log('Connected to WebSocket');
+          this.socket.emit('subscribe', {
+            events: ['hand_detected', 'hand_lost', 'hand_moved', 'frame_processed']
+          });
+        });
+
+        this.socket.on('event', (eventData) => {
+          this.handleHandEvent(eventData);
+        });
+
+        this.socket.on('disconnect', () => {
+          console.log('Disconnected from WebSocket');
+        });
+      }
+
+      handleHandEvent(eventData) {
+        if (eventData.type === 'frame_processed') {
+          this.handData = eventData.data.hands || [];
+          this.updateHandIndicators();
+          this.processHandGestures();
+        }
+      }
+
+      updateHandIndicators() {
+        // Clear existing indicators
+        this.handIndicators.forEach(indicator => {
+          if (indicator.parentNode) {
+            indicator.parentNode.removeChild(indicator);
+          }
+        });
+        this.handIndicators.clear();
+
+        // Create indicators for current hands
+        this.handData.forEach((hand, index) => {
+          const indicator = document.createElement('div');
+          indicator.className = 'hand-indicator';
+          indicator.id = `hand-${hand.hand_id || index}`;
+          
+          // Use index finger tip for pointing, fallback to palm center
+          let x, y;
+          if (hand.fingertips && hand.fingertips.index) {
+            x = hand.fingertips.index.x * this.canvas.width;
+            y = hand.fingertips.index.y * this.canvas.height;
+          } else if (hand.landmarks && hand.landmarks[8]) {
+            x = hand.landmarks[8].x * this.canvas.width;
+            y = hand.landmarks[8].y * this.canvas.height;
+          } else {
+            x = hand.palm_center.x * this.canvas.width;
+            y = hand.palm_center.y * this.canvas.height;
+          }
+          
+          indicator.style.left = x + 'px';
+          indicator.style.top = y + 'px';
+          
+          document.body.appendChild(indicator);
+          this.handIndicators.set(hand.hand_id || index, indicator);
+        });
+      }
+
+      processHandGestures() {
+        let drawingHand = null;
+        let gestureStatus = "POINT WITH ONE FINGER TO PAINT";
+        
+        for (const hand of this.handData) {
+          const fingerCount = this.countExtendedFingers(hand);
+          const handId = hand.hand_id || 0;
+          const indicator = this.handIndicators.get(handId);
+          
+          // Simple logic: 1 finger = draw, anything else = stop
+          if (fingerCount === 1) {
+            drawingHand = hand;
+            gestureStatus = "PAINTING WITH RAINBOW COLORS ✨";
+            if (indicator) {
+              indicator.classList.add('drawing');
+            }
+            break; // Use first single finger hand found
+          } else if (fingerCount === 0) {
+            gestureStatus = "FIST DETECTED - PAINTING STOPPED ✊";
+            if (indicator) {
+              indicator.classList.remove('drawing');
+            }
+          } else if (fingerCount >= 2) {
+            gestureStatus = `${fingerCount} FINGERS - PAINTING STOPPED ✋`;
+            if (indicator) {
+              indicator.classList.remove('drawing');
+            }
+          }
+        }
+
+        // Update UI
+        document.getElementById('gestureStatus').textContent = gestureStatus;
+
+        // Handle drawing
+        if (drawingHand) {
+          this.handleDrawing(drawingHand);
+        } else {
+          this.stopDrawing();
+        }
+      }
+
+      countExtendedFingers(hand) {
+        if (!hand.landmarks || hand.landmarks.length < 21) {
+          return 0;
+        }
+
+        const landmarks = hand.landmarks;
+        let extendedCount = 0;
+
+        // MediaPipe hand landmark indices
+        const fingers = [
+          { tip: 4, joint: 3 },   // Thumb
+          { tip: 8, joint: 6 },   // Index  
+          { tip: 12, joint: 10 }, // Middle
+          { tip: 16, joint: 14 }, // Ring
+          { tip: 20, joint: 18 }  // Pinky
+        ];
+
+        for (let i = 0; i < fingers.length; i++) {
+          const tip = landmarks[fingers[i].tip];
+          const joint = landmarks[fingers[i].joint];
+          
+          if (i === 0) {
+            // Thumb: check if tip is to the right/left of joint (extended sideways)
+            const tipDistance = Math.abs(tip.x - landmarks[0].x); // Distance from wrist
+            const jointDistance = Math.abs(joint.x - landmarks[0].x);
+            if (tipDistance > jointDistance * 1.2) {
+              extendedCount++;
+            }
+          } else {
+            // Other fingers: check if tip is above joint (extended upward)
+            if (tip.y < joint.y - 0.03) { // Y decreases upward, with threshold
+              extendedCount++;
+            }
+          }
+        }
+
+        return extendedCount;
+      }
+
+      getRainbowColor() {
+        // Create rainbow HSL color and convert to RGB
+        this.hue = (this.hue + this.hueSpeed) % 360;
+        return `hsl(${this.hue}, 100%, 60%)`;
+      }
+
+      handleDrawing(hand) {
+        // Get drawing position from index finger tip or palm center
+        let x, y;
+        if (hand.fingertips && hand.fingertips.index) {
+          x = hand.fingertips.index.x * this.canvas.width;
+          y = hand.fingertips.index.y * this.canvas.height;
+        } else if (hand.landmarks && hand.landmarks[8]) {
+          x = hand.landmarks[8].x * this.canvas.width;
+          y = hand.landmarks[8].y * this.canvas.height;
+        } else {
+          x = hand.palm_center.x * this.canvas.width;
+          y = hand.palm_center.y * this.canvas.height;
+        }
+
+        if (!this.isDrawing) {
+          // Start new stroke
+          this.isDrawing = true;
+          this.lastX = x;
+          this.lastY = y;
+          
+          // Draw initial rainbow dot
+          this.ctx.beginPath();
+          this.ctx.arc(x, y, this.brushSize / 2, 0, Math.PI * 2);
+          this.ctx.fillStyle = this.getRainbowColor();
+          this.ctx.fill();
+        } else {
+          // Continue stroke - only draw if there's meaningful movement
+          const dx = x - this.lastX;
+          const dy = y - this.lastY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance > 2) { // Minimum movement threshold
+            // Create rainbow gradient for the stroke
+            const gradient = this.ctx.createLinearGradient(this.lastX, this.lastY, x, y);
+            gradient.addColorStop(0, this.getRainbowColor());
+            gradient.addColorStop(1, this.getRainbowColor());
+            
+            this.ctx.beginPath();
+            this.ctx.moveTo(this.lastX, this.lastY);
+            this.ctx.lineTo(x, y);
+            this.ctx.strokeStyle = gradient;
+            this.ctx.lineWidth = this.brushSize;
+            this.ctx.stroke();
+            
+            this.lastX = x;
+            this.lastY = y;
+          }
+        }
+      }
+
+      stopDrawing() {
+        this.isDrawing = false;
+      }
+
+      clearCanvas() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+    }
+
+    // Initialize the finger paint app
+    window.addEventListener('load', () => {
+      new FingerPaint();
+    });
+
+    // Add keyboard shortcut for clearing (for testing)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'c' || e.key === 'C') {
+        const canvas = document.getElementById('paintCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    });
+  </script>
+</body>
+
+</html>

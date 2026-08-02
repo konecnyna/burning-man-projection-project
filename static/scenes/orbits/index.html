@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- saved from url=(0030)https://hopalongvr.dghost.net/ -->
+<html lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>Orbits Visualizer - WebVR</title>
+  <meta property="title" content="Barry Martin&#39;s Hopalong Orbits Visualizer - WebVR">
+  <meta property="description"
+    content="An interactive flight through attractor orbits generated using Barry Martin&#39;s Hopalong formula.">
+
+  <meta property="og:title" content="Orbits Visualizer">
+  <meta property="og:description"
+    content="An interactive flight through attractor orbits generated using Barry Martin&#39;s Hopalong formula.">
+
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <style>
+    body {
+      background-color: #000000;
+      margin: 0px;
+      overflow: hidden;
+      font-family: Monospace;
+      font-size: 13px;
+      text-align: center;
+      font-weight: bold;
+      text-align: center;
+      position: fixed;
+      height: 100%;
+      width: 100%;
+    }
+
+    a {
+      color: #ffffaa;
+    }
+
+    #render-canvas {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    #info {
+      color: #fff;
+      position: absolute;
+      top: 0px;
+      width: 100%;
+      padding: 5px;
+      z-index: 100;
+    }
+
+    #about {
+      text-align: left;
+      z-index: 110;
+      position: absolute;
+      top: 25px;
+      left: 5px;
+      display: none;
+      width: 400px;
+      color: #fff;
+      background: #121212;
+      opacity: 0.8;
+      border-radius: 20px;
+      padding: 16px
+    }
+
+    #aboutlink {
+      z-index: 110;
+      position: absolute;
+      top: 5px;
+      left: 5px;
+    }
+  </style>
+
+</head>
+
+<body>
+  <canvas id="render-canvas" width="2042" height="1868" style="width: 1021px; height: 934px;"></canvas>
+
+  <script src="./js/Three.js"></script>
+  <script src="./js/ColorConverter.js"></script>
+  <script src="./js/Detector.js"></script>
+  <script src="./js/RequestAnimationFrame.js"></script>
+  
+  <script src="/static/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+
+</html>

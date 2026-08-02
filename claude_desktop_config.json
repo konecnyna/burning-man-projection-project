@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "apple-notifier": {
+      "command": "apple-notifier-mcp"
+    }
+  }
+}

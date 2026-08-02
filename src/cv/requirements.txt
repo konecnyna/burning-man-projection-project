@@ -1,6 +1,0 @@
-opencv-python==4.10.0.84
-cvzone==1.6.1
-mediapipe==0.10.14
-setuptools==70.0.0
-pynput==1.7.7
-python_socketio==5.11.3
