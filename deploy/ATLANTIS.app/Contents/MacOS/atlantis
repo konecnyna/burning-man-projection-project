@@ -1,0 +1,14 @@
+#!/bin/bash
+#
+# Bundle executable. Resolves the repo relative to its own location and hands
+# off to the real launcher, so the repo can move without editing anything.
+#
+#   deploy/ATLANTIS.app/Contents/MacOS/atlantis  ->  ../../../..  = repo root
+#
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../../../.." && pwd)"
+cd "$REPO" || exit 1
+# exec so this process is replaced: launchd tracks the real PID, and the
+# bundle remains the responsible process for TCC purposes.
+exec "$REPO/start-atlantis.sh"

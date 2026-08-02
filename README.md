@@ -41,6 +41,14 @@ To make the machine boot into the app and stay in it:
 ./deploy/verify-kiosk.sh               # preflight check, exit 0 = safe to leave
 ```
 
+Developing over SSH? Camera access needs the console session — see
+[DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh):
+
+```bash
+./deploy/kiosk-ctl.sh console    # launch via Terminal.app, camera works
+./deploy/kiosk-ctl.sh status     # session, launcher, health, camera
+```
+
 Then check it's alive:
 
 ```bash

@@ -15,10 +15,22 @@
     <key>Label</key>
     <string>com.atlantis.kiosk</string>
 
-    <!-- The one supported way to start the app. -->
+    <!--
+      Launch through the app bundle, not start-atlantis.sh directly.
+
+      macOS attributes camera access to the "responsible process". Launching
+      the script directly makes that com.apple.python3, which holds no TCC
+      grant and declares no NSCameraUsageDescription, so the camera request is
+      denied silently and never prompts -- the kiosk boots but never sees a
+      hand. The bundle gives the kiosk its own TCC identity that can be
+      prompted for once and then persists.
+
+      The bundle executable execs start-atlantis.sh, so everything downstream
+      (single-instance guard, venv, port, logging) is unchanged.
+    -->
     <key>ProgramArguments</key>
     <array>
-        <string>__ATLANTIS_DIR__/start-atlantis.sh</string>
+        <string>__ATLANTIS_DIR__/deploy/ATLANTIS.app/Contents/MacOS/atlantis</string>
     </array>
 
     <key>WorkingDirectory</key>

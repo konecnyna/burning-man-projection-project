@@ -17,10 +17,21 @@
 #   Aqua        -> console session, everything works
 #   Background  -> SSH session, camera and window will not
 #
-# The fix is to never launch the app from the SSH session itself. Instead,
-# drive the LaunchAgent, which lives in gui/<uid> — the Aqua session. That
-# works over SSH and needs no sudo, because you are targeting your own GUI
-# domain.
+# There are two ways round it, and they are good at different things.
+#
+#   'console'  Ask Terminal.app on the console to run the launcher, over Apple
+#              Events. Terminal holds a camera grant, and macOS attributes
+#              camera access to the responsible process -- so the python child
+#              inherits it and THE CAMERA WORKS. Requires Terminal.app to
+#              already be running on the console (it is, if you are screen
+#              sharing). This is the development path.
+#
+#   'start'    Drive the LaunchAgent in gui/<uid>. Survives logout, restarts on
+#              crash via KeepAlive, and is what runs at boot. But launchd is
+#              the responsible process, so there is NO CAMERA. This is the
+#              production/supervision path.
+#
+# Neither needs sudo.
 #
 # Usage:
 #   ./deploy/kiosk-ctl.sh status     # where it is running, health, camera
@@ -28,6 +39,8 @@
 #   ./deploy/kiosk-ctl.sh stop       # stop it
 #   ./deploy/kiosk-ctl.sh restart    # restart in place (most useful after edits)
 #   ./deploy/kiosk-ctl.sh logs       # follow the application log
+#   ./deploy/kiosk-ctl.sh console    # start via Terminal.app on the console.
+#                                    # THE ONE THAT GETS YOU A CAMERA OVER SSH.
 #   ./deploy/kiosk-ctl.sh headless   # run here in the SSH session, no window,
 #                                    # no camera -- for server-side testing only
 #
@@ -87,12 +100,14 @@ cmd_status() {
     local pid; pid=$(app_pid)
     if [ -n "$pid" ]; then
         ok "running, pid $pid, up $(ps -o etime= -p "$pid" | tr -d ' ')"
-        # Which session is the app itself in? That determines camera access.
-        if launchctl print "$DOMAIN" 2>/dev/null | grep -q "\b$pid\b"; then
-            ok "hosted in the Aqua session (camera can work)"
+        # Compare against the agent's OWN pid. Grepping the whole gui-domain
+        # dump for the number gives false positives.
+        local agent_pid
+        agent_pid=$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null | awk -F'= ' '/^\tpid = /{print $2; exit}')
+        if [ -n "$agent_pid" ] && [ "$agent_pid" = "$pid" ]; then
+            echo "        launched by: LaunchAgent (survives logout, no camera)"
         else
-            warn "not hosted by the GUI domain — likely started from a shell"
-            echo "        If it was started over SSH, the camera will not work."
+            echo "        launched by: a shell or Terminal.app (not launchd-supervised)"
         fi
     else
         warn "not running"
@@ -108,9 +123,18 @@ cmd_status() {
     else
         warn "no camera hardware detected"
     fi
-    if grep -q 'Could not open camera' "$REPO_DIR/logs/atlantis.log" 2>/dev/null; then
-        local last; last=$(grep 'Could not open camera' "$REPO_DIR/logs/atlantis.log" | tail -1 | cut -c1-19)
-        warn "last camera failure logged at $last"
+    # Ground truth for "is the camera actually open": did the most recent
+    # 'Starting hand tracker' get followed by a failure, or not? Session and
+    # launch method are only proxies -- this is the real answer.
+    local tail_log; tail_log=$(awk '/Starting hand tracker/{buf=""} {buf=buf"\n"$0} END{print buf}' \
+                               "$REPO_DIR/logs/atlantis.log" 2>/dev/null)
+    if [ -z "$tail_log" ]; then
+        warn "no tracker start found in the log"
+    elif echo "$tail_log" | grep -q 'Could not open camera'; then
+        err "camera NOT open on the current run"
+        echo "        Launched over SSH? Use:  ./deploy/kiosk-ctl.sh console"
+    else
+        ok "camera opened on the current run — hand tracking is live"
     fi
 }
 
@@ -162,6 +186,50 @@ cmd_logs() {
     tail -f "$f"
 }
 
+cmd_console() {
+    # Terminal.app must already be running: launching a GUI app from a
+    # Background session hangs, so we check rather than try.
+    if ! pgrep -f 'Terminal.app/Contents/MacOS/Terminal' >/dev/null 2>&1; then
+        err "Terminal.app is not running on the console."
+        err "Open it there (or over Screen Sharing) and run this again."
+        err "Without it, Apple Events would have to launch a GUI app from this"
+        err "background session, which hangs."
+        exit 1
+    fi
+
+    # Free the port first, or the launcher's single-instance guard refuses.
+    if agent_loaded; then
+        launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null
+        ok "stopped the LaunchAgent copy"
+        sleep 2
+    fi
+    local pid; pid=$(app_pid)
+    if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null; sleep 2
+        ps -p "$pid" >/dev/null 2>&1 && kill -9 "$pid" 2>/dev/null
+        ok "stopped existing process $pid"
+    fi
+
+    echo "  asking Terminal.app to launch it..."
+    osascript -e "tell application \"Terminal\" to do script \"cd '$REPO_DIR' && ./start-atlantis.sh\"" >/dev/null 2>&1 &
+    local osa=$!
+    local i
+    for i in $(seq 1 25); do kill -0 $osa 2>/dev/null || break; sleep 1; done
+    if kill -0 $osa 2>/dev/null; then
+        kill -9 $osa 2>/dev/null
+        err "Apple Events call hung. Is Terminal.app really running on the console?"
+        exit 1
+    fi
+
+    sleep 14
+    if grep -q 'Could not open camera' <(tail -5 "$REPO_DIR/logs/atlantis.log" 2>/dev/null); then
+        warn "started, but the camera still failed — see logs/atlantis.log"
+    else
+        ok "started via Terminal.app; camera grant inherited"
+    fi
+    cmd_status
+}
+
 cmd_headless() {
     warn "Headless mode: no window and NO CAMERA (this is an SSH session)."
     warn "Use this only to exercise the server, routes and offline checks."
@@ -172,11 +240,12 @@ cmd_headless() {
 
 case "${1:-status}" in
     status)   cmd_status ;;
+    console)  cmd_console ;;
     start)    cmd_start ;;
     stop)     cmd_stop ;;
     restart)  cmd_restart ;;
     logs)     cmd_logs ;;
     headless) cmd_headless ;;
-    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//' ;;
-    *) err "Unknown command: $1"; echo "Try: status | start | stop | restart | logs | headless"; exit 2 ;;
+    -h|--help) sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) err "Unknown command: $1"; echo "Try: status | console | start | stop | restart | logs | headless"; exit 2 ;;
 esac

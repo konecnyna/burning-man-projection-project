@@ -93,7 +93,28 @@ fi
 
 [ "$fail" = 1 ] && { echo; err "Validation failed. Nothing changed."; exit 1; }
 
-# ------------------------------------------------------------------ 2. render
+# ------------------------------------------------------------- 2. app bundle
+step "Preparing the app bundle (TCC identity for camera access)"
+
+BUNDLE="$REPO_DIR/deploy/ATLANTIS.app"
+if [ -d "$BUNDLE" ]; then
+    ok "bundle present"
+    run chmod +x "$BUNDLE/Contents/MacOS/atlantis"
+    # Ad-hoc signature gives TCC a stable identity to attach the grant to.
+    # Re-sign every install: the cdhash changes whenever the bundle changes.
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "      would ad-hoc sign $BUNDLE"
+    elif codesign --force --sign - --identifier xyz.atlantis.kiosk "$BUNDLE" 2>/dev/null; then
+        ok "ad-hoc signed as xyz.atlantis.kiosk"
+    else
+        warn "could not sign the bundle; camera prompting may not work"
+    fi
+else
+    err "missing $BUNDLE"
+    exit 1
+fi
+
+# ------------------------------------------------------------------ 3. render
 step "Installing the LaunchAgent"
 
 run mkdir -p "$AGENT_DIR" "$REPO_DIR/logs"
@@ -128,7 +149,7 @@ else
     exit 1
 fi
 
-# ------------------------------------------------------- 3. legacy conflicts
+# ------------------------------------------------------- 4. legacy conflicts
 step "Checking for conflicting autostart entries"
 
 # A Login Item pointing at the launcher would start a second copy that fights
@@ -178,7 +199,7 @@ else
     warn "left in place"
 fi
 
-# ------------------------------------------------------------------ 4. power
+# ------------------------------------------------------------------ 5. power
 step "Configuring power management (requires sudo)"
 
 echo "  The kiosk must never sleep, and must power back on after a power cut."
@@ -196,7 +217,7 @@ step "Disabling the screen saver"
 run defaults -currentHost write com.apple.screensaver idleTime -int 0
 did "screen saver disabled"
 
-# ----------------------------------------------------------------- 5. verify
+# ----------------------------------------------------------------- 6. verify
 step "Verifying"
 if [ "$DRY_RUN" = 1 ]; then
     echo "      would run deploy/verify-kiosk.sh"

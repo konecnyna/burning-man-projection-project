@@ -228,13 +228,13 @@ it for real, run the uninstaller or `launchctl bootout`.
 
 ## 5b. Working over SSH
 
-Production is reboot-into-the-app. But SSH is useful for development and
-debugging, and there is one macOS rule that governs everything here.
+Production is reboot-into-the-app. SSH is for development and debugging, and
+there is one macOS rule that governs everything here.
 
 ### The rule
 
 An SSH session runs in macOS's **Background** session. The console login runs
-in **Aqua**. Check which you are in:
+in **Aqua**:
 
 ```bash
 launchctl managername
@@ -242,37 +242,67 @@ launchctl managername
 #   Background -> SSH session
 ```
 
-Anything launched *directly* from an SSH session inherits Background, and
-therefore:
+Anything launched *directly* from SSH inherits Background and gets **no camera
+and no reliable window**. macOS attributes camera access to the **responsible
+process**; for a launchd- or SSH-spawned interpreter that is
+`com.apple.python3`, which holds no TCC grant and declares no
+`NSCameraUsageDescription`, so the request is denied **silently and never
+prompts**. OpenCV reports:
 
-- **No camera.** TCC-protected resources are gated on the session, and a
-  Background process has nowhere to draw a permission prompt. The request dies
-  as `NotDetermined` and OpenCV reports
-  `not authorized to capture video (status 0)` — which reads like a permission
-  denial but actually means "never asked". Granting camera access to
-  Terminal.app does not help; that is a different session.
-- **No reliable window.** A GUI app hosted in a Background session may not
-  render and tends to exit without explanation.
-
-### What does work
-
-Do not launch the app from the SSH session. Drive the **LaunchAgent** instead:
-it lives in `gui/<uid>`, which *is* the Aqua session. This works over SSH and
-needs **no sudo**, because you are targeting your own GUI domain.
-
-```bash
-./deploy/kiosk-ctl.sh status     # session, agent, process, health, camera
-./deploy/kiosk-ctl.sh start      # start in the Aqua session
-./deploy/kiosk-ctl.sh restart    # bounce it after a code change
-./deploy/kiosk-ctl.sh stop
-./deploy/kiosk-ctl.sh logs       # follow logs/atlantis.log
+```
+OpenCV: not authorized to capture video (status 0), requesting...
 ```
 
-`restart` is the one you want after editing code — it kickstarts the agent in
-place, so the app comes back with a real window and working camera while you
-stay on SSH.
+`status 0` is `NotDetermined` — never asked — not "denied". Granting camera
+access to Terminal.app in System Settings does not help a launchd-spawned
+process; that grant belongs to Terminal, not to python.
 
-Underneath, those are:
+### The three launch paths
+
+| Path | Camera | Survives logout / restarts on crash | Use for |
+|---|---|---|---|
+| `kiosk-ctl.sh console` | ✅ **yes** | ❌ no | **development over SSH** |
+| `kiosk-ctl.sh start` (LaunchAgent) | ❌ no | ✅ yes | boot / unattended |
+| `kiosk-ctl.sh headless` | ❌ no | ❌ no | server-side testing |
+
+None of them need sudo.
+
+### Getting a camera over SSH — `console`
+
+```bash
+./deploy/kiosk-ctl.sh console
+```
+
+This asks **Terminal.app on the console** to run the launcher, over Apple
+Events. Terminal holds a camera grant (`kTCCServiceCamera`, `auth_value=2`),
+and because macOS attributes access to the responsible process, the python
+child **inherits it and the camera works**.
+
+Verified from an SSH session: 150 `frame_processed` events in 5 s at 30 fps,
+with the camera open.
+
+**Requirement: Terminal.app must already be running on the console.** It is if
+you are screen sharing. If it is not, Apple Events has to launch a GUI app from
+a background session, which *hangs* — `console` checks for this and tells you
+rather than hanging.
+
+Screen Sharing plus SSH is a good combination: screen share to keep Terminal
+alive and to see the output, SSH for everything else.
+
+### The supervision path — `start` / `restart`
+
+```bash
+./deploy/kiosk-ctl.sh start      # bootstrap the agent into gui/<uid>
+./deploy/kiosk-ctl.sh restart    # kickstart in place
+./deploy/kiosk-ctl.sh stop
+```
+
+The LaunchAgent lives in `gui/<uid>`, which *is* the Aqua session, so this
+works over SSH with no sudo — you are targeting your own GUI domain. Verified:
+an agent bootstrapped from SSH reports `managername=Aqua`.
+
+It gets you `RunAtLoad` + `KeepAlive`, but **not** the camera, because launchd
+is the responsible process. Underneath:
 
 ```bash
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.atlantis.kiosk.plist
@@ -280,27 +310,51 @@ launchctl kickstart -k gui/$(id -u)/com.atlantis.kiosk
 launchctl bootout   gui/$(id -u)/com.atlantis.kiosk
 ```
 
-Verified: an agent bootstrapped from an SSH session reports
-`managername=Aqua`.
+### Knowing which you have
+
+```bash
+./deploy/kiosk-ctl.sh status
+```
+
+It reports the shell's session, whether the agent is loaded, **who launched the
+running process**, health, and — the part that matters — whether the camera
+actually opened on the current run. That last check reads the log rather than
+inferring from the session, so it is ground truth:
+
+```
+Camera
+  ✓ hardware present: UVC Camera VendorID_3141 ProductID_25447
+  ✓ camera opened on the current run — hand tracking is live
+```
 
 ### Server-side testing without a window
-
-To exercise routes, the offline check or the event plumbing — no window, no
-camera needed:
 
 ```bash
 ./deploy/kiosk-ctl.sh headless
 ```
 
-That runs in the SSH session deliberately. Hand tracking will not work; that is
-expected and not a bug to chase.
+Runs in the SSH session on purpose. No window, no camera — for exercising
+routes, the offline check and event plumbing. Hand tracking will not work and
+that is expected.
 
-### Camera permission, first time
+### Known limitation: camera at boot
 
-The first Aqua-session launch may raise a camera prompt **on the physical
-display**. Someone has to click Allow there once; it cannot be answered over
-SSH. After that the grant persists for that interpreter — rebuilding `venv/`
-creates a new binary and requires a fresh grant.
+The LaunchAgent path has no camera, so **a machine that boots straight into the
+app will not see hands** until someone starts it from the console. Approaches
+tried and rejected:
+
+- **App bundle wrapper** (`deploy/ATLANTIS.app`) — built with
+  `NSCameraUsageDescription` and ad-hoc signed, but its executable is a shell
+  script, so the kernel's code identity is bash, not the bundle. TCC never
+  created an entry for it. A real bundle identity needs a compiled executable,
+  which means a build step.
+- **PPPC configuration profile** — Apple excludes Camera and Microphone from
+  profile-based pre-authorization.
+
+This is unresolved. Until it is, the reliable sequence for an event is: boot,
+then start once from the console (or over Screen Sharing) with
+`./deploy/kiosk-ctl.sh console`.
+
 
 ---
 

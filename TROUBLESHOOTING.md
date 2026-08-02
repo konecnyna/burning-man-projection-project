@@ -88,13 +88,18 @@ gated on the session, and a Background process has nowhere to draw a permission
 prompt — so the request dies as `NotDetermined`, no matter how many times you
 restart it, and regardless of what Terminal.app has been granted.
 
-Do not launch the app from SSH. Drive the LaunchAgent, which lives in the Aqua
-session:
+**To get a camera over SSH**, have Terminal.app on the console launch it. macOS
+attributes camera access to the responsible process, and Terminal holds a
+grant, so the python child inherits it:
 
 ```bash
-./deploy/kiosk-ctl.sh restart
-./deploy/kiosk-ctl.sh status     # tells you which session everything is in
+./deploy/kiosk-ctl.sh console    # <- the one that gets you a camera
+./deploy/kiosk-ctl.sh status     # says whether the camera actually opened
 ```
+
+Terminal.app must already be running on the console (it is, if you are screen
+sharing). `kiosk-ctl.sh start` uses the LaunchAgent instead — supervised and
+survives logout, but **no camera**, because launchd is the responsible process.
 
 Full explanation in [DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh).
 
@@ -312,7 +317,8 @@ captured by the agent. Some failure paths are silent regardless:
 | Scene navigation | **N**/**→** next, **P**/**←** previous (keyboard only) |
 | Blocked off-box loads | `curl -s localhost:5001/api/csp-violations \| python3 -m json.tool` |
 | Open the UI in a real browser with DevTools | `http://localhost:<port>` in Safari or Chrome |
-| Control the app over SSH | `./deploy/kiosk-ctl.sh status\|start\|stop\|restart\|logs` |
+| Control the app over SSH | `./deploy/kiosk-ctl.sh status\|console\|start\|stop\|restart\|logs` |
+| Camera working over SSH | `./deploy/kiosk-ctl.sh console` (needs Terminal.app open on the console) |
 | Which session am I in? | `launchctl managername` — `Aqua` = console, `Background` = SSH |
 
 There is no debug UI, video feed, or on-screen HUD — that machinery was removed

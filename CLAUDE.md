@@ -156,12 +156,19 @@ Things that will waste your time if you don't know them.
   `hand_id` as durable.
 - **The parent filters hands to `confidence.overall >= 0.7`** before scene
   handlers see them; scenes with their own WebSocket get unfiltered data.
-- **An SSH session cannot run this app properly.** SSH is macOS's `Background`
-  session; the console is `Aqua`. Anything launched from SSH gets no camera
-  (TCC has nowhere to prompt, so OpenCV reports "not authorized, status 0")
-  and no reliable window. Check with `launchctl managername`. Drive the
-  LaunchAgent instead — `./deploy/kiosk-ctl.sh restart` — which runs in Aqua
-  and needs no sudo. See [DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh).
+- **Launching from SSH gets you no camera.** SSH is macOS's `Background`
+  session; the console is `Aqua`. macOS attributes camera access to the
+  *responsible process*, which for a launchd/SSH-spawned interpreter is
+  `com.apple.python3` — no TCC grant, no `NSCameraUsageDescription`, so it is
+  denied silently and never prompts. OpenCV says "not authorized, status 0",
+  which means *never asked*, not denied.
+  **Fix:** `./deploy/kiosk-ctl.sh console` — asks Terminal.app on the console
+  to launch it, so the python child inherits Terminal's camera grant. Needs
+  Terminal.app already open on the console (true when screen sharing).
+  `kiosk-ctl.sh start` uses the LaunchAgent: supervised and survives logout,
+  but no camera. `kiosk-ctl.sh status` tells you which you have and whether
+  the camera actually opened. See
+  [DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh).
 - **Only ever run one instance.** Two copies fight over the port and camera.
   `start-atlantis.sh` refuses to start a second, via a pidfile and a port
   check.
