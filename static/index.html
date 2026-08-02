@@ -185,26 +185,20 @@
       box-shadow: 0 0 20px #ff8b94;
     }
 
+    /* Not a bar: just a transparent frame that parks each HUD box at the
+       bottom corners. A full-width opaque slab sat on top of the artwork;
+       discrete translucent boxes let the scene show through. */
     .status-bar {
       position: fixed;
       bottom: 20px;
       left: 20px;
       right: 20px;
-      background: #001100;
-      border: 2px solid #00ff41;
-      border-radius: 10px;
-      box-shadow:
-        0 0 20px rgba(0, 255, 65, 0.3),
-        inset 0 0 20px rgba(0, 255, 65, 0.1);
-      padding: 10px 20px;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-end;
+      gap: 12px;
       z-index: 50;
-      font-family: 'Share Tech Mono', monospace;
-      color: #00ff41;
-      max-height: 60px;
-      overflow: visible;
+      pointer-events: none;   /* audience input is camera-only */
     }
 
     .idle-warning {
@@ -212,12 +206,14 @@
       bottom: 100px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(51, 34, 0, 0.95);
-      border: 2px solid var(--pipboy-orange);
+      background: rgba(51, 34, 0, 0.55);
+      border: 1px solid rgba(255, 170, 60, 0.6);
       border-radius: 8px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       box-shadow:
-        0 0 20px var(--pipboy-orange-glow),
-        inset 0 0 15px rgba(255, 170, 60, 0.1);
+        0 0 16px var(--pipboy-orange-glow),
+        inset 0 0 14px rgba(255, 170, 60, 0.08);
       padding: 12px 20px;
       z-index: 60;
       font-family: 'Share Tech Mono', monospace;
@@ -254,6 +250,17 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      padding: 8px 14px;
+      background: rgba(0, 17, 0, 0.42);
+      border: 1px solid rgba(0, 255, 65, 0.45);
+      border-radius: 8px;
+      /* Frosted rather than solid, so the scene reads through the box. */
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      box-shadow:
+        0 0 14px rgba(0, 255, 65, 0.15),
+        inset 0 0 14px rgba(0, 255, 65, 0.05);
+      font-family: 'Share Tech Mono', monospace;
       color: #00ff41;
       text-shadow: 0 0 5px #00ff41;
     }
@@ -498,12 +505,14 @@
       top: -100px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(0, 51, 20, 0.95);
-      border: 2px solid var(--pipboy-green);
+      background: rgba(0, 51, 20, 0.55);
+      border: 1px solid rgba(0, 255, 65, 0.6);
       border-radius: 8px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       box-shadow:
-        0 0 20px rgba(0, 255, 65, 0.5),
-        inset 0 0 15px rgba(0, 255, 65, 0.1);
+        0 0 16px rgba(0, 255, 65, 0.35),
+        inset 0 0 14px rgba(0, 255, 65, 0.08);
       padding: 12px 20px;
       z-index: 65;
       font-family: 'Share Tech Mono', monospace;
@@ -626,6 +635,126 @@
     @keyframes dialPulse {
       0%, 100% { opacity: 1; }
       50%      { opacity: 0.55; }
+    }
+
+
+    /* ------------------------------------------------------------------
+       "Keep this scene" — appears in the last 15s of a scene. Hovering a
+       hand over it holds a confirm ring, exactly like the onboarding
+       "move your hand here to begin" dial, and pauses the scene timer for
+       as long as the hand stays there.
+       ------------------------------------------------------------------ */
+    .extend-prompt {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 18px;
+      background: rgba(0, 17, 0, 0.42);
+      border: 1px solid rgba(0, 255, 65, 0.45);
+      border-radius: 10px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      box-shadow:
+        0 0 14px rgba(0, 255, 65, 0.15),
+        inset 0 0 14px rgba(0, 255, 65, 0.05);
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--pipboy-green);
+      text-shadow: 0 0 6px var(--pipboy-green);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      z-index: 55;
+      pointer-events: none;
+    }
+
+    .extend-prompt.visible {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Hand is over it: brighten and stop the attract pulse. */
+    .extend-prompt.hovered {
+      background: rgba(0, 34, 0, 0.6);
+      border-color: var(--pipboy-green);
+      box-shadow:
+        0 0 26px rgba(0, 255, 65, 0.45),
+        inset 0 0 18px rgba(0, 255, 65, 0.12);
+    }
+
+    .extend-text { display: flex; flex-direction: column; line-height: 1.25; }
+    .extend-label { font-size: 0.95rem; letter-spacing: 0.08em; }
+    .extend-hint  { font-size: 0.7rem; opacity: 0.7; letter-spacing: 0.06em; }
+
+    .extend-dial {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+
+    .extend-dial .extend-number {
+      position: absolute;
+      font-size: 1.05rem;
+      font-weight: bold;
+      color: var(--pipboy-green);
+      text-shadow: 0 0 10px var(--pipboy-green);
+      z-index: 1;
+      line-height: 1;
+    }
+
+    .extend-dial svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: rotate(-90deg);
+    }
+
+    .extend-dial .extend-track { opacity: 0.25; }
+
+    .extend-dial .extend-ring {
+      transition: stroke-dashoffset 0.06s linear;  /* 50ms tick, so it fills smoothly */
+      stroke-linecap: round;
+    }
+
+    /* Attract loop while it waits to be noticed. */
+    .extend-prompt.visible:not(.hovered) {
+      animation: extendAttract 2s ease-in-out infinite;
+    }
+
+    @keyframes extendAttract {
+      0%, 100% { box-shadow: 0 0 14px rgba(0, 255, 65, 0.15), inset 0 0 14px rgba(0, 255, 65, 0.05); }
+      50%      { box-shadow: 0 0 24px rgba(0, 255, 65, 0.35), inset 0 0 18px rgba(0, 255, 65, 0.10); }
+    }
+
+    /* Cursor showing where the tracker thinks the hand is. Only rendered
+       while the prompt is up, so it never sits over the artwork. */
+    .extend-hand-cursor {
+      position: fixed;
+      width: 22px;
+      height: 22px;
+      margin: -11px 0 0 -11px;
+      border: 2px solid var(--pipboy-green);
+      border-radius: 50%;
+      background: rgba(0, 255, 65, 0.25);
+      box-shadow: 0 0 12px var(--pipboy-green);
+      pointer-events: none;
+      z-index: 9999;
+      display: none;
+      transition: transform 0.1s ease, background 0.2s ease;
+    }
+
+    .extend-hand-cursor.engaged {
+      background: rgba(0, 255, 65, 0.6);
+      transform: scale(1.5);
+      box-shadow: 0 0 22px var(--pipboy-green);
     }
 
     /* Glitch transition overlay */
@@ -826,6 +955,26 @@
         <div id="overlayExtraContent"></div>
       </div>
     </div>
+
+
+    <!-- "Keep this scene": shown in the last 15s, confirmed by hand-hold -->
+    <div class="extend-prompt hud-element" id="extendPrompt">
+      <div class="extend-dial" id="extendDial">
+        <div class="extend-number" id="extendNumber">3</div>
+        <svg width="48" height="48">
+          <circle class="extend-track" cx="24" cy="24" r="20" fill="none"
+                  stroke="var(--pipboy-green)" stroke-width="3" />
+          <circle class="extend-ring" id="extendRing" cx="24" cy="24" r="20" fill="none"
+                  stroke="var(--pipboy-green)" stroke-width="3"
+                  stroke-dasharray="125.7" stroke-dashoffset="125.7" />
+        </svg>
+      </div>
+      <div class="extend-text">
+        <span class="extend-label">KEEP THIS SCENE</span>
+        <span class="extend-hint">hold your hand here</span>
+      </div>
+    </div>
+    <div class="extend-hand-cursor" id="extendHandCursor"></div>
 
     <!-- Persistent strip: what is playing and what is next -->
     <div class="status-bar hud-element" id="status-bar">
@@ -1418,7 +1567,9 @@
         this.sceneHandlers = {};
         this.cycleTimer = null;
         this.countdownTimer = null;
+        this._cyclePausedAt = null;
         this.currentSceneIframe = null;
+        this._extendInit();
         this.quickScene = 30
         this.defaultDuration = 45
         this.popularScene = 60
@@ -1563,6 +1714,8 @@
           clearInterval(this.countdownTimer);
           this.countdownTimer = null;
         }
+        this._cyclePausedAt = null;
+        this._extendHide();
         this._lastCountdownSecs = null;
         const number = document.getElementById('sceneCountdownNumber');
         const ring   = document.getElementById('sceneCountdownRing');
@@ -1615,12 +1768,20 @@
           number.textContent = '--';
           ring.style.strokeDashoffset = CIRCUMFERENCE;   // empty arc
           dial.classList.remove('ending');
+          this._extendHide();
           return;
         }
 
-        const elapsed   = (Date.now() - startedAt) / 1000;
+        // While the hand is held on "keep this scene" the clock is frozen,
+        // so measure to the pause instant rather than now.
+        const nowMs = this._cyclePausedAt || Date.now();
+        const elapsed   = (nowMs - startedAt) / 1000;
         const remaining = Math.max(0, scene.duration - elapsed);
         const secs      = Math.ceil(remaining);
+
+        // Offer the extend affordance near the end of the scene.
+        if (remaining <= this.EXTEND_VISIBLE_AT && remaining > 0) this._extendShow();
+        else this._extendHide();
 
         number.textContent = secs > 0 ? secs : 0;
 
@@ -1659,6 +1820,190 @@
         this.appState.setState({ sceneIndex: prevIndex });
         this.loadScene(this.scenes[prevIndex]);
         this.scheduleNextScene();
+      }
+
+
+      // ----------------------------------------------------------------
+      // "Keep this scene"
+      //
+      // Appears in the last EXTEND_VISIBLE_AT seconds. Holding a hand over
+      // it for EXTEND_HOLD_SECONDS restarts the scene's clock. While the
+      // hand is there the scene timer is PAUSED, so nobody loses the scene
+      // mid-confirmation.
+      //
+      // Same confirm pattern as the onboarding "move your hand here" dial.
+      // ----------------------------------------------------------------
+      _extendInit() {
+        this.EXTEND_VISIBLE_AT   = 15;    // seconds remaining
+        this.EXTEND_HOLD_SECONDS = 2.5;   // hold to confirm
+        this.EXTEND_RING_CIRC    = 125.7; // must match the markup
+        this._extendVisible  = false;
+        this._extendHovering = false;
+        this._extendStart    = null;
+        this._extendTimer    = null;
+      }
+
+      // Called on every hand update, whatever scene is running.
+      updateExtendAffordance(hands) {
+        const prompt = document.getElementById('extendPrompt');
+        const cursor = document.getElementById('extendHandCursor');
+        if (!prompt) return;
+
+        if (!this._extendVisible) {
+          if (cursor) cursor.style.display = 'none';
+          return;
+        }
+
+        const hand = hands && hands.length ? hands[0] : null;
+        if (!hand || !hand.palm_center) {
+          if (cursor) cursor.style.display = 'none';
+          this._extendStopHold();
+          return;
+        }
+
+        const x = hand.palm_center.x * window.innerWidth;
+        const y = hand.palm_center.y * window.innerHeight;
+
+        if (cursor) {
+          cursor.style.display = 'block';
+          cursor.style.left = x + 'px';
+          cursor.style.top  = y + 'px';
+        }
+
+        // Generous hit area: hand tracking is not a mouse.
+        const r = prompt.getBoundingClientRect();
+        const pad = 60;
+        const over = x >= r.left - pad && x <= r.right + pad &&
+                     y >= r.top  - pad && y <= r.bottom + pad;
+
+        if (over && !this._extendHovering)      this._extendStartHold();
+        else if (!over && this._extendHovering) this._extendStopHold();
+      }
+
+      _extendStartHold() {
+        this._extendHovering = true;
+        this._extendStart = Date.now();
+
+        const prompt = document.getElementById('extendPrompt');
+        const cursor = document.getElementById('extendHandCursor');
+        if (prompt) prompt.classList.add('hovered');
+        if (cursor) cursor.classList.add('engaged');
+
+        // Freeze the scene clock for as long as the hand is here.
+        this.pauseCycle();
+        this._extendTick();
+      }
+
+      _extendTick() {
+        if (!this._extendHovering) return;
+
+        const elapsed   = (Date.now() - this._extendStart) / 1000;
+        const remaining = Math.max(0, this.EXTEND_HOLD_SECONDS - elapsed);
+
+        const num  = document.getElementById('extendNumber');
+        const ring = document.getElementById('extendRing');
+        if (num)  num.textContent = Math.ceil(remaining);
+        if (ring) {
+          const filled = Math.min(1, elapsed / this.EXTEND_HOLD_SECONDS);
+          ring.style.strokeDashoffset = this.EXTEND_RING_CIRC * (1 - filled);
+        }
+
+        if (remaining > 0) {
+          this._extendTimer = setTimeout(() => this._extendTick(), 50);
+        } else {
+          this._extendConfirm();
+        }
+      }
+
+      _extendConfirm() {
+        this._extendStopHold({ resumeClock: false });
+        this._extendHide();
+        this.extendCurrentScene();
+      }
+
+      // resumeClock=false when confirming, because extendCurrentScene()
+      // restarts the clock itself.
+      _extendStopHold(opts) {
+        const resumeClock = !opts || opts.resumeClock !== false;
+        if (!this._extendHovering) return;
+        this._extendHovering = false;
+
+        if (this._extendTimer) {
+          clearTimeout(this._extendTimer);
+          this._extendTimer = null;
+        }
+
+        const prompt = document.getElementById('extendPrompt');
+        const cursor = document.getElementById('extendHandCursor');
+        const num    = document.getElementById('extendNumber');
+        const ring   = document.getElementById('extendRing');
+        if (prompt) prompt.classList.remove('hovered');
+        if (cursor) cursor.classList.remove('engaged');
+        if (num)  num.textContent = Math.ceil(this.EXTEND_HOLD_SECONDS);
+        if (ring) ring.style.strokeDashoffset = this.EXTEND_RING_CIRC;
+
+        if (resumeClock) this.resumeCycle();
+      }
+
+      _extendShow() {
+        if (this._extendVisible) return;
+        this._extendVisible = true;
+        const p = document.getElementById('extendPrompt');
+        if (p) p.classList.add('visible');
+      }
+
+      _extendHide() {
+        if (!this._extendVisible && !this._extendHovering) return;
+        this._extendVisible = false;
+        this._extendStopHold();
+        const p = document.getElementById('extendPrompt');
+        const c = document.getElementById('extendHandCursor');
+        if (p) p.classList.remove('visible');
+        if (c) c.style.display = 'none';
+      }
+
+      // ---- pause / resume the scene clock -----------------------------
+
+      pauseCycle() {
+        if (this._cyclePausedAt) return;
+        this._cyclePausedAt = Date.now();
+        if (this.cycleTimer) {
+          clearTimeout(this.cycleTimer);
+          this.cycleTimer = null;
+        }
+      }
+
+      resumeCycle() {
+        if (!this._cyclePausedAt) return;
+        const pausedFor = Date.now() - this._cyclePausedAt;
+        this._cyclePausedAt = null;
+
+        // Push the start time forward so the elapsed calculation ignores
+        // the paused interval, then reschedule for whatever is left.
+        const started = this.appState.get('sceneStartTime');
+        if (started) this.appState.setState({ sceneStartTime: started + pausedFor });
+
+        const scene = this.appState.get('currentScene');
+        if (!scene || scene.duration === 0) return;
+        const elapsed = (Date.now() - this.appState.get('sceneStartTime')) / 1000;
+        const left = Math.max(0, scene.duration - elapsed);
+        this.cycleTimer = setTimeout(() => this.nextScene(), left * 1000);
+      }
+
+      extendCurrentScene() {
+        const scene = this.appState.get('currentScene');
+        if (!scene) return;
+
+        this._cyclePausedAt = null;
+        if (this.cycleTimer) clearTimeout(this.cycleTimer);
+
+        this.appState.setState({ sceneStartTime: Date.now() });
+        this.cycleTimer = setTimeout(() => this.nextScene(), scene.duration * 1000);
+        this._lastCountdownSecs = null;   // let the 5s heads-up fire again
+
+        if (this.app && this.app.showToast) {
+          this.app.showToast(`Keeping ${scene.name || scene.id}`, 2500, '\u21BB');
+        }
       }
 
       async loadScene(scene) {
@@ -2098,6 +2443,11 @@
         const filteredHands = (hands || []).filter(hand => hand.confidence.overall >= .7);
         // Update hands state - this will trigger ModeManager via subscription
         this.appState.setState({ hands: filteredHands });
+
+        // Drive the "keep this scene" hover, whatever scene is running.
+        if (this.sceneManager && this.sceneManager.updateExtendAffordance) {
+          this.sceneManager.updateExtendAffordance(filteredHands);
+        }
       }
 
       initializeKeyboardShortcuts() {
