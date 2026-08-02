@@ -117,32 +117,37 @@ resizeCanvas();
 
 
 let config = {
+  // Upstream defaults from PavelDoGreat/WebGL-Fluid-Simulation.
+  // Deviating from these is what produced the washed-out, sluggish look:
+  // DENSITY_DISSIPATION was .4 (dye lingered and stacked toward white) and
+  // COLORFUL was false (one hue accumulated instead of cycling).
   SIM_RESOLUTION: 128,
   DYE_RESOLUTION: 1024,
   CAPTURE_RESOLUTION: 512,
-  DENSITY_DISSIPATION: .4,
-  VELOCITY_DISSIPATION: 0.08,
+  DENSITY_DISSIPATION: 1,
+  VELOCITY_DISSIPATION: 0.2,
   PRESSURE: 0.8,
   PRESSURE_ITERATIONS: 20,
-  CURL: 35,
-  SPLAT_RADIUS: 0.12,
-  SPLAT_FORCE: 3000,
+  CURL: 30,
+  SPLAT_RADIUS: 0.25,
+  SPLAT_FORCE: 6000,
   SHADING: true,
-  COLORFUL: false,
+  COLORFUL: true,
   COLOR_UPDATE_SPEED: 10,
   PAUSED: false,
   BACK_COLOR: { r: 0, g: 0, b: 0 },
   TRANSPARENT: false,
-  BLOOM: false,
-  BLOOM_ITERATIONS: 6,
-  BLOOM_RESOLUTION: 28,
-  BLOOM_INTENSITY: 0.000001,
-  BLOOM_THRESHOLD: 0.4,
+  BLOOM: true,
+  BLOOM_ITERATIONS: 8,
+  BLOOM_RESOLUTION: 256,
+  BLOOM_INTENSITY: 0.8,
+  BLOOM_THRESHOLD: 0.6,
   BLOOM_SOFT_KNEE: 0.7,
   SUNRAYS: true,
-  SUNRAYS_RESOLUTION: 50,
+  SUNRAYS_RESOLUTION: 196,
   SUNRAYS_WEIGHT: 1.0,
 }
+
 
 const sandConfig = {
   SIM_RESOLUTION: 1024,
@@ -1578,10 +1583,11 @@ function correctDeltaY(delta) {
 }
 
 function generateColor() {
-  let c = HSVtoRGB(Math.random(), 0.8, 0.9);
-  c.r *= 0.2;
-  c.g *= 0.2;
-  c.b *= 0.2;
+  // Upstream values: full saturation and value, scaled to 0.15.
+  let c = HSVtoRGB(Math.random(), 1.0, 1.0);
+  c.r *= 0.15;
+  c.g *= 0.15;
+  c.b *= 0.15;
   return c;
 }
 
