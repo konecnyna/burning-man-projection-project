@@ -299,12 +299,69 @@ Scene content and the loading contract are documented in [SCENES.md](SCENES.md).
 
 ## 8. Hardware
 
-| | Requirement |
+The deployment machine, as measured:
+
+| | Spec |
 |---|---|
-| Machine | Apple silicon Mac mini — deployment box is **Apple M2**, macOS 15.0.1 |
+| Model | Mac mini (2023) — `Mac14,3` |
+| Chip | Apple **M2**, 8 cores (4 performance + 4 efficiency) |
+| Memory | **8 GB unified** |
+| Storage | 228 GB, ~117 GB free |
+| OS | macOS **Sequoia 15.0.1** (build 24A348) |
 | Display | 1920 × 1080 |
-| Camera | **External USB webcam, mandatory** |
+| Camera | **External USB webcam — mandatory, none built in** |
 | Python | 3.9.6 (`venv/`) |
+| User | `atlantis`, auto-login on, FileVault off |
+
+Reproduce with:
+
+```bash
+system_profiler SPHardwareDataType | grep -E 'Model|Chip|Cores|Memory'
+sw_vers
+```
+
+### 8 GB is the binding constraint
+
+This is the tightest resource in the system and the one most likely to end a
+long run. Everything here shares one 8 GB pool: macOS itself, the Python
+process (OpenCV + MediaPipe), and WebKit's separate helper processes for the
+webview and its GPU work.
+
+Measured baseline, idle, no camera attached and no WebGL scene running:
+
+| Process | RSS |
+|---|---|
+| `python main.py` | 220 MB |
+| WebKit helpers (3) | 136 MB |
+| **Total** | **356 MB** |
+
+That is the floor. With the camera open, MediaPipe's graph and frame buffers
+add substantially, and a WebGL scene such as `fluidsim` adds GPU-backed
+textures and framebuffers on top.
+
+**Why this matters for uptime.** Under memory pressure macOS does not
+politely ask — it terminates jetsam-eligible processes, and WebKit's content
+and GPU processes are prime candidates. If the webview's content process is
+killed, the pywebview window closes, `webview.start()` returns, and `main.py`
+exits **cleanly with status 0**. No crash, no traceback, nothing in the log
+beyond the normal shutdown line.
+
+That is exactly the signature of the historical "dies after about four hours"
+behaviour: a clean exit rather than an OOM kill of the Python process. It is a
+hypothesis, not a proven cause — but it fits the evidence better than any leak
+measured so far, all of which were too small (see [Known issues](#9-known-issues)).
+
+`vm.swapusage` currently reads zero, but the machine has recorded ~12,500
+pageouts, so it has been under pressure at some point.
+
+Practical consequences:
+
+- Keep the enabled-scene list short, and prefer 2D canvas scenes over WebGL
+  ones where the effect allows.
+- Treat any new per-frame allocation as expensive; there is no headroom.
+- `KeepAlive` in the LaunchAgent (see [DEPLOYMENT.md](DEPLOYMENT.md)) does not
+  prevent this, but it does make it self-heal within 15 s instead of going
+  dark until someone notices.
 
 ### Camera
 

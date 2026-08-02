@@ -60,6 +60,14 @@ These are non-negotiable and break the installation if violated.
 5. **Performance.** Hand tracking must stay responsive — MediaPipe is configured
    at `model_complexity=0` deliberately. Don't add per-frame work to the
    tracking loop.
+6. **8 GB of RAM, total.** The deployment box is a Mac mini 2023 (`Mac14,3`),
+   Apple M2, **8 GB unified**, macOS Sequoia 15.0.1. macOS, Python/MediaPipe
+   and WebKit's helper processes all share it; the idle floor is already
+   ~356 MB. Under pressure macOS kills the webview's content process, which
+   closes the window and exits the app with status 0 — no crash, no traceback.
+   Treat memory as the scarcest resource: no new per-frame allocations, and
+   prefer 2D canvas scenes to WebGL ones where the effect allows.
+   See [ARCHITECTURE.md §8](ARCHITECTURE.md#8-hardware).
 
 ## Code guidelines
 

@@ -6,6 +6,11 @@ Canvas scenes that the audience controls by moving their hands.
 
 Runs as a single Python process on a Mac mini. No build step, no internet.
 
+**Deployment machine:** Mac mini 2023 (`Mac14,3`), Apple M2, 8 GB, macOS
+Sequoia 15.0.1, 1920×1080, plus a **required external USB webcam**. The 8 GB
+is the binding constraint — see
+[ARCHITECTURE.md](ARCHITECTURE.md#8-hardware).
+
 ```
 camera ──► MediaPipe ──► EventBus ──► WebSocket ──► fullscreen webview
                                                      └── scene iframes
