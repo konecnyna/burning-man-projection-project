@@ -13,8 +13,8 @@
 
 
 sleep 10
-cd /Users/atlantis/code/burning-man-2024/
-#/opt/homebrew/bin/pm2 start /Users/atlantis/code/burning-man-2024/bootstrap.js --name atlantis
+cd /Users/atlantis/code/burning-man-2024
+/opt/homebrew/bin/pm2 start /Users/atlantis/code/burning-man-2024/bootstrap.js --name atlantis
 
 
 #/opt/homebrew/bin/node bootstrap.js

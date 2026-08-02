@@ -18,8 +18,8 @@ module.exports = class StateManager {
       showVideo: false,
       isMockMode: false,
       rtspUrl: CAMERA_URL,
-      detectionMode: "passive",
-      currentScene: scenes.fluidSim,
+      detectionMode: "active",
+      currentScene: scenes.cosmicSymbolism,
       nextSceneTime: this.getFutureDate(),
       scenes: scenes,
     };
@@ -29,7 +29,7 @@ module.exports = class StateManager {
 
     this.state = { ...defaultOpenCvState, ...openCvState };
     this.startSceneCheckInterval();
-    this.resetPassiveModeTimer();  // Initialize the passive mode timer
+    //this.resetPassiveModeTimer();  // Initialize the passive mode timer
 
 
     this.showingTransition = false;
@@ -101,23 +101,23 @@ module.exports = class StateManager {
     //   console.log("NOPE")
     // }
 
-    if (this.showingTransition) {
-      return;
-    }
+    // if (this.showingTransition) {
+    //   return;
+    // }
 
-    if (this.state.detectionMode == "active") {
-      this.resetPassiveModeTimer();
-      return;
-    }
+    // if (this.state.detectionMode == "active") {
+    //   this.resetPassiveModeTimer();
+    //   return;
+    // }
 
-    try {
-      this.showingTransition = true
-      await this.setActiveMode()
-    } catch (e) {
-      console.trace(e)
-    } finally {
-      this.showingTransition = false
-    }    
+    // try {
+    //   this.showingTransition = true
+    //   await this.setActiveMode()
+    // } catch (e) {
+    //   console.trace(e)
+    // } finally {
+    //   this.showingTransition = false
+    // }    
   }
 
   resetNextSceneTime(minutes = DEFAULT_SCENE_TIME) {

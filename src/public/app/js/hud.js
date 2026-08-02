@@ -52,8 +52,6 @@ const constructHud = (currentScene, nextSceneTime) => {
         const seconds = Math.floor((timeRemaining / 1000) % 60);
         timeRemainingDiv.textContent = `⏰ ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
-        // Show or hide the HUD based on the time remaining
-        if (timeRemaining > 150000 || timeRemaining < 30000) { // above 2m30s or below 30s
           hud.classList.remove('slide-up');
           hud.classList.add('slide-down');
         } else if (lastTimeRemaining !== null && lastTimeRemaining < 30000 && timeRemaining > 30000) {
@@ -64,6 +62,7 @@ const constructHud = (currentScene, nextSceneTime) => {
           hud.classList.remove('slide-down');
           hud.classList.add('slide-up');
         }
+
 
         lastTimeRemaining = timeRemaining;
       } else {
@@ -92,7 +91,7 @@ const constructHud = (currentScene, nextSceneTime) => {
   // Add additional instructions if they exist
   let instructions = currentScene?.meta?.additional_instructions || [];
   if (!instructions.length) {
-    // instructions = ["ℹ️ Make sure to follow the instructions to change the scene."];
+    instructions = ["ℹ️ Move your hand, palms out, slowly to interect"];
   }
 
   if (elementsAdded) hud.appendChild(createDivider());
