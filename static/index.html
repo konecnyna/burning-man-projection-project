@@ -727,7 +727,9 @@
 </head>
 
 <body>
-  <link href="fonts/share-tech-mono.css" rel="stylesheet">
+  <!-- Absolute: this file is served at "/", so a relative path would resolve
+       to /fonts/... which has no route. -->
+  <link href="/static/fonts/share-tech-mono.css" rel="stylesheet">
   <div class="app-container">
     <!-- Scene containers will be dynamically created -->
     <div class="scene-container active" id="scene-container">

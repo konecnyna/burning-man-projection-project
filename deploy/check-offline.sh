@@ -219,6 +219,23 @@ fi
 
 [ "$MISSING" = 0 ] && pass "all $CHECKED local src/href references resolve on disk"
 
+# Resolving on disk is not the same as resolving over HTTP. static/index.html
+# is served at "/", so a relative href there resolves to /<path>, which has no
+# Flask route even though the file exists under static/. Scene files are served
+# at /scenes/<name>/, where relative paths do work.
+RELREFS=$( (cd "$SCAN" && grep -noE '(src|href)="[^"/][^":]*"' static/index.html 2>/dev/null) \
+           | grep -vE '\$\{|\{\{' || true)
+if [ -z "$RELREFS" ]; then
+    pass "static/index.html uses absolute paths (it is served at /)"
+else
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        bad "relative reference in static/index.html — served at / so this 404s"
+        note "static/index.html:$line"
+        note "Prefix with /static/ ."
+    done <<< "$RELREFS"
+fi
+
 # ---------------------------------------------------------- 6. attribution
 if [ "$VERBOSE" = 1 ]; then
     sect "Hosts appearing anywhere in served files (mostly attribution)"

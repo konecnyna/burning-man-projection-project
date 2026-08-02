@@ -75,6 +75,35 @@ system_profiler SPCameraDataType
 Empty output means macOS sees no camera. Mac minis have no built-in camera —
 check the USB webcam is plugged in and try a different port.
 
+**1b. Don't trust the OpenCV error message.**
+
+```
+OpenCV: not authorized to capture video (status 0), requesting...
+OpenCV: camera failed to properly initialize!
+```
+
+This says "not authorized", but `status 0` is AVFoundation's
+`AVAuthorizationStatusNotDetermined` — *never prompted*, which is not the same
+as denied. OpenCV prints the same two lines whether the camera is missing,
+unprompted, or actually denied. Tell them apart:
+
+```bash
+# Is there hardware at all? Empty output = no camera attached.
+system_profiler SPCameraDataType
+ioreg -l | grep -ciE '"IOClass" = "AppleCamera|USBVDC'      # 0 = none
+
+# Is permission granted for the app that launches Python?
+# auth_value: 0 = denied, 1 = unknown, 2 = allowed
+sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
+  "select client, auth_value from access where service='kTCCServiceCamera';"
+```
+
+- **No hardware** → plug in a USB webcam. Mac minis have none built in.
+- **Hardware present, `auth_value` not 2** → grant it in System Settings.
+- **Hardware present, granted, still `status 0`** → the process has no GUI
+  session to prompt in. Launch it from Terminal or via the LaunchAgent rather
+  than from a detached shell.
+
 **2. Did the tracker fail to open it?**
 
 The app emits a `camera_error` event and keeps running with no hand input. There
