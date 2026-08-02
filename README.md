@@ -1,97 +1,124 @@
-# ATLANTIS Kiosk Auto-Launch Setup
+# ATLANTIS Hand Tracking Kiosk
 
-This guide configures a Mac mini to automatically start the ATLANTIS Hand Tracking Kiosk on boot.
+An unattended interactive installation. A camera watches for hands, MediaPipe
+turns them into landmark coordinates, and a fullscreen browser renders WebGL and
+Canvas scenes that the audience controls by moving their hands.
 
-## Prerequisites
+Runs as a single Python process on a Mac mini. No build step, no internet.
 
-1. Mac mini with macOS
-2. This project cloned to `/Users/[username]/github/burning-man-2024/`
-3. Python virtual environment set up (`venv/` directory exists)
-
-## Simple Setup (Recommended)
-
-### 1. Enable Auto-Login
-
-1. Open **System Preferences** → **Users & Groups**
-2. Click the lock icon and enter admin password
-3. Select **Login Options** at bottom left
-4. Set **Automatic login** to your user account
-
-### 2. Add to Login Items
-
-1. Open **System Preferences** → **Users & Groups**
-2. Select your user account
-3. Click **Login Items** tab
-4. Click the **+** button
-5. Navigate to `/Users/defkon/github/burning-man-2024/start-atlantis.sh`
-6. Select the script and click **Add**
-7. Make sure **Hide** is checked (optional - hides Terminal window)
-
-### 3. Make Script Executable
-
-```bash
-chmod +x /Users/defkon/github/burning-man-2024/start-atlantis.sh
+```
+camera ──► MediaPipe ──► EventBus ──► WebSocket ──► fullscreen webview
+                                                     └── scene iframes
 ```
 
-That's it! The Mac mini will now auto-login and launch ATLANTIS automatically.
+---
 
-## Operation
-
-### Startup Sequence
-1. Mac mini powers on
-2. System auto-logs in to configured user
-3. Login Items launches `start-atlantis.sh`
-4. Script activates Python environment and launches ATLANTIS
-5. Kiosk interface appears in fullscreen
-
-### Managing the Login Item
-
-To disable/enable auto-launch:
-1. Open **System Preferences** → **Users & Groups**
-2. Select your user → **Login Items** tab
-3. Find `start-atlantis.sh` in the list
-4. Uncheck to disable, check to enable
-
-## Troubleshooting
-
-### Common Issues
-
-**Script doesn't run on startup:**
-- Verify auto-login is enabled
-- Check Login Items list contains `start-atlantis.sh`
-- Make sure script is executable: `chmod +x start-atlantis.sh`
-
-**Python/dependency errors:**
-- Check virtual environment exists: `ls venv/`
-- Manually test the script: `./start-atlantis.sh`
-
-**Application doesn't launch:**
-- Verify camera permissions for Terminal/Python
-- Check MediaPipe installation: `source venv/bin/activate && python -c "import mediapipe"`
-
-### Manual Testing
+## Quick start
 
 ```bash
-# Test the script directly
-./start-atlantis.sh
+# One-time setup
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-# Simulate restart to test full flow
-sudo shutdown -r now
+# Development — debug HUD visible
+python main.py --port 5000
+
+# Production — exactly what the kiosk runs at boot
+./start-atlantis.sh          # venv + --production + port 5001
 ```
 
-## Security Notes
+Then check it's alive:
 
-- The kiosk runs with standard user privileges
-- Camera access must be granted to Terminal or Python
-- No network access required after initial setup
-- Consider disabling unnecessary system services for kiosk deployment
+```bash
+curl http://localhost:5000/health
+```
 
-## Kiosk Hardening (Optional)
+A **USB webcam is required** — Mac minis have no built-in camera. Without one
+the UI still comes up and cycles scenes, but no hands are ever detected.
 
-For production kiosk deployment:
+---
 
-1. **Disable dock and menu bar**: Use third-party kiosk software
-2. **Disable hot corners and shortcuts**: System Preferences → Mission Control
-3. **Turn off screen saver**: System Preferences → Desktop & Screen Saver
-4. **Disable sleep**: System Preferences → Energy Saver
-5. **Hide desktop icons**: Terminal: `defaults write com.apple.finder CreateDesktop false`
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Process/thread model, hand tracking, event system, HTTP surface, frontend state machine, hardware, known issues |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Boot chain, power-loss recovery, camera permissions, kiosk hardening, risks, pre-event checklist |
+| [SCENES.md](SCENES.md) | Scene inventory, loading rules, hand-data contract, how to add a scene |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom-first fixes |
+| [CLAUDE.md](CLAUDE.md) | Instructions for AI assistants working in this repo |
+| [PRD.md](PRD.md) | Product requirements and success metrics |
+| [planning.md](planning.md) | Original technical planning notes |
+| [TASKS.md](TASKS.md) / [todo.md](todo.md) | Work tracking |
+
+---
+
+## Layout
+
+```
+main.py               Process orchestration, CLI, webview window
+hand_tracker.py       Camera, MediaPipe, ID tracking, confidence, gestures
+web_app.py            Flask routes + SocketIO
+event_system.py       EventBus and event type constants
+start-atlantis.sh     Production launcher (used by the boot chain)
+
+static/
+  index.html          The entire frontend — state, modes, scenes, HUD
+  scenes/             One directory per scene, plus idle.html and welcome.html
+  libs/               Vendored socket.io, three.js
+  fonts/              Local @font-face fonts
+```
+
+`hand_detector.py`, `hand_visualizer.py`, and `templates/index.html` are unused.
+
+---
+
+## How it behaves
+
+Four modes, driven by whether a confident hand is visible:
+
+```
+idle ──(hand, confidence > 0.75)──► onboarding ──► active ──(45s idle)──► idle
+```
+
+- **idle** — screensaver, waiting for hands
+- **onboarding** — instructions
+- **active** — cycles the interactive scenes on a timer (~4 min 15 s per loop)
+
+Falls back to idle after **45 seconds** with no qualifying hand, with a warning
+banner at 40 s.
+
+Enabled scenes: kaleidoscope (30 s), fluid simulation (60 s), cosmic symbolism
+(60 s), tie dye (45 s), kaleidoscope (60 s). Several more are written and
+commented out — see [SCENES.md](SCENES.md#2-scene-inventory).
+
+---
+
+## Operations
+
+```bash
+# Is it running?
+ps aux | grep '[m]ain.py'
+lsof -iTCP -sTCP:LISTEN -P -n | grep Python
+
+# Health
+curl http://localhost:5001/health
+
+# Watch what the tracker sees — MJPEG with landmarks, boxes, FPS
+open http://localhost:5001/video_feed
+```
+
+Before leaving the installation unattended, run the
+[pre-event checklist](DEPLOYMENT.md#9-pre-event-checklist).
+
+---
+
+## Constraints
+
+- **Fully offline.** Every library, font, and image is vendored. No CDN
+  references anywhere. See [the offline rule](SCENES.md#8-offline-rule).
+- **No build process.** Python plus static files, nothing to compile.
+- **Camera-only input.** No touch, no keyboard, no mouse for the audience.
+- **Unattended.** It has to come back on its own after a power cut — see
+  [DEPLOYMENT.md](DEPLOYMENT.md).
