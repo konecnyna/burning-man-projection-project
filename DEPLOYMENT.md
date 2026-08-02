@@ -1,317 +1,305 @@
 # ATLANTIS Kiosk — Deployment & Unattended Operation
 
-Everything required to make the installation come up by itself and stay up.
+Making the machine boot into the app and stay in it.
 
-- [1. The boot chain](#1-the-boot-chain)
-- [2. Configuring the boot chain](#2-configuring-the-boot-chain)
-- [3. What `start-atlantis.sh` does](#3-what-start-atlantissh-does)
-- [4. Power management](#4-power-management)
-- [5. Camera permissions](#5-camera-permissions)
-- [6. Kiosk hardening](#6-kiosk-hardening)
-- [7. Failure modes and recovery](#7-failure-modes-and-recovery)
-- [8. Risks](#8-risks)
-- [9. Pre-event checklist](#9-pre-event-checklist)
+- [1. Install](#1-install)
+- [2. What the installer does](#2-what-the-installer-does)
+- [3. The boot chain](#3-the-boot-chain)
+- [4. The launcher](#4-the-launcher)
+- [5. Everyday operations](#5-everyday-operations)
+- [6. Camera permissions](#6-camera-permissions)
+- [7. Kiosk hardening](#7-kiosk-hardening)
+- [8. Failure modes](#8-failure-modes)
+- [9. Before you leave it unattended](#9-before-you-leave-it-unattended)
+- [10. Manual setup](#10-manual-setup)
 
 Related: [ARCHITECTURE.md](ARCHITECTURE.md) · [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
-Install path on the deployment machine: `/Users/atlantis/burning-man-projection-project`
-User account: `atlantis`
+---
+
+## 1. Install
+
+Everything boot-related is generated from files in this repo. There is nothing
+to configure by hand and nothing to remember.
+
+```bash
+cd /path/to/burning-man-projection-project
+
+# Once, if the venv doesn't exist yet
+python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+
+# See exactly what would change, without changing anything
+./deploy/install-kiosk.sh --dry-run
+
+# Do it
+./deploy/install-kiosk.sh
+```
+
+The installer is **idempotent** — run it as often as you like. It prompts before
+each system-level change and asks for `sudo` only for power management and for
+removing a system-domain LaunchDaemon.
+
+| Script | Purpose |
+|---|---|
+| `deploy/install-kiosk.sh` | Set the machine up. `--dry-run`, `--yes`, `--port N` |
+| `deploy/verify-kiosk.sh` | Check every link in the chain. Exit 0 = safe to leave |
+| `deploy/uninstall-kiosk.sh` | Remove the LaunchAgent and stop the app |
+| `deploy/com.atlantis.kiosk.plist.in` | LaunchAgent template — **edit this, never the installed copy** |
+
+Then confirm the whole thing actually works:
+
+```bash
+sudo shutdown -r now
+```
 
 ---
 
-## 1. The boot chain
+## 2. What the installer does
 
-Three independent mechanisms must line up for the kiosk to come back on its own.
+1. **Validates the repo** — template, launcher, `main.py`, `venv/`, and that
+   `mediapipe`, `flask`, `cv2` import. Refuses to change anything if the repo
+   isn't in a launchable state.
+
+2. **Renders the LaunchAgent** from `deploy/com.atlantis.kiosk.plist.in`,
+   substituting the repo path and port, writing to
+   `~/Library/LaunchAgents/com.atlantis.kiosk.plist`, then `plutil -lint`s the
+   result before loading it.
+
+3. **Loads the agent** with `RunAtLoad` (start at login) and `KeepAlive`
+   (restart whenever the process exits, for any reason).
+
+4. **Removes conflicting autostart entries** — a Login Item pointing at
+   `start-atlantis.sh` would start a second copy that fights for the port.
+
+5. **Sets power management** so the machine never sleeps and powers back on
+   after a cut. `[sudo]`
+
+6. **Disables the screen saver.**
+
+7. **Runs `verify-kiosk.sh`** and exits non-zero if anything is wrong.
+
+Because the plist is generated, the repo path is baked in at install time —
+move or rename the repo and just re-run the installer.
+
+---
+
+## 3. The boot chain
+
+Three mechanisms in sequence. Remove any one and the kiosk does not come back
+on its own.
 
 ```
   power applied
         │
         ▼
-  [1] pmset autorestart = 1      ──►  Mac powers on by itself after power loss
+  [1] pmset autorestart = 1     ──►  Mac powers on by itself after power loss
         │
         ▼
-  [2] auto-login (autoLoginUser)  ──►  desktop session, no password prompt
-        │
+  [2] auto-login                ──►  desktop session, no password prompt
+        │                            (requires FileVault OFF)
         ▼
-  [3] Login Item: start-atlantis.sh
+  [3] LaunchAgent com.atlantis.kiosk
+        │  RunAtLoad   → starts at login
+        │  KeepAlive   → restarts on every exit
+        │  Throttle 15 → backs off if it fails repeatedly
         │
-        ├─ sleep 5                     let the desktop settle
-        ├─ cd to script directory
-        ├─ verify venv/ exists         hard-fails if missing
-        ├─ source venv/bin/activate
-        ├─ import-check mediapipe, flask, cv2  (pip install if missing)
-        └─ python3 main.py --production --port 5001
-                │
-                ▼
-        fullscreen webview on localhost:5001
+        └─► start-atlantis.sh ─► main.py --production --port 5001
+                                        │
+                                        ▼
+                            fullscreen webview on localhost:5001
 ```
 
-Remove any one of the three and the installation does not come back unattended.
+`KeepAlive` is the piece that makes this survivable. A Login Item runs its
+target exactly once; if the app crashes or the window is closed, the
+installation goes dark until a human intervenes. The LaunchAgent relaunches it.
+
+### Auto-login is not scripted
+
+It is the one step the installer cannot do for you — macOS has no supported
+non-interactive way to set it.
+
+System Settings → Users & Groups → **Automatically log in as** → `atlantis`.
+
+FileVault must be **off**, or auto-login is ignored entirely.
+`verify-kiosk.sh` checks both.
 
 ---
 
-## 2. Configuring the boot chain
+## 4. The launcher
 
-### Restart after power failure
+`start-atlantis.sh` is the single supported way to start the app — used by the
+LaunchAgent and by hand. Starting it any other way means what you're testing
+isn't what comes back after a reboot.
 
 ```bash
-sudo pmset -a autorestart 1
+./start-atlantis.sh                        # port 5001, production
+ATLANTIS_PORT=5000 ./start-atlantis.sh     # override the port
+ATLANTIS_BOOT_DELAY=0 ./start-atlantis.sh  # skip the 5s settle delay
 ```
 
-### Auto-login
+It resolves its own directory, waits for the desktop to settle, hard-fails if
+`venv/` is missing, `pip install`s if imports fail, logs each step with a
+timestamp, and `exec`s Python so the LaunchAgent tracks Python's real PID and
+`SIGTERM` reaches it on shutdown.
 
-System Settings → Users & Groups → unlock → **Automatically log in as** →
-select the `atlantis` account.
+`ATLANTIS_PORT` is the single source of truth for the port. The LaunchAgent
+passes it in; the default is `5001`.
 
-Verify:
+Logs go to `logs/kiosk.out.log` and `logs/kiosk.err.log` inside the repo.
+`logs/` is gitignored.
+
+---
+
+## 5. Everyday operations
+
 ```bash
-defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser
-# atlantis
+# Status
+launchctl print gui/$(id -u)/com.atlantis.kiosk
+
+# Restart the app right now
+launchctl kickstart -k gui/$(id -u)/com.atlantis.kiosk
+
+# Stop it staying down (KeepAlive will restart it, so use the uninstaller
+# if you actually want it to stay stopped)
+./deploy/uninstall-kiosk.sh
+
+# Live logs
+tail -f logs/kiosk.out.log logs/kiosk.err.log
+
+# Health
+curl http://localhost:5001/health
+
+# Full preflight
+./deploy/verify-kiosk.sh
 ```
 
-Auto-login is incompatible with FileVault. FileVault must stay **off** for the
-kiosk to boot unattended.
+Because `KeepAlive` is on, `pkill main.py` will **not** stop the kiosk — the
+agent restarts it within `ThrottleInterval` (15 s). That is deliberate. To stop
+it for real, run the uninstaller or `launchctl bootout`.
 
-### Login Item
+---
 
-System Settings → General → Login Items → **+** → select
-`/Users/atlantis/burning-man-projection-project/start-atlantis.sh`.
+## 6. Camera permissions
 
-Verify:
+macOS grants camera access **per binary**, to whatever process launches Python.
+The grant follows `venv/bin/python3`.
+
+System Settings → Privacy & Security → Camera.
+
+Rebuilding the venv creates a new interpreter binary, so **the grant must be
+given again**. Unattended, that prompt never gets answered and the camera
+silently fails — the kiosk boots and cycles scenes with no hand input.
+
+A USB webcam is required; Mac minis have no built-in camera.
+
 ```bash
-osascript -e 'tell application "System Events" to get the name of every login item'
-# start-atlantis.sh
-```
-
-Make sure the script is executable:
-```bash
-chmod +x /Users/atlantis/burning-man-projection-project/start-atlantis.sh
+system_profiler SPCameraDataType     # empty output = no camera detected
 ```
 
 ---
 
-## 3. What `start-atlantis.sh` does
+## 7. Kiosk hardening
 
-```bash
-sleep 5                              # wait for the desktop
-cd "$(dirname "${BASH_SOURCE[0]}")"  # resolve its own directory
-[ -d venv ] || exit 1                # hard-fail if the venv is missing
-source venv/bin/activate
-python3 -c "import mediapipe, flask, cv2" || pip install -r requirements.txt
-python3 main.py --production --port 5001
-```
-
-Because it resolves its own directory, the script can be moved with the repo
-without editing. It launches on **port 5001** in **production mode** (debug UI
-hidden).
-
-It writes no log file. Nothing captures stdout or stderr.
-
----
-
-## 4. Power management
-
-The kiosk must never sleep or blank.
-
-| Setting | Required | Command |
-|---|---|---|
-| Restart after power failure | `1` | `sudo pmset -a autorestart 1` |
-| System sleep | `0` (never) | `sudo pmset -a sleep 0` |
-| Display sleep | `0` (never) | `sudo pmset -a displaysleep 0` |
-| Disk sleep | `0` | `sudo pmset -a disksleep 0` |
-| Screen saver | off | System Settings → Lock Screen → Start Screen Saver: Never |
-
-Check all at once:
-
-```bash
-pmset -g | grep -E 'autorestart|^ sleep|displaysleep|disksleep'
-defaults -currentHost read com.apple.screensaver idleTime   # want 0
-```
-
-`caffeinate` is **not** a substitute. A `caffeinate -t N` assertion expires, and
-one run from an interactive shell dies with that shell. Set `pmset sleep 0` so
-the machine cannot sleep regardless of what is running.
-
----
-
-## 5. Camera permissions
-
-macOS grants camera access per-binary, to whatever process launches Python.
-Because the Login Item runs the script under the user session, the grant follows
-the interpreter in `venv/`.
-
-Grant under System Settings → Privacy & Security → Camera.
-
-Switching interpreters invalidates the grant — if the app is ever run with a
-different Python than `venv/bin/python3`, macOS treats it as a new binary and
-prompts again. Unattended, that prompt never gets answered and the camera
-silently fails.
-
-Confirm a camera is attached and visible to the OS:
-
-```bash
-system_profiler SPCameraDataType
-```
-
-Empty output means no camera is detected. The kiosk will still boot and cycle
-scenes, but no hands will ever register.
-
----
-
-## 6. Kiosk hardening
-
-Optional but recommended for a public installation.
+Optional, for a public installation.
 
 ```bash
 # Hide desktop icons
 defaults write com.apple.finder CreateDesktop false && killall Finder
 
-# Auto-hide the Dock with no reveal delay
+# Auto-hide the Dock with no reveal
 defaults write com.apple.dock autohide -bool true
 defaults write com.apple.dock autohide-delay -float 1000
 killall Dock
 ```
 
-By hand:
-- Disable hot corners — System Settings → Desktop & Dock → Hot Corners
-- Disable notifications / enable Do Not Disturb permanently
-- Disable software update prompts
-- Disable Spotlight keyboard shortcut if a keyboard will be reachable
+By hand: disable hot corners (Settings → Desktop & Dock), turn on Do Not
+Disturb permanently, disable automatic software updates so an update prompt
+can't block login.
 
-The webview window is frameless and fullscreen, so with the Dock hidden and
+The webview is frameless and fullscreen, so with the Dock hidden and
 notifications off there is nothing for the audience to click out to.
 
 ---
 
-## 7. Failure modes and recovery
+## 8. Failure modes
 
-| Event | Recovery path | Automatic? |
+| Event | Recovery | Automatic? |
 |---|---|---|
-| Power cut, then restored | `autorestart` → auto-login → Login Item | ✅ Yes |
-| Clean reboot / `shutdown -r` | Same chain | ✅ Yes |
-| Webview window closed | `create_window()`'s `finally` calls `stop()`, process exits | ❌ **Stays down** |
-| Python process crashes | Nothing supervises it | ❌ **Stays down** |
-| Camera unplugged mid-run | `camera_error` events; retries a dead handle forever | ⚠️ No reconnect |
-| Display sleep / screensaver | Disabled by §4 | ✅ N/A |
-| Scene JS throws | Scene iframe breaks; cycle timer still advances | ⚠️ Self-heals next scene |
+| Power cut, then restored | `autorestart` → auto-login → LaunchAgent | ✅ |
+| Clean reboot | Same chain | ✅ |
+| App crashes | `KeepAlive` relaunches within 15 s | ✅ |
+| Webview window closed | Process exits, `KeepAlive` relaunches | ✅ |
+| Startup fails repeatedly | Throttled to one attempt per 15 s; logged | ⚠️ Needs a human, but logged |
+| Camera unplugged mid-run | `camera_error` events, retries a dead handle | ❌ No reconnect — restart |
+| Display sleep / screensaver | Disabled by the installer | ✅ N/A |
+| Scene JS throws | That iframe breaks; the cycle timer still advances | ⚠️ Self-heals next scene |
 
-A Login Item runs its target **exactly once** at login. There is no supervisor,
-no `KeepAlive`, and no restart-on-exit anywhere in the system.
+Remaining gaps, both requiring code changes rather than configuration:
 
----
-
-## 8. Risks
-
-Ranked by likelihood × impact for an unattended run.
-
-1. **A crash is unrecoverable without a human.** This is the single largest gap
-   between how the kiosk is deployed and what unattended operation requires.
-   The fix is to replace the Login Item with a `LaunchAgent` carrying
-   `RunAtLoad` and `KeepAlive`, which relaunches the process whenever it exits:
-
-   ```xml
-   <!-- ~/Library/LaunchAgents/xyz.atlantis.kiosk.plist -->
-   <?xml version="1.0" encoding="UTF-8"?>
-   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-   <plist version="1.0">
-   <dict>
-     <key>Label</key>            <string>xyz.atlantis.kiosk</string>
-     <key>ProgramArguments</key>
-     <array>
-       <string>/Users/atlantis/burning-man-projection-project/start-atlantis.sh</string>
-     </array>
-     <key>RunAtLoad</key>        <true/>
-     <key>KeepAlive</key>        <true/>
-     <key>StandardOutPath</key>  <string>/Users/atlantis/atlantis.out.log</string>
-     <key>StandardErrorPath</key><string>/Users/atlantis/atlantis.err.log</string>
-   </dict>
-   </plist>
-   ```
-
-   ```bash
-   launchctl load ~/Library/LaunchAgents/xyz.atlantis.kiosk.plist
-   ```
-
-   Remove the Login Item first so the app does not start twice and fight over
-   the port. This change also solves risk 2.
-
-2. **No logs.** Nothing is written to disk, so a failure that happens overnight
-   leaves nothing to diagnose. The `StandardOutPath` / `StandardErrorPath` keys
-   above are the cheapest fix. Until then, redirect by hand:
-   `./start-atlantis.sh >> ~/atlantis.log 2>&1`
-
-3. **Sleep settings drift.** `pmset sleep` defaulting to a non-zero value will
-   put the machine to sleep mid-event. Verify it is `0` before every run — see
-   the checklist in §9.
-
-4. **Manual launches diverge from the boot config.** Starting the app by hand
-   with a different port or without `--production` means a reboot silently
-   changes behaviour relative to what is running. Always launch via
-   `./start-atlantis.sh`.
-
-5. **An unrelated `pm2.atlantis.plist` sits in `~/Library/LaunchAgents/`.** It
-   runs `pm2 resurrect` with `RunAtLoad` + `KeepAlive` and has nothing to do
-   with this application. It is not currently loaded, but it will load on next
-   login if anything enables it. Remove it:
-
-   ```bash
-   launchctl unload ~/Library/LaunchAgents/pm2.atlantis.plist 2>/dev/null
-   rm ~/Library/LaunchAgents/pm2.atlantis.plist
-   ```
-
-6. **Unpinned dependencies.** `requirements.txt` is entirely `>=`. If the venv
-   is ever rebuilt on site, a newer MediaPipe may behave differently. Pin with
-   `pip freeze > requirements.lock.txt` before travelling.
+- **No camera reconnect.** `hand_tracker.py` retries the same dead handle
+  forever after an unplug. Recovery is a restart:
+  `launchctl kickstart -k gui/$(id -u)/com.atlantis.kiosk`
+- **Silent internal failures.** `EventBus.emit` swallows every handler
+  exception. The LaunchAgent captures stdout/stderr, but exceptions inside event
+  handlers never reach it.
 
 ---
 
-## 9. Pre-event checklist
-
-Run this before leaving the installation unattended.
+## 9. Before you leave it unattended
 
 ```bash
-cd /Users/atlantis/burning-man-projection-project
-
-# 1. Boot chain
-pmset -g | grep -E 'autorestart|^ sleep|displaysleep|disksleep'
-defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser
-osascript -e 'tell application "System Events" to get the name of every login item'
-ls -l start-atlantis.sh
-
-# 2. Hardware
-system_profiler SPCameraDataType | head
-
-# 3. Dependencies resolve in the venv
-source venv/bin/activate && python -c "import mediapipe, flask, cv2; print('ok')"
-
-# 4. App comes up
-./start-atlantis.sh &
-sleep 15 && curl -s http://localhost:5001/health
+./deploy/verify-kiosk.sh
 ```
 
-Expected:
+It checks, and tells you the fix for anything that fails:
 
-| Check | Expected |
+| Group | Checks |
 |---|---|
-| `autorestart` | `1` |
-| `sleep` | `0` |
-| `displaysleep` | `0` |
-| `disksleep` | `0` |
-| auto-login user | `atlantis` |
-| login item | `start-atlantis.sh` |
-| script mode | executable (`-rwxr-xr-x`) |
-| camera | at least one device listed |
-| imports | `ok` |
-| `/health` | `{"status":"healthy",...}` |
+| Repo | launcher executable; venv imports `mediapipe`, `flask`, `cv2` |
+| LaunchAgent | plist installed, points at this repo, `KeepAlive`, `RunAtLoad`, loaded |
+| Conflicts | no Login Item duplicate, no stale artifacts, exactly one app process |
+| Boot chain | auto-login set, FileVault off |
+| Power | `autorestart=1`, `sleep=0`, `displaysleep=0`, `disksleep=0`, screen saver off |
+| Runtime | camera detected, `/health` responding on the expected port |
 
-### Full restart test
-
-Nothing substitutes for this. Do it at least once on site:
+Exit code 0 means safe to leave. Then do the thing no script can do for you:
 
 ```bash
 sudo shutdown -r now
 ```
 
 Confirm the kiosk returns to fullscreen with no keyboard or mouse interaction,
-then wave a hand at it and confirm it leaves the idle screen.
+then wave at it and confirm it leaves the idle screen.
+
+---
+
+## 10. Manual setup
+
+Only if you can't run the installer. This is what it automates.
+
+```bash
+REPO=/Users/atlantis/burning-man-projection-project
+
+# 1. LaunchAgent
+mkdir -p ~/Library/LaunchAgents "$REPO/logs"
+sed -e "s|__ATLANTIS_DIR__|$REPO|g" -e "s|__ATLANTIS_PORT__|5001|g" \
+    "$REPO/deploy/com.atlantis.kiosk.plist.in" \
+    > ~/Library/LaunchAgents/com.atlantis.kiosk.plist
+plutil -lint ~/Library/LaunchAgents/com.atlantis.kiosk.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.atlantis.kiosk.plist
+
+# 2. Power
+sudo pmset -a autorestart 1 sleep 0 displaysleep 0 disksleep 0
+
+# 3. Screen saver
+defaults -currentHost write com.apple.screensaver idleTime -int 0
+
+# 4. Remove any Login Item that also starts the app
+osascript -e 'tell application "System Events" to delete login item "start-atlantis.sh"'
+```
+
+Then set auto-login by hand (§3) and verify with `./deploy/verify-kiosk.sh`.
+
+**Do not hand-edit `~/Library/LaunchAgents/com.atlantis.kiosk.plist`.** It is
+generated, and the next install overwrites it. Change
+`deploy/com.atlantis.kiosk.plist.in` and re-run the installer.

@@ -94,11 +94,25 @@ curl http://localhost:5000/health
 open http://localhost:5000/video_feed
 ```
 
+Boot / kiosk setup — everything is generated from the repo, nothing is
+configured by hand:
+
+```bash
+./deploy/install-kiosk.sh --dry-run   # preview every change
+./deploy/install-kiosk.sh             # install the LaunchAgent + power settings
+./deploy/verify-kiosk.sh              # preflight; exit 0 = safe to leave
+./deploy/uninstall-kiosk.sh           # remove
+```
+
 `--kiosk` is parsed but never read. The window is always fullscreen and
 frameless. Don't tell users to pass it.
 
-**No log file exists.** Nothing writes one. To capture output:
-`./start-atlantis.sh >> ~/atlantis.log 2>&1`
+**Logs** come from the LaunchAgent capturing stdout/stderr, at
+`logs/kiosk.{out,err}.log`. The application writes no log file of its own.
+
+**Never hand-edit `~/Library/LaunchAgents/com.atlantis.kiosk.plist`** — it is
+generated from `deploy/com.atlantis.kiosk.plist.in` and the next install
+overwrites it. Change the template.
 
 ## Traps
 

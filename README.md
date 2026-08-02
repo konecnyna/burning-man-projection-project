@@ -28,6 +28,14 @@ python main.py --port 5000
 ./start-atlantis.sh          # venv + --production + port 5001
 ```
 
+To make the machine boot into the app and stay in it:
+
+```bash
+./deploy/install-kiosk.sh --dry-run    # preview
+./deploy/install-kiosk.sh              # install
+./deploy/verify-kiosk.sh               # preflight check, exit 0 = safe to leave
+```
+
 Then check it's alive:
 
 ```bash
@@ -61,7 +69,13 @@ main.py               Process orchestration, CLI, webview window
 hand_tracker.py       Camera, MediaPipe, ID tracking, confidence, gestures
 web_app.py            Flask routes + SocketIO
 event_system.py       EventBus and event type constants
-start-atlantis.sh     Production launcher (used by the boot chain)
+start-atlantis.sh     Production launcher — the one supported way to start it
+
+deploy/
+  install-kiosk.sh    Make this machine boot into the app (idempotent)
+  verify-kiosk.sh     Preflight the whole boot chain
+  uninstall-kiosk.sh  Remove the LaunchAgent
+  *.plist.in          LaunchAgent template (edit this, not the installed copy)
 
 static/
   index.html          The entire frontend — state, modes, scenes, HUD
@@ -110,7 +124,8 @@ open http://localhost:5001/video_feed
 ```
 
 Before leaving the installation unattended, run the
-[pre-event checklist](DEPLOYMENT.md#9-pre-event-checklist).
+`./deploy/verify-kiosk.sh` — see
+[DEPLOYMENT.md](DEPLOYMENT.md#9-before-you-leave-it-unattended).
 
 ---
 

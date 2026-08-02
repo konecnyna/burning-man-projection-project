@@ -23,21 +23,31 @@ concluding the app is down.
 
 ## Screen is black / nothing on the projector
 
-**The process died.** Nothing supervises it — a crash or a closed window leaves
-the installation dark permanently.
+**Is the LaunchAgent installed?** With it, a crash self-heals within 15 s.
+Without it, nothing restarts the app and it stays dark.
 
 ```bash
-ps aux | grep '[m]ain.py'    # no output = it exited
+./deploy/verify-kiosk.sh
 ```
 
-Restart:
+If the agent is missing, install it:
 ```bash
-cd /Users/atlantis/burning-man-projection-project
-./start-atlantis.sh
+./deploy/install-kiosk.sh
 ```
 
-To stop this recurring, install the `KeepAlive` LaunchAgent in
-[DEPLOYMENT.md §8](DEPLOYMENT.md#8-risks).
+**The agent is installed but the app keeps dying.** `KeepAlive` will retry every
+15 s forever, so a repeating failure looks like a flickering black screen. The
+reason is in the logs:
+
+```bash
+tail -50 logs/kiosk.err.log
+tail -50 logs/kiosk.out.log
+```
+
+Force a restart:
+```bash
+launchctl kickstart -k gui/$(id -u)/com.atlantis.kiosk
+```
 
 **The Mac went to sleep.**
 
@@ -165,21 +175,23 @@ not affected.
 
 ## Kiosk didn't come back after a reboot or power cut
 
-Check each link in the chain — see [DEPLOYMENT.md §1](DEPLOYMENT.md#1-the-boot-chain).
+One command checks every link in the chain and prints the fix for whatever
+failed:
 
 ```bash
-pmset -g | grep autorestart                                     # want 1
-defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser   # want atlantis
-osascript -e 'tell application "System Events" to get the name of every login item'
-ls -l start-atlantis.sh                                         # want executable
+./deploy/verify-kiosk.sh
 ```
 
 Common causes:
 
 - **FileVault is on.** It blocks auto-login entirely. Must be off.
-- **Login item was removed** by a macOS update or a Settings change.
-- **`venv/` is missing.** `start-atlantis.sh` hard-exits if the directory is not
-  there — for example after the repo is re-cloned without rebuilding it.
+- **Auto-login was reset** by a macOS update. Re-set it in System Settings —
+  see [DEPLOYMENT.md §3](DEPLOYMENT.md#3-the-boot-chain).
+- **The LaunchAgent isn't loaded.** Re-run `./deploy/install-kiosk.sh`.
+- **`venv/` is missing.** `start-atlantis.sh` hard-exits if it isn't there —
+  for example after re-cloning the repo without rebuilding it.
+- **The repo moved.** The plist has the path baked in at install time. Re-run
+  the installer from the new location.
 - **A macOS update is waiting at a prompt** and blocks login.
 
 ---
@@ -219,20 +231,20 @@ which means **camera permission must be granted again**.
 
 ---
 
-## There are no logs
+## Where are the logs
 
-Correct — nothing in the application writes a log file.
-
-To capture output:
+When started by the LaunchAgent:
 
 ```bash
-./start-atlantis.sh >> ~/atlantis.log 2>&1
+tail -f logs/kiosk.out.log logs/kiosk.err.log
 ```
 
-Permanently, use the `StandardOutPath` / `StandardErrorPath` keys in the
-LaunchAgent from [DEPLOYMENT.md §8](DEPLOYMENT.md#8-risks).
+`logs/` is inside the repo and gitignored. If the app was started some other
+way, output goes wherever that shell sent it — start it via
+`./start-atlantis.sh` under the LaunchAgent to get logging.
 
-Be aware that several failure paths are silent regardless of redirection:
+The application itself writes no log file; everything comes from stdout/stderr
+captured by the agent. Some failure paths are silent regardless:
 `EventBus.emit` swallows every handler exception, and `main.py` exits via
 `sys.exit(1)` with no message.
 

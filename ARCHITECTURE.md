@@ -309,44 +309,46 @@ exists in this codebase.
 ## 9. Known issues
 
 Ordered by operational impact. Deployment-level risks are in
-[DEPLOYMENT.md](DEPLOYMENT.md#risks).
+[DEPLOYMENT.md](DEPLOYMENT.md#8-failure-modes).
 
-1. **No crash recovery.** Nothing supervises the Python process. If it exits —
-   crash, closed window, `stop()` — the installation stays dark until someone
-   restarts it by hand.
+1. **The application has no internal supervision or logging of its own.**
+   `main.py`, `hand_tracker.py`, and `web_app.py` swallow exceptions with bare
+   `except: pass` or `sys.exit(1)` with no message, and `EventBus.emit`
+   discards handler exceptions. Crash recovery and log capture come from the
+   LaunchAgent installed by `deploy/install-kiosk.sh` — `KeepAlive` relaunches
+   the process and `StandardOutPath`/`StandardErrorPath` capture stdout and
+   stderr to `logs/`. Anything swallowed internally still never surfaces.
+   See [DEPLOYMENT.md](DEPLOYMENT.md).
 
-2. **No logging.** `main.py`, `hand_tracker.py`, and `web_app.py` swallow
-   exceptions with bare `except: pass` or `sys.exit(1)` with no message.
-   `EventBus.emit` discards handler exceptions. `start-atlantis.sh` does not
-   redirect stdout/stderr anywhere. Unattended failures leave no artifact.
+2. **`main.py` still defaults to port `5000`.** The deployed path is driven by
+   `ATLANTIS_PORT` (default `5001`), which `start-atlantis.sh` and the
+   LaunchAgent both use. Running `python main.py` bare gets a different port
+   than the kiosk.
 
-3. **Port is defined in two places with different values.** `main.py` defaults
-   to `5000`; `start-atlantis.sh` passes `5001`.
-
-4. **`EventBus.emit` holds the lock while invoking handlers**, so one slow
+3. **`EventBus.emit` holds the lock while invoking handlers**, so one slow
    WebSocket handler stalls the tracking thread.
 
-5. **No camera reconnect.** A failed read emits `camera_error`, sleeps 100 ms,
+4. **No camera reconnect.** A failed read emits `camera_error`, sleeps 100 ms,
    and retries the same dead handle forever. Unplug/replug needs a restart.
 
-6. **Two `loadScene` implementations** with divergent hardcoded scene-id lists —
+5. **Two `loadScene` implementations** with divergent hardcoded scene-id lists —
    `SceneManager.loadScene` (line 1752) and `HandTrackingKiosk.loadScene`
-   (line 2718). See [SCENES.md](SCENES.md#the-hardcoded-iframe-list) — this is
+   (line 2718). See [SCENES.md](SCENES.md#4-the-hardcoded-iframe-list) — this is
    the most common way a newly added scene silently fails.
 
-7. **Duplicate scene id.** `kaleidoscope` appears twice in the scene array.
+6. **Duplicate scene id.** `kaleidoscope` appears twice in the scene array.
    Index-based cycling works; any id-based lookup resolves to the first entry.
 
-8. **`HandTrackingKiosk.stop()` has an inverted guard.** `self.running` starts
+7. **`HandTrackingKiosk.stop()` has an inverted guard.** `self.running` starts
    `False` and is never set `True` on start; `stop()` returns early *if*
    `running` is true, then sets it true. It works as an already-stopped latch,
    but the field name means the opposite of how it reads, and
    `run_headless()`'s `while not self.running` loop only works by coincidence.
 
-9. **Unused code.** `hand_detector.py`, `hand_visualizer.py`, and
+8. **Unused code.** `hand_detector.py`, `hand_visualizer.py`, and
    `templates/index.html` are never imported or rendered. `web_app.py` imports
    `render_template` without using it.
 
-10. **Dependencies are lower-bounded, not pinned.** `requirements.txt` uses
+9. **Dependencies are lower-bounded, not pinned.** `requirements.txt` uses
     `>=` throughout, so a fresh install will not reproduce the current
     environment.

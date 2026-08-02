@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for the ATLANTIS kiosk LaunchAgent.
+
+  Do not install this file directly and do not hand-edit the installed copy.
+  Run deploy/install-kiosk.sh, which renders the __PLACEHOLDERS__ below and
+  writes the result to ~/Library/LaunchAgents/com.atlantis.kiosk.plist.
+
+  Editing the installed copy means the next install overwrites your change.
+  Change this template instead, then re-run the installer.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.atlantis.kiosk</string>
+
+    <!-- The one supported way to start the app. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__ATLANTIS_DIR__/start-atlantis.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__ATLANTIS_DIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ATLANTIS_PORT</key>
+        <string>__ATLANTIS_PORT__</string>
+        <key>PATH</key>
+        <string>/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin</string>
+    </dict>
+
+    <!-- Start at login. Auto-login makes login happen on every boot. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Relaunch whenever the process exits, for any reason. This is what
+         makes a crash or a closed window self-heal instead of going dark. -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Minimum seconds between relaunches, so a hard startup failure
+         backs off instead of spinning. -->
+    <key>ThrottleInterval</key>
+    <integer>15</integer>
+
+    <key>StandardOutPath</key>
+    <string>__ATLANTIS_DIR__/logs/kiosk.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__ATLANTIS_DIR__/logs/kiosk.err.log</string>
+</dict>
+</plist>
