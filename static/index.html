@@ -677,6 +677,15 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    /* Hand is approaching: grow and brighten, so aiming has feedback. */
+    .extend-prompt.near {
+      transform: translateX(-50%) translateY(0) scale(1.06);
+      border-color: rgba(0, 255, 65, 0.8);
+      box-shadow:
+        0 0 22px rgba(0, 255, 65, 0.3),
+        inset 0 0 16px rgba(0, 255, 65, 0.08);
+    }
+
     /* Hand is over it: brighten and stop the attract pulse. */
     .extend-prompt.hovered {
       background: rgba(0, 34, 0, 0.6);
@@ -736,26 +745,67 @@
 
     /* Cursor showing where the tracker thinks the hand is. Only rendered
        while the prompt is up, so it never sits over the artwork. */
+    /* The audience has no pointer and no idea where the tracker thinks their
+       hand is. This has to be unmistakable, and it has to say "getting
+       warmer" -- a bare dot gives no feedback about aim. */
     .extend-hand-cursor {
       position: fixed;
-      width: 22px;
-      height: 22px;
-      margin: -11px 0 0 -11px;
+      width: 38px;
+      height: 38px;
+      margin: -19px 0 0 -19px;
       border: 2px solid var(--pipboy-green);
       border-radius: 50%;
-      background: rgba(0, 255, 65, 0.25);
-      box-shadow: 0 0 12px var(--pipboy-green);
+      background: rgba(0, 255, 65, 0.18);
+      box-shadow: 0 0 16px var(--pipboy-green), inset 0 0 10px rgba(0, 255, 65, 0.3);
       pointer-events: none;
       z-index: 9999;
       display: none;
-      transition: transform 0.1s ease, background 0.2s ease;
+      transition: transform 0.12s ease, background 0.2s ease, border-color 0.2s ease;
     }
 
-    .extend-hand-cursor.engaged {
-      background: rgba(0, 255, 65, 0.6);
-      transform: scale(1.5);
-      box-shadow: 0 0 22px var(--pipboy-green);
+    /* Centre dot, so the exact point is readable at a distance. */
+    .extend-hand-cursor::before {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 6px; height: 6px;
+      margin: -3px 0 0 -3px;
+      border-radius: 50%;
+      background: var(--pipboy-green);
+      box-shadow: 0 0 8px var(--pipboy-green);
     }
+
+    /* Halo that keeps expanding, so the eye finds it against a busy scene. */
+    .extend-hand-cursor::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 38px; height: 38px;
+      margin: -19px 0 0 -19px;
+      border: 1px solid var(--pipboy-green);
+      border-radius: 50%;
+      animation: cursorPing 1.6s ease-out infinite;
+    }
+
+    @keyframes cursorPing {
+      0%   { transform: scale(1);   opacity: 0.8; }
+      100% { transform: scale(2.4); opacity: 0;   }
+    }
+
+    /* Warmer: within reach of the target. */
+    .extend-hand-cursor.near {
+      border-color: var(--pipboy-orange);
+      background: rgba(255, 170, 60, 0.22);
+      box-shadow: 0 0 22px var(--pipboy-orange);
+    }
+
+    /* On target and counting down. */
+    .extend-hand-cursor.engaged {
+      background: rgba(0, 255, 65, 0.55);
+      transform: scale(1.35);
+      box-shadow: 0 0 28px var(--pipboy-green);
+    }
+    .extend-hand-cursor.engaged::after { animation: none; opacity: 0; }
 
     /* Glitch transition overlay */
     .glitch-overlay {
@@ -971,7 +1021,7 @@
       </div>
       <div class="extend-text">
         <span class="extend-label">KEEP THIS SCENE</span>
-        <span class="extend-hint">hold your hand here</span>
+        <span class="extend-hint" id="extendHint">raise your hand to keep it</span>
       </div>
     </div>
     <div class="extend-hand-cursor" id="extendHandCursor"></div>
@@ -1872,9 +1922,26 @@
 
         // Generous hit area: hand tracking is not a mouse.
         const r = prompt.getBoundingClientRect();
-        const pad = 60;
+        const pad = 70;
         const over = x >= r.left - pad && x <= r.right + pad &&
                      y >= r.top  - pad && y <= r.bottom + pad;
+
+        // Distance to the target's centre, used purely for "getting warmer"
+        // feedback. Without it the only signal is a binary on/off at the
+        // hit-box edge, which is impossible to aim at from across a room.
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dist = Math.hypot(x - cx, y - cy);
+        const NEAR = 260;   // px
+
+        if (cursor) cursor.classList.toggle('near', !over && dist < NEAR);
+        prompt.classList.toggle('near', !over && dist < NEAR);
+
+        const hint = document.getElementById('extendHint');
+        if (hint && !this._extendHovering) {
+          hint.textContent = (dist < NEAR) ? 'almost — move onto the circle'
+                                           : 'raise your hand to keep it';
+        }
 
         if (over && !this._extendHovering)      this._extendStartHold();
         else if (!over && this._extendHovering) this._extendStopHold();
@@ -1888,6 +1955,8 @@
         const cursor = document.getElementById('extendHandCursor');
         if (prompt) prompt.classList.add('hovered');
         if (cursor) cursor.classList.add('engaged');
+        const hint = document.getElementById('extendHint');
+        if (hint) hint.textContent = 'hold still...';
 
         // Freeze the scene clock for as long as the hand is here.
         this.pauseCycle();
@@ -1937,8 +2006,8 @@
         const cursor = document.getElementById('extendHandCursor');
         const num    = document.getElementById('extendNumber');
         const ring   = document.getElementById('extendRing');
-        if (prompt) prompt.classList.remove('hovered');
-        if (cursor) cursor.classList.remove('engaged');
+        if (prompt) prompt.classList.remove('hovered', 'near');
+        if (cursor) cursor.classList.remove('engaged', 'near');
         if (num)  num.textContent = Math.ceil(this.EXTEND_HOLD_SECONDS);
         if (ring) ring.style.strokeDashoffset = this.EXTEND_RING_CIRC;
 
@@ -1958,8 +2027,8 @@
         this._extendStopHold();
         const p = document.getElementById('extendPrompt');
         const c = document.getElementById('extendHandCursor');
-        if (p) p.classList.remove('visible');
-        if (c) c.style.display = 'none';
+        if (p) p.classList.remove('visible', 'near', 'hovered');
+        if (c) { c.style.display = 'none'; c.classList.remove('engaged', 'near'); }
       }
 
       // ---- pause / resume the scene clock -----------------------------
