@@ -172,9 +172,9 @@ manager sees them.
 Waking from idle requires `confidence.overall > 0.75`, and the parent frame
 separately discards any hand below `0.7` before the mode manager ever sees it.
 
-There is no on-screen readout. If waking is unreliable, the person is likely too
-far from the camera or the lighting is poor — move the camera closer to where
-people stand.
+Confidence is not displayed on screen. If waking is unreliable, the person is
+likely too far from the camera or the lighting is poor — move the camera closer
+to where people stand.
 
 To make it easier to trigger, lower `idleHandConfidenceDetectionLevel` at
 `static/index.html:888`.
@@ -321,5 +321,9 @@ captured by the agent. Some failure paths are silent regardless:
 | Camera working over SSH | `./deploy/kiosk-ctl.sh console` (needs Terminal.app open on the console) |
 | Which session am I in? | `launchctl managername` — `Aqua` = console, `Background` = SSH |
 
-There is no debug UI, video feed, or on-screen HUD — that machinery was removed
-because it cost frame-rate and never earned its keep. The log is the tool.
+There is no debug UI or video feed — that instrumentation was removed because
+it cost frame-rate and never earned its keep. The log is the tool.
+
+The on-screen HUD (scene announcement, current scene, next-scene countdown,
+idle warning, toasts) is **audience-facing UI and is still there** — it is not
+a debug surface.

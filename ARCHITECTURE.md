@@ -29,8 +29,9 @@ from `localhost` off the filesystem, and every JS/CSS/font/image asset is
 vendored into the repo so the installation runs fully offline.
 
 ~1,100 lines of Python plus a ~2,500-line frontend orchestrator
-(`static/index.html`). There is no on-screen chrome: the display shows only
-the active scene.
+(`static/index.html`). The on-screen HUD is audience-facing — scene
+announcement, current scene, countdown to the next one, and an idle warning.
+Debug instrumentation was removed; the HUD was not.
 
 ---
 
@@ -90,7 +91,7 @@ Steps 3 and 5 are unconditional sleeps, not readiness checks.
 | `--verbose` | Debug-level logging. |
 
 The window is always `fullscreen=True, frameless=True`. There is no non-kiosk
-window mode and no on-screen chrome — see [Frontend](#7-frontend).
+window mode. See [Frontend](#7-frontend) for the HUD.
 
 ---
 
@@ -254,6 +255,7 @@ All frontend logic is inline in `static/index.html` across five classes:
 | Class | Line | Responsibility |
 |---|---|---|
 | `ApplicationState` | 765 | Observable key/value store, `subscribe(key, fn)` |
+| `HUDManager` | 924 | Audience HUD: scene announcement, visibility per mode |
 | `ModeManager` | 881 | Four-mode state machine, idle timers, mode-owned scenes |
 | `SceneManager` | 1239 | Interactive scene list, auto-cycling, countdown, loading |
 | `HandTrackingKiosk` | 1734 | Socket wiring, bootstraps everything above |

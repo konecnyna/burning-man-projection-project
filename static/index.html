@@ -744,15 +744,48 @@
       <!-- Hand cursors will be created dynamically -->
     </div>
 
-    <!-- Idle warning notification.
-         Audience-facing feedback, not debug chrome, so it survives the HUD
-         removal. Scene changes are driven by the cycle timer; manual override
-         is keyboard-only (see KEYBOARD SHORTCUTS below). -->
-    <div class="idle-warning" id="idleWarning">
+    <!-- ====================================================================
+         AUDIENCE HUD
+         These tell a visitor what is happening: which scene they are in, when
+         it will change, and when the piece is about to go back to sleep.
+         This is user interface, not instrumentation. The debug readouts that
+         used to live alongside it (event counts, hand counts, confidence,
+         video feed, debug points) are gone and should stay gone.
+         ==================================================================== -->
+
+    <!-- Scene announcement, shown briefly on each scene change -->
+    <div class="parent-overlay hud-element" id="parentOverlay">
+      <div class="overlay-content">
+        <h1 id="overlayTitle">Loading...</h1>
+        <p id="overlayDescription">Preparing interactive experience...</p>
+        <div id="overlayExtraContent"></div>
+      </div>
+    </div>
+
+    <!-- Persistent strip: what is playing and what is next -->
+    <div class="status-bar hud-element" id="status-bar">
+      <div class="status-item">
+        <span id="currentScene">Scene: Loading</span>
+      </div>
+      <div class="status-item">
+        <span id="sceneCountdown">Next: --</span>
+      </div>
+    </div>
+
+    <!-- Idle warning: the piece is about to go back to sleep -->
+    <div class="idle-warning hud-element" id="idleWarning">
       <div class="warning-content">
         <span class="warning-icon">⚠</span>
         <span class="warning-text">No hands detected. Entering idle mode in <span
             id="idleWarningCountdown">--</span>s</span>
+      </div>
+    </div>
+
+    <!-- Transient notices, e.g. "Now playing: Kaleidoscope" -->
+    <div class="toast-notification hud-element" id="toastNotification">
+      <div class="toast-content">
+        <span class="toast-icon" id="toastIcon">✓</span>
+        <span class="toast-text" id="toastText">Notification message</span>
       </div>
     </div>
   </div>
@@ -878,10 +911,72 @@
     // ============================================================================
     // HUD MANAGER - Centralized HUD visibility management
     // ============================================================================
+    // ============================================================================
+    // HUD — audience-facing interface
+    //
+    // Tells a visitor what is happening: which scene is playing, when it will
+    // change, and when the piece is about to return to idle. This is UI, not
+    // instrumentation; the old debug readouts are deliberately not here.
+    //
+    // Visibility is per-mode: hidden in idle (the screensaver should be clean),
+    // shown in onboarding and active.
+    // ============================================================================
+    class HUDManager {
+      constructor(appState) {
+        this.appState = appState;
+        this.overlayTimer = null;
+      }
+
+      show() {
+        document.querySelectorAll('.hud-element').forEach(el => { el.style.display = ''; });
+      }
+
+      hide() {
+        document.querySelectorAll('.hud-element').forEach(el => { el.style.display = 'none'; });
+      }
+
+      hideForMode() { this.hide(); }
+
+      showForMode(mode) {
+        // Idle is the screensaver -- nothing on top of it.
+        if (mode === 'idle') this.hide(); else this.show();
+      }
+
+
+      // Scene announcement. Auto-hides so it never sits on top of the artwork.
+      showOverlay(title, description, extraContent) {
+        const overlay = document.getElementById('parentOverlay');
+        if (!overlay) return;
+
+        const t = document.getElementById('overlayTitle');
+        const d = document.getElementById('overlayDescription');
+        const x = document.getElementById('overlayExtraContent');
+
+        if (t && title) t.textContent = title;
+        if (d) d.textContent = description || '';
+        if (x) x.innerHTML = extraContent || '';
+
+        overlay.classList.add('visible');
+
+        if (this.overlayTimer) clearTimeout(this.overlayTimer);
+        this.overlayTimer = setTimeout(() => this.hideOverlay(), 3000);
+      }
+
+      hideOverlay() {
+        const overlay = document.getElementById('parentOverlay');
+        if (overlay) overlay.classList.remove('visible');
+        if (this.overlayTimer) {
+          clearTimeout(this.overlayTimer);
+          this.overlayTimer = null;
+        }
+      }
+    }
+
     class ModeManager {
       constructor(appState, loadSceneCallback = null) {
         this.appState = appState;
         this.loadSceneCallback = loadSceneCallback;
+        this.hudManager = new HUDManager(appState);
         this.idleTimer = null;
         this.idleWarningTimer = null;
         this.idleWarningVisible = false;
@@ -1069,6 +1164,7 @@
 
       // Mode enter/exit handlers
       onEnterIdle() {
+        this.hudManager.hideForMode('idle');
         this.clearIdleTimer();
         this.hideIdleWarning();
 
@@ -1088,6 +1184,7 @@
       }
 
       onEnterOnboarding() {
+        this.hudManager.showForMode('onboarding');
         this.clearIdleTimer();
         this.hideIdleWarning();
 
@@ -1111,6 +1208,7 @@
       }
 
       onEnterActive() {
+        this.hudManager.showForMode('active');
         this.startIdleTimer();
       }
 
@@ -1241,8 +1339,10 @@
         this.appState = appState;
         this.modeManager = modeManager;
         this.app = app;
+        this.hudManager = modeManager.hudManager;
         this.sceneHandlers = {};
         this.cycleTimer = null;
+        this.countdownTimer = null;
         this.currentSceneIframe = null;
         this.quickScene = 30
         this.defaultDuration = 45
@@ -1384,6 +1484,12 @@
           clearTimeout(this.cycleTimer);
           this.cycleTimer = null;
         }
+        if (this.countdownTimer) {
+          clearInterval(this.countdownTimer);
+          this.countdownTimer = null;
+        }
+        const el = document.getElementById('sceneCountdown');
+        if (el) el.textContent = 'Next: --';
       }
 
       scheduleNextScene() {
@@ -1400,7 +1506,39 @@
           this.nextScene();
         }, currentScene.duration * 1000);
 
+        this.startSceneCountdown();
+
         // Start countdown timer
+      }
+
+      startSceneCountdown() {
+        if (this.countdownTimer) clearInterval(this.countdownTimer);
+        this.countdownTimer = setInterval(() => this.updateSceneCountdown(), 1000);
+        this.updateSceneCountdown();
+      }
+
+      updateSceneCountdown() {
+        const el = document.getElementById('sceneCountdown');
+        if (!el) return;
+
+        const scene = this.appState.get('currentScene');
+        const startedAt = this.appState.get('sceneStartTime');
+
+        if (!scene || !startedAt || scene.duration === 0 ||
+            this.modeManager.getCurrentMode() !== 'active') {
+          el.textContent = 'Next: --';
+          return;
+        }
+
+        const remaining = Math.max(0, scene.duration - (Date.now() - startedAt) / 1000);
+        el.textContent = remaining <= 0
+          ? 'Next: now'
+          : `Next: ${Math.ceil(remaining)}s`;
+
+        // One heads-up before the scene changes.
+        if (Math.ceil(remaining) === 5 && this.app && this.app.showToast) {
+          this.app.showToast('Next scene in 5 seconds', 2500, '⏭');
+        }
       }
 
       nextScene() {
@@ -1437,6 +1575,26 @@
             sceneStartTime: Date.now()
           });
 
+          // Tell the audience what they are looking at.
+          if (this.modeManager.getCurrentMode() === 'active') {
+            const idx = this.appState.get('sceneIndex') + 1;   // 1-based for display
+            const total = this.appState.get('totalScenes');
+            const pct = total ? Math.round((idx / total) * 100) : 0;
+            this.hudManager.showOverlay(scene.name, scene.description, `
+              <div class="scene-progress">
+                <div class="scene-progress-bar" style="width: ${pct}%;"></div>
+              </div>
+              <div class="scene-info">
+                <div class="scene-counter">Content ${idx} of ${total}</div>
+                <div class="scene-timer">${scene.duration}s</div>
+              </div>
+            `);
+          }
+
+          // Persistent "what is playing" readout.
+          const sceneLabel = document.getElementById('currentScene');
+          if (sceneLabel) sceneLabel.textContent = `Scene: ${scene.name || scene.id}`;
+
           const container = document.getElementById('scene-container');
 
           // Scenes listed here load as iframes so their <script> tags execute.
@@ -1463,6 +1621,11 @@
           }
 
           this.callSceneHandler('onInit');
+
+          if (this.app && this.app.showToast &&
+              this.modeManager.getCurrentMode() === 'active' && scene.duration > 0) {
+            this.app.showToast(`Now playing: ${scene.name || scene.id}`, 2500, '\u{1F3A8}');
+          }
 
         } catch (error) {
           console.error('[SceneManager] Error loading scene:', error);
@@ -2289,6 +2452,24 @@
           onCleanup: function () {
           }
         };
+      }
+
+      // Transient audience notice. Auto-hides; never blocks the artwork.
+      showToast(message, duration = 3000, icon = '\u2713') {
+        const toast = document.getElementById('toastNotification');
+        const text  = document.getElementById('toastText');
+        const ic    = document.getElementById('toastIcon');
+        if (!toast || !text || !ic) return;
+
+        text.textContent = message;
+        ic.textContent = icon;
+        toast.classList.add('visible');
+
+        if (this._toastTimer) clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => {
+          toast.classList.remove('visible');
+          this._toastTimer = null;
+        }, duration);
       }
 
       async loadScene(scene) {

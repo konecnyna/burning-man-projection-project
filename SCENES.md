@@ -260,9 +260,10 @@ Notes for scene authors:
    python main.py --port 5000
    ```
 
-   There is no on-screen chrome. Press **N** / **→** for the next scene and
-   **P** / **←** for the previous one to jump straight to it. Watch
-   `logs/atlantis.log` to confirm the tracker is running.
+   Press **N** / **→** for the next scene and **P** / **←** for the previous
+   one to jump straight to it. The HUD shows which scene is playing and the
+   countdown to the next. Watch `logs/atlantis.log` to confirm the tracker is
+   running.
 
 ### Enabling a commented-out scene
 

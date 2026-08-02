@@ -127,9 +127,20 @@ configured by hand:
 ./deploy/kiosk-ctl.sh status          # works over SSH; also says which session
 ```
 
-The window is always fullscreen and frameless. There is **no on-screen chrome
-and no debug UI** — the display shows only the active scene. Manual override is
-keyboard-only: **N**/**→** next scene, **P**/**←** previous.
+The window is always fullscreen and frameless.
+
+**The HUD is audience-facing UI, not instrumentation.** It tells a visitor what
+scene is playing, when it will change, and when the piece is about to return to
+idle: `parentOverlay` (scene announcement), `status-bar` (current scene + next
+countdown), `idleWarning`, and the toast. Treat it as part of the artwork —
+don't strip it as debug chrome.
+
+What *was* debug and is intentionally gone: event/hand counters, confidence
+readout, debug point canvases, the video feed, and the debug panel. Don't
+reintroduce those.
+
+Manual override is keyboard-only (camera-only input for the audience):
+**N**/**→** next scene, **P**/**←** previous.
 
 **Logs** go to `logs/atlantis.log` (rotating, 5MB x 3 = 20MB cap) and to stdout,
 which the LaunchAgent captures in `logs/kiosk.{out,err}.log`.
