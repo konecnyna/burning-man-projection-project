@@ -22,6 +22,10 @@ socket.on('connect', () => {
 
 
 // Function to handle hand tracking data
+// Minimum normalised travel before a hand counts as having moved. Below this
+// it is tracker jitter, not intent.
+const HAND_MOVE_THRESHOLD = 0.0015;
+
 function handleHandTracking(hands) {
   if (!canvas || !hands || hands.length === 0) return;
   
@@ -35,34 +39,40 @@ function handleHandTracking(hands) {
     
     // Removed debug logging for better performance
     
-    let pointer = pointers.find(p => p.id == hand.hand_id || p.id == index);
+    // hand_id 0 is a real id but falsy, so ?? not ||. Match on id only --
+    // matching on the loop index too let one hand pick up another's pointer.
+    const handId = (hand.hand_id !== undefined && hand.hand_id !== null)
+      ? hand.hand_id : index;
+
+    let pointer = pointers.find(p => p.id === handId);
 
     if (pointer == null) {
       pointer = new pointerPrototype();
-      pointer.id = hand.hand_id || index;
+      pointer.id = handId;
       pointers.push(pointer);
     }
 
-    // Always keep hand pointers in "down" state for continuous fluid interaction
+    // Hand pointers stay "down" so interaction is continuous.
     if (!pointer.down) {
-      updatePointerDownData(pointer, hand.hand_id || index, posX, posY);
+      updatePointerDownData(pointer, handId, posX, posY);
     }
-    
-    // Keep hand pointers always active and update last seen time
+
     pointer.down = true;
     pointer.lastSeen = Date.now();
 
     updatePointerMoveData(pointer, posX, posY);
-    
-    // Force continuous movement for dragging effect
-    pointer.moved = true;  // Always mark as moved for continuous fluid trails
-    
-    // Create additional fluid effects for more visible dragging
-    if (Math.abs(pointer.deltaX) > 0.001 || Math.abs(pointer.deltaY) > 0.001) {
-      // Extra splats for continuous trail effect
-      splatPointer(pointer);
-    }
-    
+
+    // Only count as movement if the hand actually travelled. updatePointerMoveData
+    // sets moved on any delta > 0, and hand tracking always jitters by a fraction
+    // of a pixel -- so without a threshold a completely still hand reads as moving
+    // every frame and pumps dye into one spot until it saturates to white.
+    const travelled = Math.hypot(pointer.deltaX, pointer.deltaY);
+    pointer.moved = travelled > HAND_MOVE_THRESHOLD;
+
+    // No splat here. applyInputs() splats every pointer whose `moved` is set,
+    // once per rendered frame. Splatting here as well meant two splats per hand
+    // per frame -- double the dye (hence the white-out) and double the GPU work
+    // (two full-screen passes each), which is what made it turn blocky.
   });
 }
 
