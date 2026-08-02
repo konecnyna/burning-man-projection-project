@@ -23,9 +23,47 @@ ATLANTIS_BOOT_DELAY="${ATLANTIS_BOOT_DELAY:-5}"
 
 mkdir -p "$SCRIPT_DIR/logs"
 
+PIDFILE="$SCRIPT_DIR/logs/atlantis.pid"
+
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
-log "ATLANTIS starting — dir=$SCRIPT_DIR port=$ATLANTIS_PORT"
+# ---------------------------------------------------------------------------
+# Single instance.
+#
+# Two copies fight over the port and the camera, and the loser dies in a way
+# that looks like the app crashing. This can happen easily: KeepAlive
+# relaunching while a stale process lingers, or someone starting it by hand
+# next to the LaunchAgent.
+#
+# `exec` at the end of this script replaces the shell with Python, keeping the
+# same PID, so $$ recorded here stays the live process ID.
+# ---------------------------------------------------------------------------
+if [ -f "$PIDFILE" ]; then
+    existing=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
+        # Confirm it is actually ours and not a recycled PID.
+        if ps -p "$existing" -o command= 2>/dev/null | grep -q 'main\.py'; then
+            log "ALREADY RUNNING as PID $existing — refusing to start a second copy."
+            log "  Stop it first:  kill $existing"
+            log "  Or under the LaunchAgent:  launchctl kickstart -k gui/\$(id -u)/com.atlantis.kiosk"
+            exit 1
+        fi
+    fi
+    log "Removing stale pidfile (PID ${existing:-unknown} is gone)"
+    rm -f "$PIDFILE"
+fi
+
+# Belt and braces: if anything else already holds the port, do not pile on.
+if lsof -iTCP:"$ATLANTIS_PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
+    holder=$(lsof -iTCP:"$ATLANTIS_PORT" -sTCP:LISTEN -P -n 2>/dev/null | awk 'NR==2 {print $2}')
+    log "Port $ATLANTIS_PORT is already in use by PID ${holder:-unknown} — refusing to start."
+    exit 1
+fi
+
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT INT TERM
+
+log "ATLANTIS starting — dir=$SCRIPT_DIR port=$ATLANTIS_PORT pid=$$"
 
 if [ "$ATLANTIS_BOOT_DELAY" -gt 0 ] 2>/dev/null; then
     log "Waiting ${ATLANTIS_BOOT_DELAY}s for the desktop to settle"
