@@ -35,7 +35,7 @@ Both are registered with `duration: 0`, which means "never auto-advance".
 
 ## 2. Scene inventory
 
-**Enabled** in the `SceneManager.scenes` array (`static/index.html`, line 1516):
+**Enabled** in the `SceneManager.scenes` array (`static/index.html`, line 1252):
 
 | Order | id | Duration | Directory |
 |---|---|---|---|
@@ -66,8 +66,8 @@ There are **two** `loadScene` implementations, on different code paths:
 
 | Method | Line | Used by | Loads |
 |---|---|---|---|
-| `SceneManager.loadScene` | 1752 | The active-mode cycle | The interactive scenes |
-| `HandTrackingKiosk.loadScene` | 2718 | `ModeManager` via `loadSceneCallback` | `idle`, `onboarding` |
+| `SceneManager.loadScene` | 1428 | The active-mode cycle | The interactive scenes |
+| `HandTrackingKiosk.loadScene` | 2294 | `ModeManager` via `loadSceneCallback` | `idle`, `onboarding` |
 
 Both do the same thing: check the scene's `id` against a hardcoded list. If the
 id is in the list, the scene is injected as an **iframe**. If it is not, the file
@@ -100,11 +100,11 @@ The two lists have diverged:
 
 | List | Line | Contents |
 |---|---|---|
-| `SceneManager.loadScene` | 1794 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `wireframe_geometry`, `pong`, `kaleidoscope`, `finger_paint`, `idle` |
-| `HandTrackingKiosk.loadScene` | 2737 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `finger_paint`, `idle`, `onboarding` |
+| `SceneManager.loadScene` | 1446 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `wireframe_geometry`, `pong`, `kaleidoscope`, `finger_paint`, `idle` |
+| `HandTrackingKiosk.loadScene` | 2309 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `finger_paint`, `idle`, `onboarding` |
 
 Each list happens to cover what its own path needs today, so nothing is broken
-right now. But adding a cycling scene means editing the list at **line 1794**,
+right now. But adding a cycling scene means editing the list at **line 1446**,
 and it is easy to edit the wrong one.
 
 ---
@@ -162,7 +162,7 @@ window.addEventListener('message', (e) => {
 ### C. Explicit parent handler
 
 Register an object on `SceneManager.sceneHandlers` (see `initializeSceneHandlers`,
-line 1853) with any of `onInit`, `onHandDetected`, `onHandMove`, `onHandLost`,
+line 1502) with any of `onInit`, `onHandDetected`, `onHandMove`, `onHandLost`,
 `onThumbsUp`, `onThumbsDown`, `onCleanup`, `onDestroy`. `pong` and
 `wireframe_geometry` use this to post a different shape:
 
@@ -231,7 +231,7 @@ Notes for scene authors:
    Self-contained: inline CSS/JS or local relative assets. See §8.
 
 2. **Register it** in the `SceneManager.scenes` array (`static/index.html`,
-   line 1516):
+   line 1252):
 
    ```js
    {
@@ -247,7 +247,7 @@ Notes for scene authors:
    Use a unique `id`. Underscores in the id, hyphens in the directory, matching
    the existing convention.
 
-3. **Add the id to the iframe list at line 1794.** Skipping this is the failure
+3. **Add the id to the iframe list at line 1446.** Skipping this is the failure
    in §4 — the scene will load as dead markup with no error.
 
 4. **Wire up hand data** using mechanism A from §5 unless you have a reason not
@@ -260,9 +260,9 @@ Notes for scene authors:
    python main.py --port 5000
    ```
 
-   Use the HUD's next/previous scene controls to jump straight to it. Open
-   `http://localhost:5000/video_feed` in a second window to confirm the tracker
-   is actually seeing hands.
+   There is no on-screen chrome. Press **N** / **→** for the next scene and
+   **P** / **←** for the previous one to jump straight to it. Watch
+   `logs/atlantis.log` to confirm the tracker is running.
 
 ### Enabling a commented-out scene
 

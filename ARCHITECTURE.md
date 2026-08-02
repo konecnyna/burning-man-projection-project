@@ -28,8 +28,9 @@ No build step. No network access required. No database. Everything is served
 from `localhost` off the filesystem, and every JS/CSS/font/image asset is
 vendored into the repo so the installation runs fully offline.
 
-~1,400 lines of Python plus a ~3,200-line frontend orchestrator
-(`static/index.html`).
+~1,100 lines of Python plus a ~2,500-line frontend orchestrator
+(`static/index.html`). There is no on-screen chrome: the display shows only
+the active scene.
 
 ---
 
@@ -85,11 +86,11 @@ Steps 3 and 5 are unconditional sleeps, not readiness checks.
 |---|---|
 | `--port N` | Web server port. Default **5000**. |
 | `--headless` | No webview window; server and tracker only. |
-| `--production` | Exposed to the frontend via `/api/production-mode`; hides debug UI. |
-| `--kiosk` | **No-op.** Parsed into `args.kiosk`, which is never read. |
+| `--production` | Exposed to the frontend via `/api/production-mode`. |
+| `--verbose` | Debug-level logging. |
 
 The window is always `fullscreen=True, frameless=True`. There is no non-kiosk
-window mode.
+window mode and no on-screen chrome — see [Frontend](#7-frontend).
 
 ---
 
@@ -97,13 +98,10 @@ window mode.
 
 | File | Lines | Role |
 |---|---|---|
-| `main.py` | 139 | Process orchestration, CLI, signals, webview window |
-| `hand_tracker.py` | 613 | Camera, MediaPipe, ID tracking, confidence, gestures |
-| `web_app.py` | 199 | Flask routes, SocketIO, per-client event subscriptions |
-| `event_system.py` | 92 | `Event`, `HandTrackingEvents`, `EventBus` |
-| `hand_detector.py` | 201 | Unused — `HandDetector` is never imported |
-| `hand_visualizer.py` | 163 | Unused — `HandVisualizer` is never imported |
-| `templates/index.html` | 35 | Unused — Flask serves `static/index.html` directly |
+| `main.py` | 198 | Process orchestration, CLI, signals, logging, webview window |
+| `hand_tracker.py` | 539 | Camera, MediaPipe, ID tracking, confidence, gestures |
+| `web_app.py` | 249 | Flask routes, SocketIO, per-client event subscriptions, CSP |
+| `event_system.py` | 101 | `Event`, `HandTrackingEvents`, `EventBus` |
 
 Scene management is entirely frontend-side. There is no `scene_manager.py`.
 
@@ -191,15 +189,20 @@ Each hand carries `hand_id`, `landmarks` (21 × `{x, y, z}` normalised),
 `palm_center`, `wrist`, `fingertips` (thumb/index/middle/ring/pinky), and
 `confidence`.
 
-Two behaviours to be aware of:
+Behaviours that matter for an always-on process:
 
-- **Handlers run while the lock is held.** `emit()` acquires `self._lock` then
-  calls every subscriber inline, so a slow handler blocks all publishers.
-- **Handler exceptions are swallowed** (`except Exception: pass`, no logging).
+- **Handlers run outside the lock.** `emit()` copies the subscriber list under
+  the lock and dispatches after releasing it, so one slow WebSocket client
+  cannot stall the tracking thread.
+- **Handler exceptions are logged, not swallowed** — `logger.exception`, so a
+  broken subscriber is visible instead of failing silently for the whole run.
+- **History is a `deque(maxlen=1000)`** — self-trimming, no O(n) `pop(0)` on
+  the per-frame path.
 
-`hand_moved` and `frame_processed` fire every frame with full landmark payloads
-— up to 4 hands × 21 landmarks × 3 floats. At 30–60 FPS this dominates both CPU
-and WebSocket traffic.
+**Only `hand_moved` and `hand_detected` carry hand payloads.**
+`frame_processed` is a heartbeat carrying `hand_count` and `fps` only. Sending
+the full landmark blob on both doubled serialization on the server and object
+allocation in the browser for no benefit.
 
 ---
 
@@ -214,8 +217,6 @@ Bound to `localhost` only.
 | `/static/<path>` | GET | Static assets |
 | `/health` | GET | `{"status", "timestamp", "csp_violations"}` |
 | `/api/production-mode` | GET | Reflects the `--production` flag |
-| `/api/debug-settings` | GET/POST | Reads/writes `debug_settings.json` |
-| `/video_feed` | GET | MJPEG stream of the annotated debug frame, ~30 FPS |
 | `/csp-report` | POST | Browser posts blocked off-box loads here |
 | `/api/csp-violations` | GET/DELETE | Inspect or reset blocked off-box loads |
 
@@ -252,11 +253,10 @@ All frontend logic is inline in `static/index.html` across five classes:
 
 | Class | Line | Responsibility |
 |---|---|---|
-| `ApplicationState` | 838 | Observable key/value store, `subscribe(key, fn)` |
-| `HUDManager` | 974 | Pipboy-style overlay, visibility per mode |
-| `ModeManager` | 1137 | Four-mode state machine, idle timers, mode-owned scenes |
-| `SceneManager` | 1501 | Interactive scene list, auto-cycling, countdown, loading |
-| `HandTrackingKiosk` | 2085 | Socket wiring, bootstraps everything above |
+| `ApplicationState` | 765 | Observable key/value store, `subscribe(key, fn)` |
+| `ModeManager` | 881 | Four-mode state machine, idle timers, mode-owned scenes |
+| `SceneManager` | 1239 | Interactive scene list, auto-cycling, countdown, loading |
+| `HandTrackingKiosk` | 1734 | Socket wiring, bootstraps everything above |
 
 ### Modes
 
@@ -286,12 +286,12 @@ All in `static/index.html`:
 
 | Constant | Value | Line | Meaning |
 |---|---|---|---|
-| `idleTimeoutMs` | `45_000` | 868 | Inactivity before returning to idle |
-| idle warning | `idleTimeoutMs - 5000` | 1410 | Warning banner at 40 s |
-| `idleHandConfidenceDetectionLevel` | `0.75` | 1145 | Confidence needed to wake |
-| `quickScene` | `30` | 1511 | Short scene duration (seconds) |
-| `defaultDuration` | `45` | 1512 | Standard scene duration |
-| `popularScene` | `60` | 1513 | Long scene duration |
+| `idleTimeoutMs` | `45_000` | 795 | Inactivity before returning to idle |
+| idle warning | `idleTimeoutMs - 5000` | 1148 | Warning banner at 40 s |
+| `idleHandConfidenceDetectionLevel` | `0.75` | 888 | Confidence needed to wake |
+| `quickScene` | `30` | 1247 | Short scene duration (seconds) |
+| `defaultDuration` | `45` | 1248 | Standard scene duration |
+| `popularScene` | `60` | 1249 | Long scene duration |
 
 Scene content and the loading contract are documented in [SCENES.md](SCENES.md).
 
@@ -351,8 +351,8 @@ Ordered by operational impact. Deployment-level risks are in
    and retries the same dead handle forever. Unplug/replug needs a restart.
 
 5. **Two `loadScene` implementations** with divergent hardcoded scene-id lists —
-   `SceneManager.loadScene` (line 1752) and `HandTrackingKiosk.loadScene`
-   (line 2718). See [SCENES.md](SCENES.md#4-the-hardcoded-iframe-list) — this is
+   `SceneManager.loadScene` (line 1428) and
+   `HandTrackingKiosk.loadScene` (line 2294). See [SCENES.md](SCENES.md#4-the-hardcoded-iframe-list) — this is
    the most common way a newly added scene silently fails.
 
 6. **Duplicate scene id.** `kaleidoscope` appears twice in the scene array.
@@ -363,10 +363,6 @@ Ordered by operational impact. Deployment-level risks are in
    `running` is true, then sets it true. It works as an already-stopped latch,
    but the field name means the opposite of how it reads, and
    `run_headless()`'s `while not self.running` loop only works by coincidence.
-
-8. **Unused code.** `hand_detector.py`, `hand_visualizer.py`, and
-   `templates/index.html` are never imported or rendered. `web_app.py` imports
-   `render_template` without using it.
 
 9. **Dependencies are lower-bounded, not pinned.** `requirements.txt` uses
     `>=` throughout, so a fresh install will not reproduce the current

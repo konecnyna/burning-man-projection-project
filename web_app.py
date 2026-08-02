@@ -1,13 +1,13 @@
-from flask import Flask, render_template, request, Response, send_from_directory, jsonify
+from flask import Flask, request, send_from_directory, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
+import logging
 import threading
-import cv2
-import json
-import os
 from collections import deque
 from datetime import datetime
 from typing import Dict, Set
 from event_system import Event, EventBus, HandTrackingEvents
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------
 # Offline enforcement.
@@ -100,7 +100,7 @@ class WebSocketManager:
                 self.socketio.emit('event', event.to_dict(), room=client_id)
         return handler
 
-def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False):
+def create_web_app(event_bus: EventBus, production_mode=False):
     """Create Flask app with WebSocket support"""
     app = Flask(__name__, static_folder='static')
     app.config['SECRET_KEY'] = 'hand-tracking-secret'
@@ -144,13 +144,10 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
         with CSP_VIOLATIONS_LOCK:
             CSP_VIOLATIONS.append(entry)
 
-        # Goes to the LaunchAgent's captured stderr, so it lands in
-        # logs/kiosk.err.log alongside everything else.
-        print(
-            "[CSP VIOLATION] blocked={blocked_uri} directive={violated_directive} "
-            "doc={document_uri} src={source_file}:{line_number}".format(**entry),
-            flush=True,
-        )
+        logger.warning(
+            "CSP violation: blocked=%s directive=%s doc=%s src=%s:%s",
+            entry['blocked_uri'], entry['violated_directive'],
+            entry['document_uri'], entry['source_file'], entry['line_number'])
         return ('', 204)
 
     @app.route('/api/csp-violations', methods=['GET'])
@@ -203,67 +200,8 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
         """Get production mode status"""
         return jsonify({'production_mode': production_mode})
     
-    @app.route('/api/debug-settings', methods=['GET'])
-    def get_debug_settings():
-        """Get current debug settings"""
-        debug_settings_file = 'debug_settings.json'
-        
-        if os.path.exists(debug_settings_file):
-            try:
-                with open(debug_settings_file, 'r') as f:
-                    settings = json.load(f)
-                return jsonify(settings)
-            except (json.JSONDecodeError, IOError) as e:
-                return jsonify({'error': f'Failed to read debug settings: {str(e)}'}), 500
-        else:
-            # Return default settings if file doesn't exist
-            default_settings = {
-                'showDebugPoints': False,
-                'showControlsHUD': True
-            }
-            return jsonify(default_settings)
-    
-    @app.route('/api/debug-settings', methods=['POST'])
-    def save_debug_settings():
-        """Save debug settings"""
-        debug_settings_file = 'debug_settings.json'
-        
-        try:
-            settings = request.get_json()
-            if not settings:
-                return jsonify({'error': 'No settings provided'}), 400
-                
-            with open(debug_settings_file, 'w') as f:
-                json.dump(settings, f, indent=2)
-                
-            return jsonify({'success': True, 'message': 'Debug settings saved successfully'})
-        except (json.JSONDecodeError, IOError) as e:
-            return jsonify({'error': f'Failed to save debug settings: {str(e)}'}), 500
-    
-    def generate_video_stream():
-        """Generate video stream for OpenCV display"""
-        while True:
-            if hand_tracker:
-                frame = hand_tracker.get_current_frame()
-                if frame is not None:
-                    # Encode frame as JPEG
-                    ret, buffer = cv2.imencode('.jpg', frame)
-                    if ret:
-                        frame_bytes = buffer.tobytes()
-                        yield (b'--frame\r\n'
-                               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            # Sleep to prevent high CPU usage
-            import time
-            time.sleep(0.033)  # ~30 FPS
-    
-    @app.route('/video_feed')
-    def video_feed():
-        """Video streaming route"""
-        if not hand_tracker:
-            return Response("Hand tracker not available", status=503)
-        return Response(generate_video_stream(),
-                       mimetype='multipart/x-mixed-replace; boundary=frame')
-    
+
+
     @socketio.on('connect')
     def handle_connect():
         client_id = request.sid
@@ -298,9 +236,9 @@ def create_web_app(event_bus: EventBus, hand_tracker=None, production_mode=False
         
     return app, socketio
 
-def run_web_app(event_bus: EventBus, hand_tracker=None, host: str = 'localhost', port: int = 5000, debug: bool = False, production_mode: bool = False):
+def run_web_app(event_bus: EventBus, host: str = 'localhost', port: int = 5000, debug: bool = False, production_mode: bool = False):
     """Run the web application"""
-    app, socketio = create_web_app(event_bus, hand_tracker, production_mode)
+    app, socketio = create_web_app(event_bus, production_mode)
     
     def run_server():
         socketio.run(app, host=host, port=port, debug=debug, use_reloader=False, allow_unsafe_werkzeug=True)

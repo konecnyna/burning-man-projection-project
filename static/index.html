@@ -739,96 +739,21 @@
     <!-- Glitch transition overlay -->
     <div class="glitch-overlay" id="glitchOverlay"></div>
 
-    <!-- Parent overlay for scene transitions -->
-    <div class="parent-overlay hud-element" id="parentOverlay">
-      <div class="overlay-content">
-        <h1 id="overlayTitle">Loading...</h1>
-        <p id="overlayDescription">Preparing interactive experience...</p>
-
-        <div id="overlayExtraContent"></div>
-      </div>
-    </div>
-
     <!-- Hand cursors -->
     <div class="hand-cursors" id="handCursors">
       <!-- Hand cursors will be created dynamically -->
     </div>
 
-    <!-- Debug points -->
-    <div class="debug-points hud-element" id="debugPoints">
-      <canvas class="debug-point-canvas" id="debugCanvas1"></canvas>
-      <canvas class="debug-point-canvas" id="debugCanvas2"></canvas>
-      <canvas class="debug-point-canvas" id="debugCanvas3"></canvas>
-      <canvas class="debug-point-canvas" id="debugCanvas4"></canvas>
-    </div>
-
-    <!-- Status bar -->
-    <div class="status-bar hud-element" id="status-bar">
-      <div class="status-item">
-        <div class="status-indicator" id="connectionStatus"></div>
-        <span id="connectionText">Disconnected</span>
-      </div>
-      <div class="status-item">
-        <span id="confidenceCounter">Confidence: 0%</span>
-      </div>
-      <div class="status-item">
-        <span id="handCounter">Hands: 0</span>
-      </div>
-      <div class="status-item">
-        <span id="currentScene">Scene: Loading</span>
-      </div>
-      <div class="status-item">
-        <span id="sceneCountdown">Next: --</span>
-      </div>
-    </div>
-
-    <!-- Idle warning notification -->
-    <div class="idle-warning hud-element" id="idleWarning">
+    <!-- Idle warning notification.
+         Audience-facing feedback, not debug chrome, so it survives the HUD
+         removal. Scene changes are driven by the cycle timer; manual override
+         is keyboard-only (see KEYBOARD SHORTCUTS below). -->
+    <div class="idle-warning" id="idleWarning">
       <div class="warning-content">
         <span class="warning-icon">⚠</span>
         <span class="warning-text">No hands detected. Entering idle mode in <span
             id="idleWarningCountdown">--</span>s</span>
       </div>
-    </div>
-
-    <!-- Toast notification -->
-    <div class="toast-notification hud-element" id="toastNotification">
-      <div class="toast-content">
-        <span class="toast-icon" id="toastIcon">✓</span>
-        <span class="toast-text" id="toastText">Notification message</span>
-      </div>
-    </div>
-
-    <!-- Debug controls -->
-    <button class="debug-toggle hud-element" id="debug-toggle" onclick="toggleDebug()">Debug</button>
-    <div class="debug-panel hud-element" id="debug-panel">
-      <div>Events: <span id="eventCount">0</span></div>
-      <div>Scene: <span id="debugScene">-</span></div>
-      <div>Timer: <span id="debugTimer">-</span></div>
-      <div>Auto-cycle: <span id="debugAutoCycle">-</span></div>
-      <div>Hands detected: <span id="debugHandCount">0</span></div>
-      <div>Debug points: <span id="debugPointsStatus">Off</span></div>
-      <div>Controls/HUD: <span id="controlsHUDStatus">On</span></div>
-      <div class="debug-control">
-        <button onclick="toggleVideo()">Toggle Video</button>
-        <button onclick="toggleDebugPoints()">Toggle Debug Points</button>
-        <button onclick="toggleControlsHUD()">Toggle Controls/HUD</button>
-      </div>
-      <div style="font-size: 0.7rem; opacity: 0.7; margin-top: 5px;">
-        Tip: Ctrl+Shift+H to toggle Controls/HUD
-      </div>
-    </div>
-
-    <!-- Debug video display -->
-    <div class="debug-video" id="debugVideo">
-      <!-- <img id="videoStream" src="/video_feed" alt="Camera Feed"> -->
-    </div>
-
-    <!-- Manual controls -->
-    <div class="manual-controls hud-element" id="manual-controls">
-      <button onclick="previousScene()">Prev ◀</button>
-      <button onclick="nextScene()">Next ▶</button>
-      <!-- <button onclick="toggleAutoCycle()">Auto</button> -->
     </div>
   </div>
 
@@ -871,14 +796,9 @@
           idleTimeoutStartTime: null,
 
           // Debug state
-          debugVisible: false,
-          debugPointsVisible: false,
-          controlsHUDVisible: true
         };
 
         this.listeners = new Map();
-        this.stateHistory = [];
-        this.maxHistorySize = 100;
       }
 
       // Get current state (read-only)
@@ -892,22 +812,12 @@
       }
 
       // Update state and notify listeners
+      // Called ~4x per frame on the hand-tracking path, so it stays lean:
+      // one shallow clone for the previous value, no history buffer. A
+      // stateHistory used to be recorded here and never read by anything.
       setState(updates) {
         const oldState = { ...this.state };
         this.state = { ...this.state, ...updates };
-
-        // Add to history
-        this.stateHistory.push({
-          timestamp: Date.now(),
-          changes: updates,
-          oldState: oldState,
-          newState: { ...this.state }
-        });
-
-        // Trim history
-        if (this.stateHistory.length > this.maxHistorySize) {
-          this.stateHistory.shift();
-        }
 
         // Notify listeners
         Object.keys(updates).forEach(key => {
@@ -945,11 +855,6 @@
         };
       }
 
-      // Get state history for debugging
-      getHistory() {
-        return [...this.stateHistory];
-      }
-
       // Reset state to initial values
       reset() {
         this.setState({
@@ -973,174 +878,10 @@
     // ============================================================================
     // HUD MANAGER - Centralized HUD visibility management
     // ============================================================================
-    class HUDManager {
-      constructor(appState) {
-        this.appState = appState;
-        this.debugMode = false;
-        this.productionMode = false;
-        this.overlayTimer = null;
-        this.loadProductionMode();
-      }
-
-      async loadProductionMode() {
-        try {
-          const response = await fetch('/api/production-mode');
-          const data = await response.json();
-          this.productionMode = data.production_mode;
-
-          // Apply production mode styles immediately
-          this.applyProductionModeStyles();
-        } catch (error) {
-          console.warn('[HUDManager] Failed to load production mode status:', error);
-          this.productionMode = false;
-        }
-      }
-
-      applyProductionModeStyles() {
-        if (this.productionMode) {
-          // Hide development UI elements in production mode
-          const devElements = document.querySelectorAll('#manual-controls, #debug-toggle');
-          devElements.forEach(element => {
-            if (element) {
-              element.style.display = 'none';
-              element.classList.add('production-hidden');
-            }
-          });
-        }
-      }
-
-      show(reason = 'unknown') {
-
-        // Show HUD elements when not in idle mode, but respect debug settings
-        const appContainer = document.querySelector('.app-container');
-        if (appContainer && this.appState.get('controlsHUDVisible') !== false) {
-          appContainer.classList.remove('controls-hud-hidden');
-        }
-
-        // Show all elements with hud-element class
-        const hudElements = document.querySelectorAll('.hud-element');
-        hudElements.forEach(element => {
-          // Skip production-hidden elements
-          if (this.productionMode && element.classList.contains('production-hidden')) {
-            return;
-          }
-          element.style.display = '';
-        });
-
-        // Ensure production mode styles are still applied
-        this.applyProductionModeStyles();
-      }
-
-      hide(reason = 'unknown') {
-
-        // Hide ALL HUD elements
-        const appContainer = document.querySelector('.app-container');
-        if (appContainer) {
-          appContainer.classList.add('controls-hud-hidden');
-        }
-
-        // Hide all elements with hud-element class
-        const hudElements = document.querySelectorAll('.hud-element');
-        hudElements.forEach(element => {
-          element.style.display = 'none';
-        });
-      }
-
-      hideForMode(mode) {
-        this.hide(`mode-${mode}`);
-      }
-
-      showForMode(mode) {
-
-        // Different modes might have different HUD visibility rules
-        switch (mode) {
-          case 'idle':
-            this.hide('idle-mode');
-            break;
-          case 'onboarding':
-            // For onboarding, we might want to show only specific elements
-            this.show('onboarding-mode');
-            break;
-          case 'active':
-            this.show('active-mode');
-            break;
-          default:
-            this.show('default-mode');
-        }
-      }
-
-      updateVisibility(mode) {
-        if (mode === 'idle') {
-          this.hideForMode('idle');
-        } else {
-          this.showForMode(mode);
-        }
-      }
-
-      setDebugMode(enabled) {
-        this.debugMode = enabled;
-        // Could add debug-specific HUD behavior here
-      }
-
-      showOverlay(title, description, extraContent) {
-
-        const overlay = document.getElementById('parentOverlay');
-        const overlayTitle = document.getElementById('overlayTitle');
-        const overlayDescription = document.getElementById('overlayDescription');
-        const overlayExtraContent = document.getElementById('overlayExtraContent');
-
-        if (overlayTitle && title) {
-          overlayTitle.textContent = title;
-        }
-
-        if (overlayDescription && description) {
-          overlayDescription.textContent = description;
-        }
-
-        // Handle extra content (scene progress, etc.)
-        if (overlayExtraContent) {
-          if (extraContent) {
-            overlayExtraContent.innerHTML = extraContent;
-          } else {
-            overlayExtraContent.innerHTML = '';
-          }
-        }
-
-        // Show the overlay (regardless of production mode)
-        overlay.classList.add('visible');
-
-        // Auto-hide after 3 seconds
-        if (this.overlayTimer) {
-          clearTimeout(this.overlayTimer);
-        }
-
-        this.overlayTimer = setTimeout(() => {
-          this.hideOverlay();
-        }, 3000);
-      }
-
-      hideOverlay() {
-
-        const overlay = document.getElementById('parentOverlay');
-        if (overlay) {
-          overlay.classList.remove('visible');
-        }
-
-        if (this.overlayTimer) {
-          clearTimeout(this.overlayTimer);
-          this.overlayTimer = null;
-        }
-      }
-    }
-
-    // ============================================================================
-    // MODE MANAGER - Handles application mode state machine
-    // ============================================================================
     class ModeManager {
       constructor(appState, loadSceneCallback = null) {
         this.appState = appState;
         this.loadSceneCallback = loadSceneCallback;
-        this.hudManager = new HUDManager(appState);
         this.idleTimer = null;
         this.idleWarningTimer = null;
         this.idleWarningVisible = false;
@@ -1330,7 +1071,6 @@
       onEnterIdle() {
         this.clearIdleTimer();
         this.hideIdleWarning();
-        this.hudManager.hideForMode('idle');
 
         this.appState.setState({
           sessionActive: false,
@@ -1350,7 +1090,6 @@
       onEnterOnboarding() {
         this.clearIdleTimer();
         this.hideIdleWarning();
-        this.hudManager.showForMode('onboarding');
 
         this.appState.setState({
           sessionActive: true,
@@ -1369,9 +1108,6 @@
 
         // Show HUD when exiting onboarding mode
         const appContainer = document.querySelector('.app-container');
-        if (appContainer && this.appState.get('controlsHUDVisible') !== false) {
-          appContainer.classList.remove('controls-hud-hidden');
-        }
       }
 
       onEnterActive() {
@@ -1505,10 +1241,8 @@
         this.appState = appState;
         this.modeManager = modeManager;
         this.app = app;
-        this.hudManager = modeManager.hudManager;
         this.sceneHandlers = {};
         this.cycleTimer = null;
-        this.countdownTimer = null;
         this.currentSceneIframe = null;
         this.quickScene = 30
         this.defaultDuration = 45
@@ -1650,16 +1384,6 @@
           clearTimeout(this.cycleTimer);
           this.cycleTimer = null;
         }
-        if (this.countdownTimer) {
-          clearInterval(this.countdownTimer);
-          this.countdownTimer = null;
-        }
-        
-        // Immediately update countdown display to show "--"
-        const countdownElement = document.getElementById('sceneCountdown');
-        if (countdownElement) {
-          countdownElement.textContent = 'Next: --';
-        }
       }
 
       scheduleNextScene() {
@@ -1677,7 +1401,6 @@
         }, currentScene.duration * 1000);
 
         // Start countdown timer
-        this.startSceneCountdown();
       }
 
       nextScene() {
@@ -1702,97 +1425,24 @@
         this.scheduleNextScene();
       }
 
-      startSceneCountdown() {
-        if (this.countdownTimer) {
-          clearInterval(this.countdownTimer);
-        }
-
-        this.countdownTimer = setInterval(() => {
-          this.updateSceneCountdown();
-        }, 1000);
-      }
-
-      updateSceneCountdown() {
-        const currentScene = this.appState.get('currentScene');
-        const sceneStartTime = this.appState.get('sceneStartTime');
-
-        if (!currentScene || !sceneStartTime || currentScene.duration === 0 || this.modeManager.getCurrentMode() !== 'active') {
-          const countdownElement = document.getElementById('sceneCountdown');
-          if (countdownElement) {
-            countdownElement.textContent = 'Next: --';
-          }
-          return;
-        }
-
-        const elapsed = (Date.now() - sceneStartTime) / 1000;
-        const remaining = Math.max(0, currentScene.duration - elapsed);
-
-        const countdownElement = document.getElementById('sceneCountdown');
-        if (countdownElement) {
-          if (remaining <= 0) {
-            countdownElement.textContent = 'Next: Now';
-          } else {
-            const minutes = Math.floor(remaining / 60);
-            const seconds = Math.floor(remaining % 60);
-
-            if (seconds == 5) {
-              if (this.app && this.app.showToast) {
-                this.app.showToast(`Changing scenes in 5 seconds`, 5000, '🔄');
-              }
-            }
-
-            if (minutes > 0) {
-              countdownElement.textContent = `Next: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-            } else {
-              countdownElement.textContent = `Next: ${seconds}s`;
-            }
-          }
-        }
-      }
-
-      // Load a scene
       async loadScene(scene) {
         try {
-
           // Clean up previous scene
           if (this.appState.get('currentScene')) {
             this.callSceneHandler('onDestroy');
           }
 
-          // Update state
           this.appState.setState({
             currentScene: scene,
             sceneStartTime: Date.now()
           });
 
-          // Show overlay during scene transition (only in active mode)
-          if (this.modeManager.getCurrentMode() === 'active') {
-            const sceneIndex = this.appState.get('sceneIndex') + 1; // 1-based for display
-            const totalScenes = this.appState.get('totalScenes');
-            const duration = scene.duration;
-            const progressPercent = Math.round((sceneIndex / totalScenes) * 100);
-
-            const sceneProgressContent = `
-              <div class="scene-progress">
-                <div class="scene-progress-bar" style="width: ${progressPercent}%;"></div>
-              </div>
-              <div class="scene-info">
-                <div class="scene-counter">Content ${sceneIndex} of ${totalScenes}</div>
-                <div class="scene-timer">${duration}s remaining</div>
-              </div>
-            `;
-
-            this.hudManager.showOverlay(
-              scene.name,
-              scene.description,
-              sceneProgressContent
-            );
-          }
-
-
           const container = document.getElementById('scene-container');
 
-          // Handle iframe scenes
+          // Scenes listed here load as iframes so their <script> tags execute.
+          // Anything not listed is injected with innerHTML, which does NOT run
+          // scripts -- the scene renders as inert markup with no error.
+          // Adding a cycling scene means adding its id to this list.
           if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'kaleidoscope', 'finger_paint', 'idle'].includes(scene.id)) {
             container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
 
@@ -1803,7 +1453,6 @@
               }
             }, 1000);
           } else {
-            // Load HTML fragment scenes
             const response = await fetch(`/${scene.html_file}`);
             if (!response.ok) {
               throw new Error(`Failed to load scene: ${response.status}`);
@@ -1813,7 +1462,6 @@
             this.currentSceneIframe = null;
           }
 
-          // Initialize scene
           this.callSceneHandler('onInit');
 
         } catch (error) {
@@ -1821,7 +1469,6 @@
         }
       }
 
-      // Call scene handler method
       callSceneHandler(method, ...args) {
         const currentScene = this.appState.get('currentScene');
         if (!currentScene) return;
@@ -2095,40 +1742,21 @@
         this.socket = io();
 
         // UI state
-        this.handColorAssignments = new Map();
-        this.nextColorIndex = 0;
-        this.debugPoints = {};
 
         // Subscribe to application state changes
         this.setupStateSubscriptions();
 
         // Initialize components
         this.initializeSocket();
-        this.initializeDebugPoints();
 
         // Start in idle mode
       }
 
       // Setup subscriptions to state changes
       setupStateSubscriptions() {
-        // Subscribe to connection state
-        this.appState.subscribe('isConnected', (connected) => {
-          this.updateConnectionStatus(connected);
-        });
-
-        // Subscribe to hands state
-        this.appState.subscribe('hands', (hands) => {
-          this.updateHandVisualization(hands);
-        });
-
-        // Subscribe to scene state
-        this.appState.subscribe('currentScene', (scene) => {
-          this.updateStatusBar();
-        });
 
         // Subscribe to confidence updates
         this.appState.subscribe('confidence', () => {
-          this.updateStatusBar();
         });
 
         // Subscribe to mode changes for HUD visibility
@@ -2139,7 +1767,6 @@
 
       // Update HUD visibility based on mode
       updateHUDVisibility(mode) {
-        this.modeManager.hudManager.updateVisibility(mode);
       }
 
       initializeSocket() {
@@ -2187,12 +1814,8 @@
             break;
 
           case 'frame_processed':
-            // Calculate highest hand confidence
-            let maxConfidence = 0;
-            if (event.data.hands && event.data.hands.length > 0) {
-              maxConfidence = Math.max(...event.data.hands.map(hand => (hand.confidence?.overall || 0) * 100));
-            }
-            this.appState.setState({ confidence: Math.round(maxConfidence) });
+            // Heartbeat only. Carries hand_count and fps, no hand payload --
+            // hand data arrives on hand_moved so it is sent once per frame.
             break;
 
           case 'thumbs_up':
@@ -2206,7 +1829,6 @@
             break;
         }
 
-        this.updateDebugPanel();
       }
 
       // Process hand tracking data and update state
@@ -2218,11 +1840,27 @@
       }
 
       initializeKeyboardShortcuts() {
+        // KEYBOARD SHORTCUTS
+        // There is no on-screen chrome, so these are the only manual override.
+        // Deliberately invisible: nothing for the audience to discover, but an
+        // operator with a keyboard can still drive it.
+        //   Right / N  -> next scene
+        //   Left  / P  -> previous scene
         document.addEventListener('keydown', (event) => {
-          // Ctrl + Shift + H to toggle controls/HUD
-          if (event.ctrlKey && event.shiftKey && event.key === 'H') {
-            event.preventDefault();
-            this.toggleControlsHUD();
+          if (event.metaKey || event.ctrlKey || event.altKey) return;
+          switch (event.key) {
+            case 'ArrowRight':
+            case 'n':
+            case 'N':
+              event.preventDefault();
+              this.sceneManager.nextScene();
+              break;
+            case 'ArrowLeft':
+            case 'p':
+            case 'P':
+              event.preventDefault();
+              this.sceneManager.previousScene();
+              break;
           }
         });
       }
@@ -2234,7 +1872,6 @@
         // Idle scene handler
         this.sceneHandlers.idle = {
           onInit: function () {
-            app.modeManager.hudManager.hideForMode('idle');
           },
 
           onHandDetected: function (hands) {
@@ -2654,69 +2291,6 @@
         };
       }
 
-      // Update hand visualization (called via state subscription)
-      updateHandVisualization(hands) {
-        this.assignHandColors(hands);
-        this.renderHandVisualization(hands);
-      }
-
-      assignHandColors(hands) {
-        // Clean up assignments for hands that no longer exist
-        const currentHandIds = new Set(hands.map(hand => hand.hand_id || `temp_${hands.indexOf(hand)}`));
-        for (const handId of this.handColorAssignments.keys()) {
-          if (!currentHandIds.has(handId)) {
-            this.handColorAssignments.delete(handId);
-          }
-        }
-
-        // Assign colors to new hands
-        hands.forEach((hand, index) => {
-          const handId = hand.hand_id || `temp_${index}`;
-          if (!this.handColorAssignments.has(handId)) {
-            this.handColorAssignments.set(handId, this.nextColorIndex % 6);
-            this.nextColorIndex++;
-          }
-        });
-      }
-
-      getHandColorIndex(hand, fallbackIndex) {
-        const handId = hand.hand_id || `temp_${fallbackIndex}`;
-        return this.handColorAssignments.get(handId) || fallbackIndex;
-      }
-
-      renderHandVisualization(hands) {
-        // Always clear debug canvases first
-        Object.values(this.debugPoints).forEach(point => {
-          point.ctx.clearRect(0, 0, point.canvas.width, point.canvas.height);
-        });
-
-        // Only draw debug points if visible and hands exist
-        const debugPointsVisible = this.appState.get('debugPointsVisible');
-        if (debugPointsVisible && hands && hands.length > 0) {
-          hands.forEach((hand, index) => {
-            // Use consistent color assignment
-            const colorIndex = this.getHandColorIndex(hand, index);
-            const debugKey = `hand_${colorIndex + 1}`;
-            const debugPoint = this.debugPoints[debugKey];
-
-            if (debugPoint && hand.palm_center) {
-              const posX = hand.palm_center.x * window.innerWidth;
-              const posY = hand.palm_center.y * window.innerHeight;
-
-              debugPoint.ctx.beginPath();
-              debugPoint.ctx.arc(posX, posY, 25, 0, Math.PI * 2);
-              debugPoint.ctx.fillStyle = debugPoint.color;
-              debugPoint.ctx.fill();
-              debugPoint.ctx.strokeStyle = 'white';
-              debugPoint.ctx.lineWidth = 2;
-              debugPoint.ctx.stroke();
-            }
-          });
-        }
-      }
-
-
-
       async loadScene(scene) {
         try {
 
@@ -2730,10 +2304,6 @@
           // Set current scene
           this.currentScene = scene;
           
-          // Show toast notification for scene change in active mode
-          if (this.modeManager && this.modeManager.getCurrentMode() === 'active' && scene.duration > 0) {
-            this.showToast(`Now playing: ${scene.name || scene.id}`, 2000, '🎨');
-          }
 
           // Handle complete HTML page scenes as iframes
           if (scene.id === 'fluidsim' || scene.id === 'cosmic_symbolism' || scene.id === 'psychedelic_waves' || scene.id === 'tie_dye' || scene.id === 'orbits' || scene.id === 'finger_paint' || scene.id === 'idle' || scene.id === 'onboarding') {
@@ -2780,34 +2350,7 @@
         }
       }
 
-      updateConnectionStatus(isConnected) {
-        const indicator = document.getElementById('connectionStatus');
-        const text = document.getElementById('connectionText');
 
-        if (isConnected) {
-          indicator.classList.add('connected');
-          text.textContent = 'Connected';
-        } else {
-          indicator.classList.remove('connected');
-          text.textContent = 'Disconnected';
-        }
-      }
-
-      updateStatusBar() {
-        const state = this.appState.getState();
-
-        document.getElementById('confidenceCounter').textContent = `Confidence: ${state.confidence}%`;
-        document.getElementById('handCounter').textContent = `Hands: ${state.hands.length}`;
-        document.getElementById('currentScene').textContent =
-          `Scene: ${state.currentScene ? state.currentScene.name : 'Loading'}`;
-      }
-
-      updateSceneCounter() {
-        if (this.currentSceneIndex !== undefined && this.totalScenes !== undefined) {
-          const counter = document.getElementById('sceneCounter');
-          counter.textContent = `Scene ${this.currentSceneIndex + 1} of ${this.totalScenes}`;
-        }
-      }
 
 
       updateIdleWarning() {
@@ -2845,142 +2388,8 @@
         }
       }
 
-      updateDebugPanel() {
-        const debugVisible = this.appState.get('debugVisible');
-        if (!debugVisible) return;
-
-        const state = this.appState.getState();
-
-        document.getElementById('eventCount').textContent = state.eventCount;
-        document.getElementById('debugScene').textContent =
-          state.currentScene ? state.currentScene.id : 'None';
-        document.getElementById('debugHandCount').textContent = state.hands.length;
-        document.getElementById('debugPointsStatus').textContent =
-          state.debugPointsVisible ? 'On' : 'Off';
-        document.getElementById('controlsHUDStatus').textContent =
-          state.controlsHUDVisible ? 'On' : 'Off';
-      }
-
-      initializeDebugPoints() {
-        this.debugPoints = {
-          hand_1: {
-            canvas: document.getElementById('debugCanvas1'),
-            ctx: document.getElementById('debugCanvas1').getContext('2d'),
-            color: 'red'
-          },
-          hand_2: {
-            canvas: document.getElementById('debugCanvas2'),
-            ctx: document.getElementById('debugCanvas2').getContext('2d'),
-            color: 'blue'
-          },
-          hand_3: {
-            canvas: document.getElementById('debugCanvas3'),
-            ctx: document.getElementById('debugCanvas3').getContext('2d'),
-            color: 'green'
-          },
-          hand_4: {
-            canvas: document.getElementById('debugCanvas4'),
-            ctx: document.getElementById('debugCanvas4').getContext('2d'),
-            color: 'yellow'
-          }
-        };
-
-        // Set canvas sizes
-        this.resizeDebugCanvases();
-
-        // Listen for window resize
-        window.addEventListener('resize', () => {
-          this.resizeDebugCanvases();
-        });
-      }
-
-      resizeDebugCanvases() {
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-
-        Object.values(this.debugPoints).forEach(point => {
-          point.canvas.width = width;
-          point.canvas.height = height;
-        });
-      }
 
 
-      toggleDebugPoints() {
-        const currentVisible = this.appState.get('debugPointsVisible');
-        const newVisible = !currentVisible;
-
-        this.appState.setState({ debugPointsVisible: newVisible });
-
-        const debugPointsDiv = document.getElementById('debugPoints');
-        if (newVisible) {
-          debugPointsDiv.classList.add('visible');
-        } else {
-          debugPointsDiv.classList.remove('visible');
-        }
-
-        // Force a refresh to clear/show debug points
-        this.renderHandVisualization(this.appState.get('hands'));
-
-        this.updateDebugPanel();
-      }
-
-      toggleControlsHUD() {
-        const currentVisible = this.appState.get('controlsHUDVisible');
-        const newVisible = !currentVisible;
-
-        this.appState.setState({ controlsHUDVisible: newVisible });
-
-        const appContainer = document.querySelector('.app-container');
-        if (newVisible) {
-          appContainer.classList.remove('controls-hud-hidden');
-        } else {
-          appContainer.classList.add('controls-hud-hidden');
-        }
-
-        this.updateDebugPanel();
-      }
-
-      loadDebugSettings() {
-        fetch('/api/debug-settings')
-          .then(response => response.json())
-          .then(settings => {
-            this.debugSettings = { ...this.debugSettings, ...settings };
-            this.debugPointsVisible = this.debugSettings.showDebugPoints;
-            this.controlsHUDVisible = this.debugSettings.showControlsHUD !== false; // Default to true
-
-            const debugPointsDiv = document.getElementById('debugPoints');
-            if (this.debugPointsVisible) {
-              debugPointsDiv.classList.add('visible');
-            } else {
-              debugPointsDiv.classList.remove('visible');
-            }
-
-            const appContainer = document.querySelector('.app-container');
-            if (this.controlsHUDVisible) {
-              appContainer.classList.remove('controls-hud-hidden');
-            } else {
-              appContainer.classList.add('controls-hud-hidden');
-            }
-
-            this.updateDebugPanel();
-          })
-          .catch(error => {
-            this.updateDebugPanel();
-          });
-      }
-
-      saveDebugSettings() {
-        fetch('/api/debug-settings', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(this.debugSettings)
-        })
-          .catch(error => {
-            console.error('Failed to save debug settings:', error);
-          });
-      }
 
       startInIdleMode() {
         console.log('[JS] Starting in idle mode');
@@ -3073,7 +2482,6 @@
       }
 
       showOnboardingScreen() {
-        this.modeManager.hudManager.showForMode('onboarding');
         this.sessionWelcomeShown = true;
         this.loadOnboardingScene();
 
@@ -3089,66 +2497,12 @@
       showWelcomeScreen() {
         this.sessionWelcomeShown = true;
         this.loadWelcomeScene();
-        this.modeManager.hudManager.showForMode('onboarding');
       }
 
-      startProgressUpdater() {
-        setInterval(() => {
-          // Update scene progress (this would be connected to scene manager)
-          // For now, just a placeholder
-        }, 1000);
-      }
 
-      // Toast notification functions
-      showToast(message, duration = 3000, icon = '✓') {
-        const toast = document.getElementById('toastNotification');
-        const toastText = document.getElementById('toastText');
-        const toastIcon = document.getElementById('toastIcon');
-
-        if (!toast || !toastText || !toastIcon) {
-          console.warn('[Toast] Toast elements not found');
-          return;
-        }
-
-        // Set content
-        toastText.textContent = message;
-        toastIcon.textContent = icon;
-
-        // Clear any existing timeout
-        if (this.toastTimeout) {
-          clearTimeout(this.toastTimeout);
-        }
-
-        // Show toast
-        toast.classList.add('visible');
-
-        // Auto-hide after duration
-        this.toastTimeout = setTimeout(() => {
-          this.hideToast();
-        }, duration);
-
-        console.log('[Toast] Showing:', message);
-      }
-
-      hideToast() {
-        const toast = document.getElementById('toastNotification');
-        if (toast) {
-          toast.classList.remove('visible');
-        }
-
-        if (this.toastTimeout) {
-          clearTimeout(this.toastTimeout);
-          this.toastTimeout = null;
-        }
-      }
     }
 
     // Global functions for manual controls
-    function toggleDebug() {
-      const panel = document.getElementById('debugPanel');
-      const isVisible = panel.classList.toggle('visible');
-      window.app.appState.setState({ debugVisible: isVisible });
-    }
 
     function nextScene() {
       if (window.app && window.app.sceneManager) {
@@ -3166,45 +2520,11 @@
       }
     }
 
-    function toggleAutoCycle() {
-      if (window.app && window.app.socket) {
-        window.app.socket.emit('toggle_auto_cycle');
-      } else {
-        console.error('Socket not available');
-      }
-    }
 
     // Global toast function
-    function showToast(message, duration = 3000, icon = '✓') {
-      if (window.app && window.app.showToast) {
-        window.app.showToast(message, duration, icon);
-      } else {
-        console.warn('[Toast] App not available');
-      }
-    }
 
-    function toggleVideo() {
-      const videoDiv = document.getElementById('debugVideo');
-      const isVisible = videoDiv.classList.toggle('visible');
 
-      // If showing video, refresh the stream
-      if (isVisible) {
-        const videoImg = document.getElementById('videoStream');
-        videoImg.src = '/video_feed?' + new Date().getTime();
-      }
-    }
 
-    function toggleDebugPoints() {
-      if (window.app) {
-        window.app.toggleDebugPoints();
-      }
-    }
-
-    function toggleControlsHUD() {
-      if (window.app) {
-        window.app.toggleControlsHUD();
-      }
-    }
 
     document.addEventListener('DOMContentLoaded', () => {
       window.app = new HandTrackingKiosk();

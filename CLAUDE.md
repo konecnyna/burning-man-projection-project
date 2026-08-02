@@ -78,17 +78,14 @@ These are non-negotiable and break the installation if violated.
 | Camera, MediaPipe, IDs, confidence, gestures | `hand_tracker.py` |
 | Flask routes, SocketIO | `web_app.py` |
 | Event bus and event constants | `event_system.py` |
-| **All** frontend logic — state, modes, scenes, HUD | `static/index.html` |
+| **All** frontend logic — state, modes, scenes | `static/index.html` |
 | Individual scenes | `static/scenes/<name>/index.html` |
 | Idle and welcome screens | `static/scenes/idle.html`, `static/scenes/welcome.html` |
 | Production launcher | `start-atlantis.sh` |
 
 **Scene management is entirely frontend-side.** There is no `scene_manager.py`.
-The relevant classes are `ModeManager` (line 1137) and `SceneManager`
-(line 1501) inside `static/index.html`.
-
-`hand_detector.py`, `hand_visualizer.py`, and `templates/index.html` are unused
-— don't wire new work into them.
+The relevant classes are `ModeManager` (line 881) and `SceneManager`
+(line 1239) inside `static/index.html`.
 
 ## Commands
 
@@ -98,8 +95,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Development — debug HUD visible
-python main.py --port 5000
+# Development
+python main.py --port 5000 --verbose
 
 # Production — what the kiosk runs at boot
 ./start-atlantis.sh          # venv + --production + port 5001
@@ -107,8 +104,8 @@ python main.py --port 5000
 # Health
 curl http://localhost:5000/health
 
-# See what the tracker sees
-open http://localhost:5000/video_feed
+# Logs — rotating, capped at 5MB x 3
+tail -f logs/atlantis.log
 ```
 
 Boot / kiosk setup — everything is generated from the repo, nothing is
@@ -121,11 +118,12 @@ configured by hand:
 ./deploy/uninstall-kiosk.sh           # remove
 ```
 
-`--kiosk` is parsed but never read. The window is always fullscreen and
-frameless. Don't tell users to pass it.
+The window is always fullscreen and frameless. There is **no on-screen chrome
+and no debug UI** — the display shows only the active scene. Manual override is
+keyboard-only: **N**/**→** next scene, **P**/**←** previous.
 
-**Logs** come from the LaunchAgent capturing stdout/stderr, at
-`logs/kiosk.{out,err}.log`. The application writes no log file of its own.
+**Logs** go to `logs/atlantis.log` (rotating, 5MB x 3 = 20MB cap) and to stdout,
+which the LaunchAgent captures in `logs/kiosk.{out,err}.log`.
 
 **Never hand-edit `~/Library/LaunchAgents/com.atlantis.kiosk.plist`** — it is
 generated from `deploy/com.atlantis.kiosk.plist.in` and the next install
@@ -136,23 +134,22 @@ overwrites it. Change the template.
 Things that will waste your time if you don't know them.
 
 - **Adding a scene requires editing the hardcoded iframe list** at
-  `static/index.html:1794`. Miss it and the scene loads via `innerHTML`, which
+  `static/index.html:1446`. Miss it and the scene loads via `innerHTML`, which
   does not execute `<script>` tags — it renders as dead markup with no error.
   See [SCENES.md §4](SCENES.md#4-the-hardcoded-iframe-list).
 - **There are two `loadScene` implementations** with divergent scene-id lists —
-  `SceneManager.loadScene` (1752) for cycling scenes, `HandTrackingKiosk.loadScene`
-  (2718) for idle/onboarding. Make sure you edit the right one.
-- **`EventBus.emit` swallows all handler exceptions** and holds its lock while
-  calling handlers. A broken subscriber fails silently; a slow one stalls the
-  tracking thread.
-- **`hand_moved` and `frame_processed` fire every frame** with full landmark
-  payloads for up to 4 hands. Anything you add to those paths runs 30–60×/second.
+  `SceneManager.loadScene` (1428) for cycling scenes,
+  `HandTrackingKiosk.loadScene` (2294) for idle/onboarding. Make sure you edit the right one.
+- **`hand_moved` and `hand_detected` carry hand payloads; `frame_processed`
+  does not** — it is a heartbeat with `hand_count` and `fps`. Do not put the
+  landmark blob back on it. Anything on those paths runs 30–60×/second.
 - **Hand IDs are reissued** whenever a frame detects zero hands. Never treat
   `hand_id` as durable.
 - **The parent filters hands to `confidence.overall >= 0.7`** before scene
   handlers see them; scenes with their own WebSocket get unfiltered data.
-- **`HandTrackingKiosk.stop()` has an inverted `self.running` guard.** It works,
-  but reads backwards. Don't "fix" it without tracing `run_headless()`.
+- **This process runs for days.** Anything keyed by `hand_id` must be pruned to
+  the live set every frame — IDs increase monotonically and are reissued after
+  any frame with no detections. `_prune_gesture_state()` is the pattern.
 
 ## Key tuning constants
 
@@ -160,16 +157,16 @@ All in `static/index.html`:
 
 | Constant | Value | Line |
 |---|---|---|
-| `idleTimeoutMs` | `45_000` | 868 |
-| `idleHandConfidenceDetectionLevel` | `0.75` | 1145 |
-| `quickScene` / `defaultDuration` / `popularScene` | `30` / `45` / `60` | 1511–1513 |
+| `idleTimeoutMs` | `45_000` | 795 |
+| `idleHandConfidenceDetectionLevel` | `0.75` | 888 |
+| `quickScene` / `defaultDuration` / `popularScene` | `30` / `45` / `60` | 1247–1249 |
 
 In `hand_tracker.py`: `max_num_hands=4`, `min_detection_confidence=0.6`,
 `min_tracking_confidence=0.2`, `model_complexity=0`, `max_tracking_distance=0.08`.
 
 ## Testing checklist
 
-- [ ] Hand tracking responsive — check FPS on `/video_feed`
+- [ ] Hand tracking responsive — check `fps` in `logs/atlantis.log`
 - [ ] All enabled scenes load and respond to hands
 - [ ] Idle timeout fires at 45 s; warning banner at 40 s
 - [ ] Waking from idle works at a realistic standing distance

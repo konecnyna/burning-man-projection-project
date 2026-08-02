@@ -110,10 +110,11 @@ The app emits a `camera_error` event and keeps running with no hand input. There
 is no log file, so check live:
 
 ```bash
-curl http://localhost:5001/video_feed --output - | head -c 100
+grep -i camera logs/atlantis.log
 ```
 
-No frames means the capture never opened.
+The tracker logs a clear message when it cannot open the camera, and logs once
+more if it later recovers.
 
 **3. Camera permission.**
 
@@ -132,10 +133,10 @@ using a different — possibly unpermitted — binary.
 
 **4. Camera opened but nothing registers.**
 
-Open `http://localhost:<port>/video_feed`. If you see the feed with no landmark
-overlay, MediaPipe is running but not detecting. Usually lighting or distance:
-confidence weights `distance` at 0.45, so hands far from the camera score low and
-get filtered out.
+If `logs/atlantis.log` shows no camera error, MediaPipe is running but not
+detecting. Usually lighting or distance: confidence weights `distance` at 0.45,
+so hands far from the camera score low and get filtered out before the mode
+manager sees them.
 
 ---
 
@@ -144,19 +145,19 @@ get filtered out.
 Waking from idle requires `confidence.overall > 0.75`, and the parent frame
 separately discards any hand below `0.7` before the mode manager ever sees it.
 
-Watch the confidence figure in the debug HUD, or on the video feed. If it hovers
-in the 0.6–0.75 range, the person is too far from the camera or the lighting is
-poor. Move the camera closer to where people stand.
+There is no on-screen readout. If waking is unreliable, the person is likely too
+far from the camera or the lighting is poor — move the camera closer to where
+people stand.
 
 To make it easier to trigger, lower `idleHandConfidenceDetectionLevel` at
-`static/index.html:1145`.
+`static/index.html:888`.
 
 ---
 
 ## It drops back to idle while someone is using it
 
 The idle timeout is 45 s of no *qualifying* hand (`idleTimeoutMs`,
-`static/index.html:868`), with a warning banner at 40 s. Intermittent detection
+`static/index.html:795`), with a warning banner at 40 s. Intermittent detection
 — hands at the edge of the confidence threshold — restarts nothing, so a person
 who is technically present but poorly detected still times out.
 
@@ -178,7 +179,7 @@ tolerate renumbering. See [SCENES.md §6](SCENES.md#6-hand-data-shape).
 
 **The scene is not in the iframe list.** This is the most common cause for a
 newly added scene. Scenes whose `id` is missing from the list at
-`static/index.html:1794` are injected with `innerHTML`, which does not execute
+`static/index.html:1446` are injected with `innerHTML`, which does not execute
 `<script>` tags. The scene renders as inert markup with no error.
 
 Add the id to that list. Full explanation in
@@ -191,7 +192,7 @@ grep -rnE 'https?://' static/scenes/<scene-name>/
 ```
 
 **Scene JS threw.** Open the webview's console — run with `webview.start(debug=True)`
-in `main.py:80`, or load `http://localhost:<port>` in Safari/Chrome instead,
+in `main.py`, or load `http://localhost:<port>` in Safari/Chrome instead,
 where scene iframes and DevTools both work normally.
 
 **Messages arrived before the iframe was ready.** `currentSceneIframe` is only
@@ -283,9 +284,12 @@ captured by the agent. Some failure paths are silent regardless:
 
 | Tool | How |
 |---|---|
-| Video feed with landmarks, bounding boxes, hand count, FPS | `http://localhost:<port>/video_feed` |
-| Debug HUD | Run without `--production` |
-| Toggle debug points / HUD at runtime | `debug_settings.json`, or `POST /api/debug-settings` |
+| Application log | `tail -f logs/atlantis.log` (rotating, 5MB x 3) |
+| Verbose logging | `python main.py --port 5000 --verbose` |
 | Recent event history (last 1000) | WebSocket `get_recent_events` |
-| Scene navigation | HUD next/previous/auto-cycle controls |
+| Scene navigation | **N**/**→** next, **P**/**←** previous (keyboard only) |
+| Blocked off-box loads | `curl -s localhost:5001/api/csp-violations \| python3 -m json.tool` |
 | Open the UI in a real browser with DevTools | `http://localhost:<port>` in Safari or Chrome |
+
+There is no debug UI, video feed, or on-screen HUD — that machinery was removed
+because it cost frame-rate and never earned its keep. The log is the tool.

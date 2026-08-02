@@ -21,8 +21,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Development — debug HUD visible
-python main.py --port 5000
+# Development
+python main.py --port 5000 --verbose
 
 # Production — exactly what the kiosk runs at boot
 ./start-atlantis.sh          # venv + --production + port 5001
@@ -78,13 +78,11 @@ deploy/
   *.plist.in          LaunchAgent template (edit this, not the installed copy)
 
 static/
-  index.html          The entire frontend — state, modes, scenes, HUD
+  index.html          The entire frontend — state, modes, scenes
   scenes/             One directory per scene, plus idle.html and welcome.html
   libs/               Vendored socket.io, three.js
   fonts/              Local @font-face fonts
 ```
-
-`hand_detector.py`, `hand_visualizer.py`, and `templates/index.html` are unused.
 
 ---
 
@@ -119,8 +117,8 @@ lsof -iTCP -sTCP:LISTEN -P -n | grep Python
 # Health
 curl http://localhost:5001/health
 
-# Watch what the tracker sees — MJPEG with landmarks, boxes, FPS
-open http://localhost:5001/video_feed
+# Logs (rotating, 5MB x 3)
+tail -f logs/atlantis.log
 ```
 
 Before leaving the installation unattended, run the

@@ -1,8 +1,12 @@
 from typing import Dict, List, Callable, Any
+import logging
 import threading
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 import json
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Event:
@@ -45,8 +49,9 @@ class EventBus:
     def __init__(self):
         self._subscribers: Dict[str, List[Callable]] = {}
         self._lock = threading.Lock()
-        self._event_history: List[Event] = []
+        # Bounded ring buffer -- this process runs for days.
         self._max_history = 1000
+        self._event_history = deque(maxlen=self._max_history)
 
     def subscribe(self, event_type: str, handler: Callable):
         """Subscribe to specific event types"""
@@ -56,20 +61,24 @@ class EventBus:
             self._subscribers[event_type].append(handler)
 
     def emit(self, event: Event):
-        """Emit event to all subscribers"""
+        """Emit event to all subscribers.
+
+        Handlers are invoked *outside* the lock. This runs at frame rate, and
+        holding the lock across handler calls means one slow WebSocket client
+        stalls the tracking thread and every other publisher.
+        """
         with self._lock:
-            # Store in history
-            self._event_history.append(event)
-            if len(self._event_history) > self._max_history:
-                self._event_history.pop(0)
-            
-            # Notify subscribers
-            if event.type in self._subscribers:
-                for handler in self._subscribers[event.type]:
-                    try:
-                        handler(event)
-                    except Exception as e:
-                        pass
+            self._event_history.append(event)   # deque(maxlen=...) trims itself
+            handlers = list(self._subscribers.get(event.type, ()))
+
+        for handler in handlers:
+            try:
+                handler(event)
+            except Exception:
+                # A broken subscriber must not take down the tracking loop, but
+                # it should not vanish silently either -- that hides real bugs
+                # for the whole run.
+                logger.exception("Event handler failed for %s", event.type)
 
     def unsubscribe(self, event_type: str, handler: Callable):
         """Remove subscription"""
@@ -85,7 +94,7 @@ class EventBus:
     def get_recent_events(self, count: int = 10):
         """Get recent events for debugging"""
         with self._lock:
-            return self._event_history[-count:]
+            return list(self._event_history)[-count:]
 
     def clear_history(self):
         """Clear event history"""
