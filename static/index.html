@@ -563,6 +563,71 @@
       z-index: 1;
     }
 
+
+    /* ------------------------------------------------------------------
+       Scene countdown ring — matches the onboarding "auto-start" dial in
+       scenes/welcome.html so the two read as the same piece of interface.
+       Number in the middle, arc sweeping down as the scene runs out.
+       ------------------------------------------------------------------ */
+    .countdown-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      opacity: 0.8;
+    }
+
+    .scene-countdown-dial {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+
+    .scene-countdown-dial .dial-number {
+      position: absolute;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: bold;
+      color: var(--pipboy-green);
+      text-shadow: 0 0 10px var(--pipboy-green);
+      z-index: 1;
+      line-height: 1;
+    }
+
+    .scene-countdown-dial svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: rotate(-90deg);   /* start the sweep at 12 o'clock */
+    }
+
+    .scene-countdown-dial .dial-track {
+      opacity: 0.25;
+    }
+
+    .scene-countdown-dial .dial-ring {
+      transition: stroke-dashoffset 0.9s linear;   /* ~1 tick, so it glides */
+      stroke-linecap: round;
+    }
+
+    /* Last five seconds: switch to orange and pulse, same cue the
+       onboarding dial uses when it is about to fire. */
+    .scene-countdown-dial.ending .dial-number,
+    .scene-countdown-dial.ending .dial-ring {
+      color: var(--pipboy-orange);
+      stroke: var(--pipboy-orange);
+      text-shadow: 0 0 12px var(--pipboy-orange);
+      animation: dialPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes dialPulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.55; }
+    }
+
     /* Glitch transition overlay */
     .glitch-overlay {
       position: fixed;
@@ -768,7 +833,17 @@
         <span id="currentScene">Scene: Loading</span>
       </div>
       <div class="status-item">
-        <span id="sceneCountdown">Next: --</span>
+        <span class="countdown-label" id="sceneCountdownLabel">NEXT</span>
+        <div class="scene-countdown-dial" id="sceneCountdownDial">
+          <div class="dial-number" id="sceneCountdownNumber">--</div>
+          <svg width="40" height="40">
+            <circle class="dial-track" cx="20" cy="20" r="17" fill="none"
+                    stroke="var(--pipboy-green)" stroke-width="3" />
+            <circle class="dial-ring" id="sceneCountdownRing" cx="20" cy="20" r="17" fill="none"
+                    stroke="var(--pipboy-green)" stroke-width="3"
+                    stroke-dasharray="106.8" stroke-dashoffset="0" />
+          </svg>
+        </div>
       </div>
     </div>
 
@@ -1488,8 +1563,13 @@
           clearInterval(this.countdownTimer);
           this.countdownTimer = null;
         }
-        const el = document.getElementById('sceneCountdown');
-        if (el) el.textContent = 'Next: --';
+        this._lastCountdownSecs = null;
+        const number = document.getElementById('sceneCountdownNumber');
+        const ring   = document.getElementById('sceneCountdownRing');
+        const dial   = document.getElementById('sceneCountdownDial');
+        if (number) number.textContent = '--';
+        if (ring)   ring.style.strokeDashoffset = 106.8;
+        if (dial)   dial.classList.remove('ending');
       }
 
       scheduleNextScene() {
@@ -1518,27 +1598,45 @@
       }
 
       updateSceneCountdown() {
-        const el = document.getElementById('sceneCountdown');
-        if (!el) return;
+        const dial   = document.getElementById('sceneCountdownDial');
+        const number = document.getElementById('sceneCountdownNumber');
+        const ring   = document.getElementById('sceneCountdownRing');
+        if (!dial || !number || !ring) return;
+
+        // Circumference of the r=17 arc; must match stroke-dasharray in the markup.
+        const CIRCUMFERENCE = 106.8;
 
         const scene = this.appState.get('currentScene');
         const startedAt = this.appState.get('sceneStartTime');
 
-        if (!scene || !startedAt || scene.duration === 0 ||
-            this.modeManager.getCurrentMode() !== 'active') {
-          el.textContent = 'Next: --';
+        const idle = !scene || !startedAt || scene.duration === 0 ||
+                     this.modeManager.getCurrentMode() !== 'active';
+        if (idle) {
+          number.textContent = '--';
+          ring.style.strokeDashoffset = CIRCUMFERENCE;   // empty arc
+          dial.classList.remove('ending');
           return;
         }
 
-        const remaining = Math.max(0, scene.duration - (Date.now() - startedAt) / 1000);
-        el.textContent = remaining <= 0
-          ? 'Next: now'
-          : `Next: ${Math.ceil(remaining)}s`;
+        const elapsed   = (Date.now() - startedAt) / 1000;
+        const remaining = Math.max(0, scene.duration - elapsed);
+        const secs      = Math.ceil(remaining);
 
-        // One heads-up before the scene changes.
-        if (Math.ceil(remaining) === 5 && this.app && this.app.showToast) {
-          this.app.showToast('Next scene in 5 seconds', 2500, '⏭');
+        number.textContent = secs > 0 ? secs : 0;
+
+        // Arc drains as the scene runs out: full at the start, empty at zero.
+        const fraction = Math.min(1, Math.max(0, remaining / scene.duration));
+        ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - fraction);
+
+        // Last five seconds go orange and pulse, matching the onboarding dial.
+        dial.classList.toggle('ending', remaining <= 5 && remaining > 0);
+
+        // Fire the heads-up once, on the transition into the 5s mark.
+        if (secs === 5 && this._lastCountdownSecs !== 5 &&
+            this.app && this.app.showToast) {
+          this.app.showToast('Next scene in 5 seconds', 2500, '\u23ED');
         }
+        this._lastCountdownSecs = secs;
       }
 
       nextScene() {
