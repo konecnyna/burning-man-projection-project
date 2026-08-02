@@ -274,19 +274,51 @@ block in the scenes array and they work.
 
 ## 8. Offline rule
 
-**The installation has no internet.** Every asset must be local and
-relatively-referenced.
+**This is the first principle of the project. The installation has no
+internet.** Not slow internet — none. Anything that reaches out hangs on DNS,
+then fails, and on site that looks like a frozen or half-rendered scene.
+
+Rules:
 
 - No CDN `<script src="https://...">`, no Google Fonts, no remote images.
+- No analytics, no social widgets, no telemetry.
 - Shared libraries live in `static/libs/` (`socket.io.min.js`, `three.min.js`).
 - Fonts live in `static/fonts/` with local `@font-face` CSS.
 - Scene-specific vendored libraries live inside the scene's own directory.
+- Every `src`/`href` must resolve to a file that exists in the repo.
 
-Check a new scene before committing:
+### Check it — don't eyeball it
 
 ```bash
-grep -rnE 'https?://' static/scenes/my-scene/
+./deploy/check-offline.sh              # exit 0 = clean
+./deploy/check-offline.sh --verbose    # also list attribution-only URLs
 ```
 
-Any hit that is not a comment, an XML namespace, or a DOCTYPE URL is a bug that
-will surface as a broken scene on the playa and nowhere else.
+It scans everything served for remote tag loads, remote CSS, runtime
+fetch/XHR/WebSocket calls, known tracker and CDN hostnames, and broken local
+references. Commented-out code is not flagged — HTML and block comments are
+stripped before scanning. It also runs as part of `./deploy/verify-kiosk.sh`.
+
+Run it after adding or changing any scene. A remote reference is the kind of
+bug that passes every test you run at home and only fails once you're somewhere
+with no way to fix it.
+
+### When a vendored library contains remote URLs
+
+Large third-party bundles often ship with hardcoded CDN and tracker URLs. If
+the code path genuinely cannot fire, neutralize its entry points and record it
+in `deploy/offline-allowlist.txt` with a reason:
+
+```
+static/scenes/foo/vendor.js | Widget bundle. Entry points stubbed in foo/index.html; URLs are dead strings.
+```
+
+`cosmic-symbolism` is the worked example. Its `libs.js` bundles the ShareThis
+widget, and `coffeelib.js` calls `stLight.options()` on a 25 ms timer. An
+inline guard in `cosmic-symbolism/index.html` — loaded between `libs.js` and
+`coffeelib.js` — replaces `stLight`, `stWidget`, and `switchTo5x` with no-ops,
+so the call happens and does nothing. **Do not reorder those three script
+tags.**
+
+The allowlist is not a way to silence the check. An entry means the code is
+already neutralized and the reason says how.

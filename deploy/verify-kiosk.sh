@@ -100,6 +100,19 @@ case "$running" in
     *) fail "$running app processes running" "kill the extras; only the LaunchAgent should start it" ;;
 esac
 
+# ------------------------------------------------------------------- offline
+sect "Offline compliance"
+
+if [ -x "$REPO_DIR/deploy/check-offline.sh" ]; then
+    if "$REPO_DIR/deploy/check-offline.sh" >/dev/null 2>&1; then
+        pass "nothing served reaches the network"
+    else
+        fail "offline violations present" "run ./deploy/check-offline.sh for detail"
+    fi
+else
+    warn "deploy/check-offline.sh missing or not executable"
+fi
+
 # ---------------------------------------------------------------- boot chain
 sect "Boot chain"
 

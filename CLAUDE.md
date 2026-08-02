@@ -31,9 +31,20 @@ operation, [TROUBLESHOOTING.md](TROUBLESHOOTING.md) is symptom-first.
 
 These are non-negotiable and break the installation if violated.
 
-1. **Fully offline.** Every library, font, and image must be vendored locally
-   and referenced relatively. No CDN links, no Google Fonts, no remote images.
-   Verify with `grep -rnE 'https?://' static/scenes/<scene>/`.
+1. **IT MUST OPERATE OFFLINE. This is the first principle of the project.**
+   The deployment has no internet at all. Anything that reaches out hangs on
+   DNS, then fails, and on site that looks like a frozen or broken scene.
+   Every library, font, and image must be vendored locally and referenced
+   relatively. No CDN links, no Google Fonts, no analytics, no social widgets.
+
+   **Never assert offline-safety — check it:**
+   ```bash
+   ./deploy/check-offline.sh
+   ```
+   Run it after touching anything under `static/`. If a vendored bundle
+   contains unavoidable remote URLs, neutralize its entry points and record
+   the reason in `deploy/offline-allowlist.txt`. The allowlist is not for
+   silencing the check.
 2. **No build process.** Python plus static files. Nothing that requires
    compiling, bundling, or a package manager at runtime.
 3. **Camera-only input.** No touch, keyboard, or mouse interaction for the

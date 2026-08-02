@@ -131,8 +131,12 @@ Before leaving the installation unattended, run the
 
 ## Constraints
 
-- **Fully offline.** Every library, font, and image is vendored. No CDN
-  references anywhere. See [the offline rule](SCENES.md#8-offline-rule).
+- **It must operate offline. This is the first principle.** The installation
+  has no internet — not slow internet, none. Every library, font, and image is
+  vendored. Anything that reaches out hangs on DNS and then fails, which on
+  site looks like a frozen scene. Enforced by `./deploy/check-offline.sh`,
+  which also runs inside `verify-kiosk.sh`. See
+  [the offline rule](SCENES.md#8-offline-rule).
 - **No build process.** Python plus static files, nothing to compile.
 - **Camera-only input.** No touch, no keyboard, no mouse for the audience.
 - **Unattended.** It has to come back on its own after a power cut — see

@@ -1,0 +1,14 @@
+# Offline check — allowlist
+#
+# Files here are exempt from the third-party-host scan in
+# deploy/check-offline.sh. Every entry needs a reason explaining why the
+# remote references cannot fire at runtime.
+#
+# This is not a way to silence the check. If a file needs an entry, the code
+# in it must already be neutralized, and the reason must say how.
+#
+# Format:  <path relative to repo root> | <reason>
+
+static/scenes/cosmic-symbolism/content/libs.js | ShareThis widget bundle. Its entry points (stLight, stWidget, switchTo5x) are replaced with no-ops by the offline guard in cosmic-symbolism/index.html, which loads after libs.js and before coffeelib.js. The URLs remain as dead strings inside the bundle.
+
+static/scenes/cosmic-symbolism/content/coffeelib.js | Builds tumblr/pinterest/twitter share URLs, but only inside click handlers on #share elements. The kiosk has no pointer input, so they are unreachable. The stLight.options() call it makes is a no-op via the guard above.

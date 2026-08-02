@@ -43,8 +43,27 @@ removing a system-domain LaunchDaemon.
 |---|---|
 | `deploy/install-kiosk.sh` | Set the machine up. `--dry-run`, `--yes`, `--port N` |
 | `deploy/verify-kiosk.sh` | Check every link in the chain. Exit 0 = safe to leave |
+| `deploy/check-offline.sh` | Prove nothing served reaches the network |
 | `deploy/uninstall-kiosk.sh` | Remove the LaunchAgent and stop the app |
 | `deploy/com.atlantis.kiosk.plist.in` | LaunchAgent template — **edit this, never the installed copy** |
+| `deploy/offline-allowlist.txt` | Vendored bundles with neutralized remote code, and why |
+
+### Offline is the first principle
+
+The installation has no internet. Provision **everything** while you still have
+a network — in particular the venv, because `start-atlantis.sh` deliberately
+does **not** `pip install` at startup. Offline, pip blocks on PyPI and retries
+for minutes, and under `KeepAlive` that becomes a silent restart loop. The
+launcher fails immediately with an actionable message instead.
+
+```bash
+# While online
+source venv/bin/activate && pip install -r requirements.txt
+./deploy/check-offline.sh
+```
+
+MediaPipe's hand models ship inside the package as local `.tflite` files, so
+tracking needs no download. `deploy/check-offline.sh` verifies that too.
 
 Then confirm the whole thing actually works:
 
@@ -258,6 +277,7 @@ It checks, and tells you the fix for anything that fails:
 | Repo | launcher executable; venv imports `mediapipe`, `flask`, `cv2` |
 | LaunchAgent | plist installed, points at this repo, `KeepAlive`, `RunAtLoad`, loaded |
 | Conflicts | no Login Item duplicate, no stale artifacts, exactly one app process |
+| Offline | nothing served reaches the network |
 | Boot chain | auto-login set, FileVault off |
 | Power | `autorestart=1`, `sleep=0`, `displaysleep=0`, `disksleep=0`, screen saver off |
 | Runtime | camera detected, `/health` responding on the expected port |

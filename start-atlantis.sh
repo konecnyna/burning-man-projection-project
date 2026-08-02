@@ -42,11 +42,22 @@ fi
 source venv/bin/activate
 
 if ! python3 -c "import mediapipe, flask, cv2" 2>/dev/null; then
-    log "Dependencies missing — installing from requirements.txt"
-    if ! pip install -r requirements.txt; then
-        log "FATAL: pip install failed"
-        exit 1
-    fi
+    log "ERROR: dependencies are not importable in venv/"
+    #
+    # Deliberately NOT running `pip install` here.
+    #
+    # This installation runs with no internet. Offline, pip blocks on PyPI
+    # DNS and retries for minutes before failing, and under the LaunchAgent's
+    # KeepAlive that turns into a silent restart loop with no visible cause.
+    # Failing immediately with an actionable message is far better on site.
+    #
+    # Dependencies are part of provisioning, not of starting up. Run this
+    # while you still have a network:
+    #
+    log "  Dependencies must be installed ahead of time, while online:"
+    log "      source venv/bin/activate && pip install -r requirements.txt"
+    log "  Then verify with: ./deploy/verify-kiosk.sh"
+    exit 1
 fi
 
 log "Interpreter: $(command -v python3)"

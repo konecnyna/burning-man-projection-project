@@ -7,6 +7,30 @@
   <link rel="stylesheet" type="text/css" media="all" href="./content/zoom.css">
   <script src="./content/jquery.min.js"></script>
   <script src="./content/libs.js"></script>
+
+  <!--
+    OFFLINE GUARD — must stay between libs.js and coffeelib.js.
+
+    libs.js bundles the ShareThis social widget. coffeelib.js calls
+    stLight.options({publisher: ...}) on a 25ms timer, which makes the widget
+    reach out to its CDN for segment lookups, OAuth checks, and button iframes.
+
+    The installation has no internet, so those requests hang on DNS and then
+    fail. Nothing in a hands-only kiosk can use a share button anyway, so the
+    entry points are replaced with no-ops here.
+
+    This runs after libs.js defines the real objects and before coffeelib.js
+    calls them. Do not reorder these three script tags.
+  -->
+  <script>
+    (function () {
+      var noop = function () { return undefined; };
+      window.stLight = { options: noop, element: noop };
+      window.stWidget = { addEntry: noop, init: noop };
+      window.switchTo5x = false;
+    })();
+  </script>
+
   <script src="./content/coffeelib.js"></script>
 
 </head>
