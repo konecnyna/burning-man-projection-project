@@ -75,6 +75,29 @@ system_profiler SPCameraDataType
 Empty output means macOS sees no camera. Mac minis have no built-in camera —
 check the USB webcam is plugged in and try a different port.
 
+**1a. Are you on SSH?** This is the single most common cause.
+
+```bash
+launchctl managername
+#   Aqua       -> console session, camera can work
+#   Background -> SSH session, camera CANNOT work
+```
+
+An SSH session runs in macOS's Background session. TCC-protected resources are
+gated on the session, and a Background process has nowhere to draw a permission
+prompt — so the request dies as `NotDetermined`, no matter how many times you
+restart it, and regardless of what Terminal.app has been granted.
+
+Do not launch the app from SSH. Drive the LaunchAgent, which lives in the Aqua
+session:
+
+```bash
+./deploy/kiosk-ctl.sh restart
+./deploy/kiosk-ctl.sh status     # tells you which session everything is in
+```
+
+Full explanation in [DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh).
+
 **1b. Don't trust the OpenCV error message.**
 
 ```
@@ -106,8 +129,7 @@ sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
 
 **2. Did the tracker fail to open it?**
 
-The app emits a `camera_error` event and keeps running with no hand input. There
-is no log file, so check live:
+The app emits a `camera_error` event and keeps running with no hand input:
 
 ```bash
 grep -i camera logs/atlantis.log
@@ -290,6 +312,8 @@ captured by the agent. Some failure paths are silent regardless:
 | Scene navigation | **N**/**→** next, **P**/**←** previous (keyboard only) |
 | Blocked off-box loads | `curl -s localhost:5001/api/csp-violations \| python3 -m json.tool` |
 | Open the UI in a real browser with DevTools | `http://localhost:<port>` in Safari or Chrome |
+| Control the app over SSH | `./deploy/kiosk-ctl.sh status\|start\|stop\|restart\|logs` |
+| Which session am I in? | `launchctl managername` — `Aqua` = console, `Background` = SSH |
 
 There is no debug UI, video feed, or on-screen HUD — that machinery was removed
 because it cost frame-rate and never earned its keep. The log is the tool.

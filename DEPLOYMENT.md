@@ -7,6 +7,7 @@ Making the machine boot into the app and stay in it.
 - [3. The boot chain](#3-the-boot-chain)
 - [4. The launcher](#4-the-launcher)
 - [5. Everyday operations](#5-everyday-operations)
+- [5b. Working over SSH](#5b-working-over-ssh)
 - [6. Camera permissions](#6-camera-permissions)
 - [7. Kiosk hardening](#7-kiosk-hardening)
 - [8. Failure modes](#8-failure-modes)
@@ -44,6 +45,7 @@ removing a system-domain LaunchDaemon.
 | `deploy/install-kiosk.sh` | Set the machine up. `--dry-run`, `--yes`, `--port N` |
 | `deploy/verify-kiosk.sh` | Check every link in the chain. Exit 0 = safe to leave |
 | `deploy/check-offline.sh` | Prove nothing served reaches the network |
+| `deploy/kiosk-ctl.sh` | Start/stop/restart/status/logs — works over SSH |
 | `deploy/uninstall-kiosk.sh` | Remove the LaunchAgent and stop the app |
 | `deploy/com.atlantis.kiosk.plist.in` | LaunchAgent template — **edit this, never the installed copy** |
 | `deploy/offline-allowlist.txt` | Vendored bundles with neutralized remote code, and why |
@@ -221,6 +223,84 @@ curl http://localhost:5001/health
 Because `KeepAlive` is on, `pkill main.py` will **not** stop the kiosk — the
 agent restarts it within `ThrottleInterval` (15 s). That is deliberate. To stop
 it for real, run the uninstaller or `launchctl bootout`.
+
+---
+
+## 5b. Working over SSH
+
+Production is reboot-into-the-app. But SSH is useful for development and
+debugging, and there is one macOS rule that governs everything here.
+
+### The rule
+
+An SSH session runs in macOS's **Background** session. The console login runs
+in **Aqua**. Check which you are in:
+
+```bash
+launchctl managername
+#   Aqua       -> console session
+#   Background -> SSH session
+```
+
+Anything launched *directly* from an SSH session inherits Background, and
+therefore:
+
+- **No camera.** TCC-protected resources are gated on the session, and a
+  Background process has nowhere to draw a permission prompt. The request dies
+  as `NotDetermined` and OpenCV reports
+  `not authorized to capture video (status 0)` — which reads like a permission
+  denial but actually means "never asked". Granting camera access to
+  Terminal.app does not help; that is a different session.
+- **No reliable window.** A GUI app hosted in a Background session may not
+  render and tends to exit without explanation.
+
+### What does work
+
+Do not launch the app from the SSH session. Drive the **LaunchAgent** instead:
+it lives in `gui/<uid>`, which *is* the Aqua session. This works over SSH and
+needs **no sudo**, because you are targeting your own GUI domain.
+
+```bash
+./deploy/kiosk-ctl.sh status     # session, agent, process, health, camera
+./deploy/kiosk-ctl.sh start      # start in the Aqua session
+./deploy/kiosk-ctl.sh restart    # bounce it after a code change
+./deploy/kiosk-ctl.sh stop
+./deploy/kiosk-ctl.sh logs       # follow logs/atlantis.log
+```
+
+`restart` is the one you want after editing code — it kickstarts the agent in
+place, so the app comes back with a real window and working camera while you
+stay on SSH.
+
+Underneath, those are:
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.atlantis.kiosk.plist
+launchctl kickstart -k gui/$(id -u)/com.atlantis.kiosk
+launchctl bootout   gui/$(id -u)/com.atlantis.kiosk
+```
+
+Verified: an agent bootstrapped from an SSH session reports
+`managername=Aqua`.
+
+### Server-side testing without a window
+
+To exercise routes, the offline check or the event plumbing — no window, no
+camera needed:
+
+```bash
+./deploy/kiosk-ctl.sh headless
+```
+
+That runs in the SSH session deliberately. Hand tracking will not work; that is
+expected and not a bug to chase.
+
+### Camera permission, first time
+
+The first Aqua-session launch may raise a camera prompt **on the physical
+display**. Someone has to click Allow there once; it cannot be answered over
+SSH. After that the grant persists for that interpreter — rebuilding `venv/`
+creates a new binary and requires a fresh grant.
 
 ---
 

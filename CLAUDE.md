@@ -124,6 +124,7 @@ configured by hand:
 ./deploy/install-kiosk.sh             # install the LaunchAgent + power settings
 ./deploy/verify-kiosk.sh              # preflight; exit 0 = safe to leave
 ./deploy/uninstall-kiosk.sh           # remove
+./deploy/kiosk-ctl.sh status          # works over SSH; also says which session
 ```
 
 The window is always fullscreen and frameless. There is **no on-screen chrome
@@ -155,6 +156,15 @@ Things that will waste your time if you don't know them.
   `hand_id` as durable.
 - **The parent filters hands to `confidence.overall >= 0.7`** before scene
   handlers see them; scenes with their own WebSocket get unfiltered data.
+- **An SSH session cannot run this app properly.** SSH is macOS's `Background`
+  session; the console is `Aqua`. Anything launched from SSH gets no camera
+  (TCC has nowhere to prompt, so OpenCV reports "not authorized, status 0")
+  and no reliable window. Check with `launchctl managername`. Drive the
+  LaunchAgent instead — `./deploy/kiosk-ctl.sh restart` — which runs in Aqua
+  and needs no sudo. See [DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh).
+- **Only ever run one instance.** Two copies fight over the port and camera.
+  `start-atlantis.sh` refuses to start a second, via a pidfile and a port
+  check.
 - **This process runs for days.** Anything keyed by `hand_id` must be pruned to
   the live set every frame — IDs increase monotonically and are reissued after
   any frame with no detections. `_prune_gesture_state()` is the pattern.
