@@ -143,10 +143,13 @@
 
 <body>
   <div class="crt">
-    <div class="screen" id="screen"></div>
+    <div class="screen" id="termOut"></div>
   </div>
 
   <script>
+  (function () {
+    'use strict';
+
     /* =====================================================================
        ATLANTIS TERMLINK — onboarding.
 
@@ -166,7 +169,11 @@
        pauses; the rest is texture that scrolls by.
        ===================================================================== */
 
-    const screen = document.getElementById('screen');
+    // NB: wrapped in an IIFE and deliberately not called `screen`.
+    // `window.screen` already exists, and an element with id="screen" also
+    // gets named access on window -- a top-level `const screen` can therefore
+    // be a SyntaxError, which kills the whole script with no visible error.
+    const out = document.getElementById('termOut');
 
     // type = characters revealed per tick (higher is faster).
     // pause = ms held after the line finishes. Empty text is a spacer.
@@ -208,14 +215,14 @@
     // Bound the DOM. This scene is short, but the kiosk runs for days and the
     // onboarding replays every time somebody walks up.
     function trimHistory() {
-      while (screen.children.length > 26) screen.removeChild(screen.firstChild);
+      while (out.children.length > 26) out.removeChild(out.firstChild);
     }
 
     function typeLine(spec) {
       return new Promise(resolve => {
         const el = document.createElement('div');
         el.className = 'line ' + (spec.cls || '');
-        screen.appendChild(el);
+        out.appendChild(el);
         trimHistory();
 
         if (!spec.t) { resolve(); return; }   // spacer
@@ -250,6 +257,7 @@
     }
 
     run();
+  })();
   </script>
 </body>
 
