@@ -27,9 +27,15 @@ Two scenes are special and owned by `ModeManager` rather than the cycle:
 | Scene | File | Purpose |
 |---|---|---|
 | `idle` | `static/scenes/idle.html` | Screensaver — "show hands to begin" |
-| `onboarding` | `static/scenes/welcome.html` | Instructions before the cycle starts |
+| `onboarding` | `static/scenes/welcome.html` | TERMLINK boot screen: camp name, portal address, palm instruction. Self-completing |
 
 Both are registered with `duration: 0`, which means "never auto-advance".
+
+`onboarding` completes itself: the terminal types its boot sequence (~9 s) and
+then posts `transition_to_active` to the parent, which already listens for that
+message. There is no hover target and no hold-to-confirm — reaching onboarding
+at all already required a confident hand to wake the kiosk out of idle. If
+nobody is there, `ModeManager`'s 45 s idle timer returns to the screensaver.
 
 ---
 
