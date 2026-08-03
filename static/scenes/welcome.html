@@ -37,8 +37,13 @@
         #030c06;
       box-shadow: inset 0 0 20vh rgba(0, 0, 0, 0.95);
       text-shadow: 0 0 6px var(--phos-glow);
-      font-size: clamp(14px, 1.55vw, 25px);
-      line-height: 1.48;
+      /* Sized for a 140" projection. At 1080p a 1vw line is ~1.2 inches tall
+         on that screen, so the shell/loader text sits around 2 inches -- big
+         enough to read as texture from across a camp, small enough that a
+         dozen lines still fit. The instruction panel scales up much further
+         below; it is the only part anyone has to actually read. */
+      font-size: clamp(18px, 1.9vw, 38px);
+      line-height: 1.45;
       letter-spacing: 0.03em;
     }
 
@@ -83,8 +88,15 @@
       animation: flicker 5s infinite steps(1);
     }
 
-    /* Once the binary takes over it owns the screen, top-aligned. */
-    .screen.app { justify-content: flex-start; }
+    /* Once the binary takes over it owns the screen. Centred and much larger:
+       at this point the audience is being asked to do something, from a
+       distance, probably in the dark, probably not concentrating. */
+    .screen.app {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      font-size: 1.5em;
+    }
 
     @keyframes flicker {
       0%, 95%, 100% { opacity: 1; }
@@ -99,32 +111,53 @@
     .bright { color: #b6ffcf; text-shadow: 0 0 10px var(--phos-glow); }
     .spacer { height: 0.75em; }
 
-    .banner {
+    /* CSS border rather than box-drawing characters: fixed-width ASCII art
+       wraps and falls apart the moment the type gets big or the projector is
+       an odd aspect. */
+    .title {
       color: var(--amber);
-      text-shadow: 0 0 12px var(--amber-glow);
-      font-size: 1.1em;
-      line-height: 1.24;
+      text-shadow: 0 0 18px var(--amber-glow);
+      font-size: 2.1em;
+      letter-spacing: 0.34em;
+      line-height: 1.1;
     }
 
-    .heading {
-      color: var(--phos-dim);
-      letter-spacing: 0.22em;
-      font-size: 0.82em;
-      margin-top: 0.5em;
+    .subtitle {
+      color: var(--phos);
+      font-size: 0.95em;
+      letter-spacing: 0.26em;
+      margin-top: 0.35em;
+      padding-bottom: 0.55em;
+      border-bottom: 2px solid var(--phos-dim);
     }
 
-    .step { padding-left: 1.2em; }
-    .step .k { color: var(--amber); }
+
+    /* One idea per line, generous spacing, nothing to parse. */
+    .beat {
+      color: var(--phos);
+      font-size: 1.06em;
+      letter-spacing: 0.12em;
+      margin-top: 0.55em;
+      opacity: 0;
+      animation: fadein 0.7s ease forwards;
+    }
+
+    .beat .q { color: var(--phos-dim); }
+
+    @keyframes fadein {
+      from { opacity: 0; transform: translateY(0.35em); }
+      to   { opacity: 1; transform: none; }
+    }
 
     /* The one instruction that has to survive being read at a glance. */
     .hero {
-      align-self: flex-start;
-      margin: 0.45em 0 0.15em 1.2em;
-      padding: 0.35em 0.85em;
-      border: 2px solid var(--amber);
+      margin: 0.85em 0 0.35em 0;
+      padding: 0.5em 1.1em;
+      border: 3px solid var(--amber);
       color: var(--amber);
-      font-size: 1.2em;
-      letter-spacing: 0.1em;
+      font-size: 1.85em;
+      letter-spacing: 0.14em;
+      line-height: 1.2;
       text-shadow: 0 0 10px var(--amber-glow);
       box-shadow: 0 0 20px rgba(255, 176, 66, 0.32),
                   inset 0 0 16px rgba(255, 176, 66, 0.1);
@@ -296,50 +329,37 @@
     }
 
     async function actProgram() {
-      // The binary takes the terminal.
+      // The binary takes the terminal. Clearing is what turns the instructions
+      // into a program's interface rather than more log output.
       dropCursor();
-      await sleep(300);
+      await sleep(320);
       out.textContent = '';
       out.classList.add('app');
-      await sleep(170);
+      await sleep(220);
 
-      raw('╔══════════════════════════════════════════════════╗', 'banner');
-      raw('║   P O R T A L   v4.20.69                         ║', 'banner');
-      raw('║   CAMP ATLANTIS   ·   4:30 & B                   ║', 'banner');
-      raw('╚══════════════════════════════════════════════════╝', 'banner');
-      await sleep(480);
+      raw('P O R T A L', 'title');
+      raw('CAMP ATLANTIS   ·   4:30 & B', 'subtitle');
+      await sleep(900);
 
-      raw('SESSION', 'heading');
-      raw('  sysadmin — dr. boom boom, phd', 'dim');
-      raw('  clearance: unrestricted', 'dim');
-      await sleep(380);
+      // The instruction. Everything else on this screen exists to frame it.
+      addLine('hero').textContent = 'RAISE YOUR PALM';
+      await sleep(1000);
 
-      raw('HOW TO USE', 'heading');
-      spacer();
-
-      addLine('hero').textContent = 'SHOW YOUR PALM TO THE LOOKING GLASS';
-      await sleep(850);
-
-      const steps = [
-        ['MOVE ', 'your hands to steer the portal'],
-        ['WATCH', 'it transports you every 30 seconds'],
-        ['STAY ', 'it follows you for as long as you are here'],
+      // Cinematic rather than a manual: one idea a line, fading in on a beat,
+      // written to be understood at a glance from across a dark camp. The
+      // audience is standing at the camera looking at a 140" screen, not
+      // reading a README.
+      const beats = [
+        'the looking glass is watching',
+        'move — and it moves with you',
+        'every thirty seconds it takes you somewhere new',
       ];
-      for (const [k, rest] of steps) {
-        const el = addLine('step dim');
-        const key = document.createElement('span');
-        key.className = 'k';
-        key.textContent = k;
-        el.appendChild(key);
-        el.appendChild(document.createTextNode('  ' + rest));
-        await sleep(320);
+      for (const b of beats) {
+        addLine('beat').textContent = b;
+        await sleep(1050);
       }
 
-      spacer();
-      const waiting = addLine('amber');
-      waiting.textContent = '> awaiting hands';
-      putCursor(waiting);
-      await sleep(1100);
+      await sleep(700);
     }
 
     async function run() {
