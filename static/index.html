@@ -265,6 +265,19 @@
       text-shadow: 0 0 5px #00ff41;
     }
 
+    /* The instruction is the one HUD item the audience is meant to act on, so
+       it takes the middle of the strip. It yields width to the two fixed-size
+       items either side rather than pushing the countdown off-screen. */
+    #sceneInstructions {
+      flex: 0 1 auto;
+      min-width: 0;
+      text-align: center;
+    }
+
+    #sceneInstructionText {
+      overflow-wrap: anywhere;
+    }
+
     .status-indicator {
       width: 10px;
       height: 10px;
@@ -845,6 +858,15 @@
       <div class="status-item">
         <span id="currentScene">Portal: Loading</span>
       </div>
+      <!-- How to use the scene that is playing. Persistent rather than part of
+           the scene-change overlay: that overlay auto-hides after 3s, scenes run
+           25-60s, and most of the audience walks up mid-scene and would never
+           see it. Hidden entirely for scenes with no instructions set. -->
+      <div class="status-item" id="sceneInstructions" style="display: none;">
+        <span class="countdown-label">HOW TO</span>
+        <span id="sceneInstructionText"></span>
+      </div>
+
       <div class="status-item">
         <span class="countdown-label" id="sceneCountdownLabel">NEXT</span>
         <div class="scene-countdown-dial" id="sceneCountdownDial">
@@ -1441,11 +1463,18 @@
         this.popularScene = 60
 
         // Scene configurations
-        this.scenes = [  
+        //
+        // `instructions` is the audience-facing "how to use this" line in the
+        // status bar. Keep it short enough to read at a glance from across a
+        // dark camp, and keep it TRUE -- each one below describes what that
+        // scene's code actually does with palm_center, not what it ought to do.
+        // A scene with no `instructions` simply hides the HUD item.
+        this.scenes = [
           {
             id: 'orbits',
             name: 'Orbits',
             description: 'An interactive flight through attractor orbits using hopalong formula',
+            instructions: 'Move your hand to steer the flight',
             duration: this.popularScene,
             html_file: 'scenes/orbits/index.html',
             background_color: '#000000'
@@ -1462,6 +1491,7 @@
             id: 'fluidsim',
             name: 'Fluid Simulation',
             description: 'WebGL fluid simulation controlled by hand movements',
+            instructions: 'Sweep your hands through the colour',
             duration: this.popularScene,
             html_file: 'scenes/fluidsim/index.html',
             background_color: '#000000'
@@ -1470,6 +1500,12 @@
             id: 'cosmic_symbolism',
             name: 'Cosmic Symbolism',
             description: 'Navigate through cosmic imagery with hand movements',
+            // Reads palm_center.y straight through: y is 0 at the top of frame,
+            // and maps to a wheel deltaY of -50..+50. Positive deltaY scrolls
+            // forward, so a LOW hand goes forward and a HIGH hand goes back.
+            // Inverted relative to what most people expect -- flipping it is a
+            // one-line change in cosmic-symbolism/index.html, not a text fix.
+            instructions: 'Lower your hand to fly on · raise it to go back',
             duration: this.popularScene,
             html_file: 'scenes/cosmic-symbolism/index.html',
             background_color: '#000000'
@@ -1478,6 +1514,7 @@
             id: 'tie_dye',
             name: 'Tie Dye',
             description: 'Use your hands to create a tie dye pattern',
+            instructions: 'Your hand is the brush — draw in the air',
             duration: this.defaultDuration,
             html_file: 'scenes/tie-dye/index.html',
             background_color: '#000000'
@@ -1486,6 +1523,7 @@
             id: 'physarum',
             name: 'Slime Mould',
             description: 'A living network grows toward your hands and reroutes as you move',
+            instructions: 'Hold your hands out — the network grows to them',
             duration: this.shortScene,
             html_file: 'scenes/physarum/index.html',
             background_color: '#000000'
@@ -1510,6 +1548,9 @@
             id: 'kaleidoscope',
             name: 'Kaleidoscope',
             description: 'Interactive kaleidoscope with hand-controlled pattern movement',
+            // Driven by frame-to-frame delta, not position: a still hand does
+            // nothing at all, so the instruction has to ask for movement.
+            instructions: 'Wave your hand to push the pattern',
             duration: this.popularScene,
             html_file: 'scenes/kaleidoscope/index.html',
             background_color: '#000000'
@@ -1710,6 +1751,15 @@
           // Persistent "what is playing" readout.
           const sceneLabel = document.getElementById('currentScene');
           if (sceneLabel) sceneLabel.textContent = `Portal: ${scene.name || scene.id}`;
+
+          // Persistent "how to use it" readout. Hidden outright when a scene
+          // has no instructions, rather than left showing the previous scene's.
+          const instructionItem = document.getElementById('sceneInstructions');
+          const instructionText = document.getElementById('sceneInstructionText');
+          if (instructionItem && instructionText) {
+            instructionText.textContent = scene.instructions || '';
+            instructionItem.style.display = scene.instructions ? '' : 'none';
+          }
 
           const container = document.getElementById('scene-container');
 
