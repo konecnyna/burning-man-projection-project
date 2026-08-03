@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLANTIS · Calibration Bench</title>
+  <script src="/static/socket.io.js"></script>
+  <style>
+    /* ==========================================================================
+       Calibration bench.
+
+       Not part of the installation. This is the tool for answering "does a hand
+       standing there actually register", which is a question about numbers that
+       only exist while someone is in front of the camera -- so it has to be
+       usable alone, at the camera, without a second person reading a terminal.
+
+       Everything here is a browser-side consumer of the same events the scenes
+       get. It adds no work to the tracking loop.
+       ========================================================================== */
+    :root {
+      --phos: #33ff66;
+      --phos-dim: #1a8a3a;
+      --phos-glow: rgba(51, 255, 102, 0.5);
+      --amber: rgb(255, 176, 66);
+      --red: #ff5252;
+      --bg: #050b06;
+      --panel: rgba(51, 255, 102, 0.04);
+      --line: rgba(51, 255, 102, 0.22);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--phos);
+      font-family: 'Menlo', 'SF Mono', Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 14px;
+      min-height: 100vh;
+    }
+    h1 { font-size: 15px; letter-spacing: 0.24em; font-weight: normal; }
+    h2 {
+      font-size: 11px; letter-spacing: 0.2em; font-weight: normal;
+      color: var(--phos-dim); margin-bottom: 8px; text-transform: uppercase;
+    }
+    .top {
+      display: flex; align-items: baseline; gap: 18px;
+      border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .top .sp { flex: 1; }
+    .chip {
+      border: 1px solid var(--line); padding: 2px 9px; font-size: 11px;
+      letter-spacing: 0.12em;
+    }
+    .chip.bad { border-color: var(--red); color: var(--red); }
+    .chip.warn { border-color: var(--amber); color: var(--amber); }
+
+    .grid {
+      display: grid; gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+      align-items: start;
+    }
+    .panel {
+      border: 1px solid var(--line); background: var(--panel); padding: 11px 12px;
+    }
+    .panel.wide { grid-column: 1 / -1; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      text-align: right; font-weight: normal; color: var(--phos-dim);
+      font-size: 10px; letter-spacing: 0.12em; padding: 3px 6px;
+      border-bottom: 1px solid var(--line);
+    }
+    th:first-child, td:first-child { text-align: left; }
+    td { text-align: right; padding: 3px 6px; font-variant-numeric: tabular-nums; }
+    tr.pass td.k { color: var(--phos); }
+    tr.fail td.k { color: var(--red); }
+    .dim { color: var(--phos-dim); }
+    .amber { color: var(--amber); }
+    .red { color: var(--red); }
+
+    /* A bar that shows a value against the two live thresholds. Reading a number
+       while standing 6ft away is hard; reading a bar crossing a line is not. */
+    .meter { position: relative; height: 16px; border: 1px solid var(--line); margin: 3px 0 8px; }
+    .meter .fill { position: absolute; inset: 0 auto 0 0; background: var(--phos-dim); }
+    .meter .fill.ok { background: var(--phos); }
+    .meter .tick { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--amber); }
+    .meter .lbl {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; font-size: 10px; letter-spacing: 0.1em;
+      text-shadow: 0 0 4px #000;
+    }
+
+    canvas { display: block; width: 100%; border: 1px solid var(--line); background: #030603; }
+
+    button {
+      font: inherit; font-size: 11px; letter-spacing: 0.14em;
+      background: transparent; color: var(--phos); border: 1px solid var(--line);
+      padding: 5px 12px; cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: rgba(51,255,102,0.1); }
+    button:disabled { color: var(--phos-dim); cursor: default; }
+    button.go { border-color: var(--phos); }
+    button.stop { border-color: var(--amber); color: var(--amber); }
+    input[type=text] {
+      font: inherit; font-size: 12px; background: #030603; color: var(--phos);
+      border: 1px solid var(--line); padding: 4px 8px; width: 150px;
+    }
+    input[type=range] { width: 100%; accent-color: #33ff66; }
+    label.row {
+      display: grid; grid-template-columns: 92px 1fr 46px; gap: 8px;
+      align-items: center; font-size: 11px; margin-bottom: 3px;
+    }
+    label.row span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 9px; }
+    .note { font-size: 11px; color: var(--phos-dim); margin-top: 7px; }
+    .big { font-size: 26px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+    ul { list-style: none; font-size: 11px; }
+    li { padding: 1px 0; }
+    a { color: var(--phos); }
+  </style>
+</head>
+<body>
+
+<div class="top">
+  <h1>CALIBRATION BENCH</h1>
+  <span class="chip" id="sensorChip">SENSOR --</span>
+  <span class="chip" id="fpsChip">-- FPS</span>
+  <span class="chip" id="handsChip">0 HANDS</span>
+  <span class="sp"></span>
+  <span class="dim" id="clock"></span>
+</div>
+
+<div class="grid">
+
+  <!-- ------------------------------------------------------------ live -->
+  <div class="panel">
+    <h2>Live hands — raw, unfiltered</h2>
+    <table>
+      <thead>
+        <tr><th>id</th><th>overall</th><th>mp</th><th>dist</th><th>stab</th><th>size</th><th>gate</th></tr>
+      </thead>
+      <tbody id="liveBody">
+        <tr><td colspan="7" class="dim">waiting for a hand…</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      This page has its own socket, so these are pre-filter values — what the
+      tracker actually produced, before the parent drops anything.
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------- walk-to-fit -->
+  <div class="panel">
+    <h2>Working distance — walk until it holds</h2>
+    <div class="dim" style="font-size:11px">best hand, confidence vs the two live gates</div>
+    <div class="meter" id="ovMeter">
+      <div class="fill" id="ovFill"></div>
+      <div class="tick" id="tick70"></div>
+      <div class="tick" id="tick75"></div>
+      <div class="lbl" id="ovLbl">--</div>
+    </div>
+    <div class="dim" style="font-size:11px">apparent hand size (drives <span class="amber">distance</span>, 45% of the score)</div>
+    <div class="meter">
+      <div class="fill" id="szFill"></div>
+      <div class="lbl" id="szLbl">--</div>
+    </div>
+    <div style="display:flex;gap:14px;align-items:baseline">
+      <div><div class="dim" style="font-size:10px">HOLDING ABOVE GATE</div><div class="big" id="holdSec">0.0s</div></div>
+      <div><div class="dim" style="font-size:10px">LAST 10s PASS RATE</div><div class="big" id="rollPass">--</div></div>
+    </div>
+    <div class="note" id="advice">Stand where a visitor would and watch the top bar.</div>
+  </div>
+
+  <!-- ------------------------------------------------------------- frame -->
+  <div class="panel">
+    <h2>Frame coverage — where hands are seen</h2>
+    <canvas id="map" width="640" height="360"></canvas>
+    <div class="note">
+      Live positions plus a fading trail of everywhere a hand has been detected.
+      If a second hand never appears, this shows whether it was outside the
+      frame or simply not detected inside it.
+      <button id="clearMap" style="margin-left:6px">CLEAR</button>
+    </div>
+  </div>
+
+  <!-- ------------------------------------------------------------- trial -->
+  <div class="panel">
+    <h2>Trial recorder</h2>
+    <div class="controls">
+      <input type="text" id="trialLabel" placeholder="6ft palm still" value="">
+      <button id="trialBtn" class="go">START (space)</button>
+      <button id="saveBtn" disabled>SAVE RUN</button>
+      <span id="trialState" class="dim">idle</span>
+    </div>
+    <table>
+      <thead><tr><th>term</th><th>min</th><th>p50</th><th>max</th></tr></thead>
+      <tbody id="statBody"><tr><td colspan="4" class="dim">no trial yet</td></tr></tbody>
+    </table>
+    <div id="trialSummary" class="note"></div>
+  </div>
+
+  <!-- --------------------------------------------------------- model lab -->
+  <div class="panel wide">
+    <h2>Model lab — re-weight the blend against the recorded trial</h2>
+    <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+      <div>
+        <label class="row"><span>mediapipe</span><input type="range" id="w_mp"   min="0" max="1" step="0.01" value="0.35"><span id="v_mp">0.35</span></label>
+        <label class="row"><span>distance</span> <input type="range" id="w_dist" min="0" max="1" step="0.01" value="0.45"><span id="v_dist">0.45</span></label>
+        <label class="row"><span>presence</span> <input type="range" id="w_pres" min="0" max="1" step="0.01" value="0.10"><span id="v_pres">0.10</span></label>
+        <label class="row"><span>stability</span><input type="range" id="w_stab" min="0" max="1" step="0.01" value="0.05"><span id="v_stab">0.05</span></label>
+        <label class="row"><span>visibility</span><input type="range" id="w_vis" min="0" max="1" step="0.01" value="0.05"><span id="v_vis">0.05</span></label>
+        <label class="row"><span>gate</span>      <input type="range" id="w_gate" min="0.3" max="1" step="0.01" value="0.70"><span id="v_gate">0.70</span></label>
+        <div class="controls" style="margin-top:8px">
+          <button data-preset="current">CURRENT</button>
+          <button data-preset="novis">DROP VISIBILITY</button>
+          <button data-preset="lessdist">LESS DISTANCE</button>
+          <button data-preset="mponly">MEDIAPIPE ONLY</button>
+        </div>
+      </div>
+      <div>
+        <table>
+          <thead><tr><th>against recorded trial</th><th>p50</th><th>pass</th></tr></thead>
+          <tbody id="labBody"><tr><td colspan="3" class="dim">record a trial first</td></tr></tbody>
+        </table>
+        <div class="note" id="labNote">
+          Weights are applied to the components the tracker already reports, so
+          this shows what the score <em>would</em> have been for the hand you
+          actually recorded — no need to restart anything to try a change.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ----------------------------------------------------------- history -->
+  <div class="panel wide">
+    <h2>Saved runs <button id="reload" style="margin-left:8px">REFRESH</button></h2>
+    <ul id="runs"><li class="dim">—</li></ul>
+    <div class="note">Saved to <code>logs/calibration/</code>, newest 200 kept.</div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const TERMS = ['overall', 'mediapipe', 'distance', 'stability', 'presence', 'hand_size'];
+
+  // ------------------------------------------------------------- state
+  let hands = [];            // latest raw hands
+  let fps = 0;
+  let lastFrameAt = 0, startedAt = Date.now();
+  const roll = [];           // {t, best} for the rolling pass rate
+  let holdSince = 0;
+  const trail = [];          // fading detection positions, bounded
+  let trial = null;          // {label, t0, rows[], perEvent[]}
+  let recorded = null;       // last completed trial
+
+  // ------------------------------------------------------------- socket
+  let socket = null;
+  try { socket = io(); } catch (err) { console.error('socket unavailable', err); }
+
+  if (socket) {
+    socket.on('connect', () => socket.emit('subscribe',
+      { events: ['frame_processed', 'hand_moved', 'hand_detected'] }));
+
+    socket.on('event', (ev) => {
+      if (!ev) return;
+      if (ev.type === 'frame_processed') {
+        lastFrameAt = Date.now();
+        fps = (ev.data && ev.data.fps) || 0;
+        if (!(ev.data && ev.data.hand_count)) {
+          hands = [];
+          if (trial) trial.perEvent.push(0);
+        }
+      } else if (ev.type === 'hand_moved' || ev.type === 'hand_detected') {
+        hands = (ev.data && ev.data.hands) || [];
+        onHands(hands);
+      }
+    });
+  }
+
+  function onHands(hs) {
+    const now = Date.now();
+    if (trial) {
+      trial.perEvent.push(hs.length);
+      for (const h of hs) {
+        const c = h.confidence || {};
+        if (TERMS.every((k) => k in c)) trial.rows.push(c);
+      }
+    }
+    for (const h of hs) {
+      const p = h.palm_center;
+      if (p) {
+        trail.push({ x: p.x, y: p.y, t: now });
+        if (trail.length > 1200) trail.shift();   // bounded; this page can be left open
+      }
+    }
+    const best = bestOverall(hs);
+    roll.push({ t: now, best });
+    while (roll.length && now - roll[0].t > 10000) roll.shift();
+
+    const gate = parseFloat($('w_gate').value);
+    if (best >= gate) { if (!holdSince) holdSince = now; }
+    else holdSince = 0;
+  }
+
+  const bestOverall = (hs) =>
+    hs.reduce((m, h) => Math.max(m, (h.confidence && h.confidence.overall) || 0), 0);
+
+  // --------------------------------------------------------------- live
+  function renderLive() {
+    const now = Date.now();
+    const stale = !lastFrameAt || now - lastFrameAt > 1500;
+
+    const sc = $('sensorChip');
+    if (!lastFrameAt) {
+      sc.textContent = now - startedAt > 3000 ? 'SENSOR OFFLINE' : 'SENSOR --';
+      sc.className = 'chip bad';
+    } else if (stale) { sc.textContent = 'SENSOR STALE'; sc.className = 'chip warn'; }
+    else { sc.textContent = 'SENSOR LIVE'; sc.className = 'chip'; }
+
+    $('fpsChip').textContent = fps ? fps.toFixed(1) + ' FPS' : '-- FPS';
+    const live = stale ? [] : hands;
+    $('handsChip').textContent = live.length + (live.length === 1 ? ' HAND' : ' HANDS');
+
+    const gate = parseFloat($('w_gate').value);
+    const body = $('liveBody');
+    if (!live.length) {
+      body.innerHTML = '<tr><td colspan="7" class="dim">no hands in frame</td></tr>';
+    } else {
+      body.innerHTML = live.map((h) => {
+        const c = h.confidence || {};
+        const ok = (c.overall || 0) >= gate;
+        const f = (v) => (v === undefined ? '—' : Number(v).toFixed(3));
+        return `<tr class="${ok ? 'pass' : 'fail'}">
+          <td>${h.hand_id ?? '—'}</td>
+          <td class="k">${f(c.overall)}</td>
+          <td>${f(c.mediapipe)}</td>
+          <td>${f(c.distance)}</td>
+          <td>${f(c.stability)}</td>
+          <td>${f(c.hand_size)}</td>
+          <td class="${ok ? '' : 'red'}">${ok ? 'PASS' : 'FAIL'}</td></tr>`;
+      }).join('');
+    }
+
+    // walk-to-fit meters
+    const best = live.length ? bestOverall(live) : 0;
+    const gate70 = gate, gate75 = 0.75;
+    $('tick70').style.left = (gate70 * 100) + '%';
+    $('tick75').style.left = (gate75 * 100) + '%';
+    const of = $('ovFill');
+    of.style.width = (Math.min(1, best) * 100) + '%';
+    of.className = 'fill' + (best >= gate70 ? ' ok' : '');
+    $('ovLbl').textContent = best ? best.toFixed(3) : '—';
+
+    const sz = live.length ? Math.max(...live.map((h) => (h.confidence || {}).hand_size || 0)) : 0;
+    $('szFill').style.width = Math.min(100, (sz / 0.2) * 100) + '%';
+    $('szLbl').textContent = sz ? sz.toFixed(3) : '—';
+
+    $('holdSec').textContent = holdSince ? ((now - holdSince) / 1000).toFixed(1) + 's' : '0.0s';
+    const seen = roll.filter((r) => r.best > 0);
+    $('rollPass').textContent = seen.length
+      ? Math.round(seen.filter((r) => r.best >= gate70).length / seen.length * 100) + '%'
+      : '--';
+
+    const adv = $('advice');
+    if (!live.length) adv.textContent = 'Stand where a visitor would and watch the top bar.';
+    else if (best >= gate75) adv.textContent = 'Above both gates — this position wakes idle and drives scenes.';
+    else if (best >= gate70) adv.textContent = 'Drives scenes, but below 0.75 — cannot wake the piece from idle here.';
+    else adv.textContent = 'Below the gate: the tracker sees this hand, the installation does not.';
+  }
+
+  // -------------------------------------------------------------- frame map
+  const cv = $('map'), cx = cv.getContext('2d');
+  function renderMap() {
+    const now = Date.now();
+    const W = cv.width, H = cv.height;
+    cx.clearRect(0, 0, W, H);
+
+    cx.strokeStyle = 'rgba(51,255,102,0.12)';
+    cx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      cx.beginPath(); cx.moveTo(W * i / 4, 0); cx.lineTo(W * i / 4, H); cx.stroke();
+      cx.beginPath(); cx.moveTo(0, H * i / 4); cx.lineTo(W, H * i / 4); cx.stroke();
+    }
+
+    for (const p of trail) {
+      const age = (now - p.t) / 20000;
+      if (age > 1) continue;
+      cx.fillStyle = `rgba(51,255,102,${0.28 * (1 - age)})`;
+      cx.fillRect(p.x * W - 1.5, p.y * H - 1.5, 3, 3);
+    }
+
+    const stale = !lastFrameAt || now - lastFrameAt > 1500;
+    if (!stale) {
+      for (const h of hands) {
+        const p = h.palm_center; if (!p) continue;
+        const c = h.confidence || {};
+        const ok = (c.overall || 0) >= parseFloat($('w_gate').value);
+        cx.strokeStyle = ok ? '#33ff66' : '#ff5252';
+        cx.lineWidth = 2;
+        cx.beginPath(); cx.arc(p.x * W, p.y * H, 16, 0, Math.PI * 2); cx.stroke();
+        cx.fillStyle = ok ? '#33ff66' : '#ff5252';
+        cx.font = '11px Menlo, monospace';
+        cx.fillText(`#${h.hand_id ?? '?'} ${(c.overall || 0).toFixed(2)}`, p.x * W + 21, p.y * H + 4);
+      }
+    }
+  }
+
+  $('clearMap').onclick = () => { trail.length = 0; };
+
+  // ---------------------------------------------------------------- trial
+  function median(a) {
+    if (!a.length) return 0;
+    const s = [...a].sort((x, y) => x - y);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  function startTrial() {
+    trial = { label: $('trialLabel').value.trim() || 'run', t0: Date.now(), rows: [], perEvent: [] };
+    $('trialBtn').textContent = 'STOP (space)';
+    $('trialBtn').className = 'stop';
+    $('saveBtn').disabled = true;
+  }
+
+  function stopTrial() {
+    const t = trial; trial = null;
+    $('trialBtn').textContent = 'START (space)';
+    $('trialBtn').className = 'go';
+    if (!t || !t.rows.length) {
+      $('trialState').textContent = 'no hand samples — nothing recorded';
+      return;
+    }
+    const secs = (Date.now() - t.t0) / 1000;
+    const stats = {};
+    for (const k of TERMS) {
+      const v = t.rows.map((r) => r[k]);
+      stats[k] = { min: Math.min(...v), p50: median(v), max: Math.max(...v) };
+    }
+    const ov = t.rows.map((r) => r.overall);
+    const hist = {};
+    for (const n of t.perEvent) hist[n] = (hist[n] || 0) + 1;
+
+    recorded = {
+      label: t.label, seconds: +secs.toFixed(1),
+      events: t.perEvent.length, hand_samples: t.rows.length,
+      hands_per_event: hist, stats,
+      pass_070: +(ov.filter((x) => x >= 0.70).length / ov.length * 100).toFixed(1),
+      pass_075: +(ov.filter((x) => x >= 0.75).length / ov.length * 100).toFixed(1),
+      rows: t.rows,
+    };
+    renderStats();
+    renderLab();
+    $('saveBtn').disabled = false;
+    $('trialState').textContent = `recorded ${recorded.hand_samples} samples in ${secs.toFixed(1)}s`;
+  }
+
+  function renderStats() {
+    if (!recorded) return;
+    $('statBody').innerHTML = TERMS.map((k) => {
+      const s = recorded.stats[k];
+      return `<tr><td>${k}</td><td>${s.min.toFixed(3)}</td>
+              <td class="k">${s.p50.toFixed(3)}</td><td>${s.max.toFixed(3)}</td></tr>`;
+    }).join('');
+    const h = Object.entries(recorded.hands_per_event)
+      .sort((a, b) => a[0] - b[0]).map(([k, v]) => `${k}:${v}`).join('  ');
+    $('trialSummary').innerHTML =
+      `<strong>${recorded.label}</strong> — ${recorded.hand_samples} samples over ` +
+      `${recorded.events} events (${recorded.seconds}s)<br>` +
+      `hands per event → ${h}<br>` +
+      `passes 0.70 <span class="${recorded.pass_070 > 90 ? '' : 'red'}">${recorded.pass_070}%</span> · ` +
+      `passes 0.75 <span class="${recorded.pass_075 > 90 ? '' : 'red'}">${recorded.pass_075}%</span>`;
+  }
+
+  $('trialBtn').onclick = () => (trial ? stopTrial() : startTrial());
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+      e.preventDefault();
+      trial ? stopTrial() : startTrial();
+    }
+  });
+
+  // ------------------------------------------------------------- model lab
+  const W_IDS = { mp: 'w_mp', dist: 'w_dist', pres: 'w_pres', stab: 'w_stab', vis: 'w_vis' };
+  const PRESETS = {
+    current:  { mp: .35, dist: .45, pres: .10, stab: .05, vis: .05, gate: .70 },
+    novis:    { mp: .37, dist: .47, pres: .11, stab: .05, vis: 0,   gate: .70 },
+    lessdist: { mp: .60, dist: .22, pres: .10, stab: .08, vis: 0,   gate: .70 },
+    mponly:   { mp: 1,   dist: 0,   pres: 0,   stab: 0,   vis: 0,   gate: .70 },
+  };
+
+  function weights() {
+    return {
+      mp: +$('w_mp').value, dist: +$('w_dist').value, pres: +$('w_pres').value,
+      stab: +$('w_stab').value, vis: +$('w_vis').value, gate: +$('w_gate').value,
+    };
+  }
+
+  function score(c, w) {
+    // visibility is not in TERMS because the tracker always reports it as zero;
+    // included here so the weight can be exercised if that ever changes.
+    return Math.min(1, c.mediapipe * w.mp + c.distance * w.dist +
+      c.presence * w.pres + c.stability * w.stab + (c.visibility || 0) * w.vis);
+  }
+
+  function renderLab() {
+    const w = weights();
+    for (const [k, id] of Object.entries(W_IDS)) $('v_' + k).textContent = (+$(id).value).toFixed(2);
+    $('v_gate').textContent = w.gate.toFixed(2);
+
+    const sum = w.mp + w.dist + w.pres + w.stab + w.vis;
+    $('labNote').innerHTML = 'Weights sum to <strong>' + sum.toFixed(2) + '</strong>' +
+      (Math.abs(sum - 1) > 0.02
+        ? ' — not 1.00, so scores are not on the same scale as the gate.'
+        : '.') +
+      ' Applied to the components the tracker already reported, so this is what the recorded hand would have scored.';
+
+    if (!recorded) return;
+    const rows = recorded.rows;
+    const mk = (name, ww) => {
+      const v = rows.map((c) => score(c, ww));
+      const pass = v.filter((x) => x >= ww.gate).length / v.length * 100;
+      return `<tr><td>${name}</td><td>${median(v).toFixed(3)}</td>
+              <td class="${pass > 90 ? '' : 'red'}">${pass.toFixed(1)}%</td></tr>`;
+    };
+    const asIs = rows.map((c) => c.overall);
+    $('labBody').innerHTML =
+      `<tr><td class="dim">as recorded (tracker)</td><td>${median(asIs).toFixed(3)}</td>
+        <td class="${recorded.pass_070 > 90 ? '' : 'red'}">${recorded.pass_070}%</td></tr>` +
+      mk('sliders above', w) +
+      Object.entries(PRESETS).map(([k, p]) => mk(k, p)).join('');
+  }
+
+  for (const id of [...Object.values(W_IDS), 'w_gate']) $(id).oninput = renderLab;
+  document.querySelectorAll('[data-preset]').forEach((b) => {
+    b.onclick = () => {
+      const p = PRESETS[b.dataset.preset];
+      for (const [k, id] of Object.entries(W_IDS)) $(id).value = p[k];
+      $('w_gate').value = p.gate;
+      renderLab();
+    };
+  });
+
+  // ---------------------------------------------------------------- saving
+  $('saveBtn').onclick = async () => {
+    if (!recorded) return;
+    const body = { ...recorded, weights: weights() };
+    // The raw rows are the point of saving -- a later session can re-run any
+    // model against today's hand instead of asking someone to stand there again.
+    try {
+      const r = await fetch('/api/calibration', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      $('trialState').textContent = j.success ? 'saved ' + j.file : 'save failed: ' + (j.error || '?');
+      loadRuns();
+    } catch (err) {
+      $('trialState').textContent = 'save failed: ' + err.message;
+    }
+  };
+
+  async function loadRuns() {
+    try {
+      const r = await fetch('/api/calibration');
+      const j = await r.json();
+      $('runs').innerHTML = (j.runs || []).length
+        ? j.runs.map((x) =>
+            `<li><span class="dim">${(x.saved || '').replace('T', ' ').slice(0, 19)}</span>
+             &nbsp; ${x.label || '—'} <span class="dim">(${x.samples || 0} samples)</span></li>`).join('')
+        : '<li class="dim">none yet</li>';
+    } catch (err) {
+      $('runs').innerHTML = '<li class="dim">could not list runs</li>';
+    }
+  }
+  $('reload').onclick = loadRuns;
+
+  // ----------------------------------------------------------------- loop
+  // One timer for the whole page. 10Hz is plenty for reading numbers and keeps
+  // this cheap enough to leave open next to the running installation.
+  setInterval(() => {
+    renderLive();
+    renderMap();
+    $('clock').textContent = new Date().toTimeString().slice(0, 8);
+    if (trial) $('trialState').textContent = `RECORDING ${((Date.now() - trial.t0) / 1000).toFixed(1)}s · ${trial.rows.length} samples`;
+  }, 100);
+
+  renderLab();
+  loadRuns();
+})();
+</script>
+</body>
+</html>

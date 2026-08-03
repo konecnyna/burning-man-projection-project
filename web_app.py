@@ -1,3 +1,5 @@
+import json
+import os
 import secrets
 
 from flask import Flask, request, send_from_directory, jsonify
@@ -212,6 +214,73 @@ def create_web_app(event_bus: EventBus, production_mode=False):
         return send_from_directory('static', filename)
     
     
+    @app.route('/calibrate')
+    def calibrate():
+        """Hand-tracking calibration bench.
+
+        Not part of the installation -- a diagnostic page for tuning the
+        confidence model and finding the working distance. Deliberately a
+        separate URL rather than anything reachable from the kiosk UI, so it
+        cannot appear in front of an audience.
+        """
+        return send_from_directory('static', 'calibrate.html')
+
+    @app.route('/api/calibration', methods=['GET', 'POST'])
+    def calibration_runs():
+        """Persist and list calibration runs.
+
+        Runs are kept so a later session can compare against today's numbers --
+        the point of measuring is being able to tell whether a change helped.
+        """
+        runs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                'logs', 'calibration')
+        os.makedirs(runs_dir, exist_ok=True)
+
+        if request.method == 'GET':
+            try:
+                names = sorted((n for n in os.listdir(runs_dir) if n.endswith('.json')),
+                               reverse=True)[:40]
+            except OSError:
+                names = []
+            out = []
+            for n in names:
+                try:
+                    with open(os.path.join(runs_dir, n)) as fh:
+                        d = json.load(fh)
+                    out.append({'file': n, 'label': d.get('label'),
+                                'samples': d.get('hand_samples'),
+                                'saved': d.get('saved')})
+                except (OSError, ValueError):
+                    continue
+            return jsonify({'runs': out})
+
+        payload = request.get_json(force=True, silent=True) or {}
+        label = str(payload.get('label') or 'run')
+        # Filename comes from user input, so keep it to a known-safe alphabet
+        # rather than trusting it near a path join.
+        safe = ''.join(c if (c.isalnum() or c in '-_') else '-' for c in label)[:48] or 'run'
+        payload['saved'] = datetime.now().isoformat()
+        name = f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{safe}.json"
+
+        try:
+            with open(os.path.join(runs_dir, name), 'w') as fh:
+                json.dump(payload, fh, indent=2)
+        except OSError as exc:
+            logger.error("Could not save calibration run: %s", exc)
+            return jsonify({'success': False, 'error': str(exc)}), 500
+
+        # Bounded: this process runs for days and the page is easy to leave
+        # recording. Keep the newest 200 and drop the rest.
+        try:
+            files = sorted(n for n in os.listdir(runs_dir) if n.endswith('.json'))
+            for stale in files[:-200]:
+                os.remove(os.path.join(runs_dir, stale))
+        except OSError:
+            pass
+
+        logger.info("Calibration run saved: %s", name)
+        return jsonify({'success': True, 'file': name})
+
     @app.route('/health')
     def health():
         with CSP_VIOLATIONS_LOCK:
