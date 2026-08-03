@@ -173,6 +173,83 @@
       50%      { opacity: 0.52; }
     }
 
+    /* ---------------------------------------------------------------- chrome
+       Instrument-panel furniture for the program: registration brackets at the
+       corners and a telemetry strip along the bottom. Positioned absolutely
+       rather than in the flow, so it costs nothing from the vertical budget the
+       address and instruction are competing for. Hidden until the binary takes
+       the screen. */
+    .chrome {
+      position: absolute;
+      inset: 3vh 3.5vw;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      z-index: 2;
+    }
+
+    .chrome.on { opacity: 1; }
+
+    .chrome i {
+      position: absolute;
+      width: 3.2vw;
+      height: 3.2vh;
+      border: 2px solid var(--phos-dim);
+    }
+    .chrome i.tl { top: 0;    left: 0;    border-right: 0; border-bottom: 0; }
+    .chrome i.tr { top: 0;    right: 0;   border-left: 0;  border-bottom: 0; }
+    .chrome i.bl { bottom: 0; left: 0;    border-right: 0; border-top: 0; }
+    .chrome i.br { bottom: 0; right: 0;   border-left: 0;  border-top: 0; }
+
+    .telemetry {
+      position: absolute;
+      left: 0; right: 0; bottom: -0.2vh;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.62em;
+      letter-spacing: 0.16em;
+      color: var(--phos-dim);
+    }
+
+    .telemetry .grp { display: flex; gap: 1.6em; }
+
+    /* Status lamps on deliberately unrelated periods, so the panel reads as
+       several independent subsystems rather than one blinking thing. */
+    .lamp::before {
+      content: '\u25CF';
+      color: var(--phos);
+      margin-right: 0.45em;
+      text-shadow: 0 0 8px var(--phos-glow);
+    }
+    .lamp.l1::before { animation: lamp 2.3s infinite steps(1); }
+    .lamp.l2::before { animation: lamp 3.1s infinite steps(1); }
+    .lamp.l3::before { animation: lamp 4.7s infinite steps(1); }
+
+    @keyframes lamp {
+      0%, 88%  { opacity: 1; }
+      92%      { opacity: 0.25; }
+      96%, 100%{ opacity: 1; }
+    }
+
+    /* Signal bars, climbing and holding. */
+    .bars { display: inline-flex; align-items: flex-end; gap: 0.14em; height: 1em; }
+    .bars b {
+      display: block;
+      width: 0.22em;
+      background: var(--phos);
+      box-shadow: 0 0 6px var(--phos-glow);
+    }
+    .bars b:nth-child(1) { height: 30%; animation: sig 1.9s infinite ease-in-out; }
+    .bars b:nth-child(2) { height: 55%; animation: sig 1.9s infinite ease-in-out 0.15s; }
+    .bars b:nth-child(3) { height: 78%; animation: sig 1.9s infinite ease-in-out 0.3s; }
+    .bars b:nth-child(4) { height: 100%; animation: sig 1.9s infinite ease-in-out 0.45s; }
+
+    @keyframes sig {
+      0%, 100% { opacity: 0.35; }
+      45%      { opacity: 1; }
+    }
+
     .cursor {
       display: inline-block;
       width: 0.58em;
@@ -194,6 +271,24 @@
 <body>
   <div class="crt">
     <div class="screen" id="termOut"></div>
+
+    <!-- Instrument chrome. Revealed when the binary takes the screen. -->
+    <div class="chrome" id="chrome">
+      <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+      <div class="telemetry">
+        <div class="grp">
+          <span class="lamp l1">LINK</span>
+          <span class="lamp l2">SENSOR /dev/eye0</span>
+          <span class="lamp l3">TRACK 4 HANDS</span>
+        </div>
+        <div class="grp">
+          <span>NODE BRC-430B</span>
+          <span>hippie-trap 4.20.69</span>
+          <span class="bars"><b></b><b></b><b></b><b></b></span>
+        </div>
+      </div>
+    </div>
+
     <div class="shimmer"></div>
   </div>
 
@@ -232,27 +327,30 @@
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // Block-letter glyphs, six rows each, uniform width per glyph. Only the
-    // characters the address needs. '&' is hand-drawn -- the others follow the
-    // usual ANSI-shadow shapes, but block-art ampersands have no standard form.
+    // Block-letter glyphs in the figlet "Standard" style -- plain ASCII only.
+    // This matters: Share Tech Mono contains NONE of the Unicode block or
+    // box-drawing characters (U+2500-259F). Using them meant every one fell
+    // back to a different font with different advance widths, which sheared
+    // the columns apart. Everything here is ASCII < 128, which the webfont
+    // covers, so the grid holds.
     const GLYPH = {
-      '4': ['██╗  ██╗', '██║  ██║', '███████║', '╚════██║', '     ██║', '     ╚═╝'],
-      '3': ['██████╗ ', '╚════██╗', ' █████╔╝', ' ╚═══██╗', '██████╔╝', '╚═════╝ '],
-      '0': [' ██████╗ ', '██╔═████╗', '██║██╔██║', '████╔╝██║', '╚██████╔╝', ' ╚═════╝ '],
-      ':': ['   ', '██╗', '╚═╝', '██╗', '╚═╝', '   '],
-      '&': ['  ████╗  ', ' ██╔═██╗ ', ' ╚████╔╝ ', ' ██╔██╗  ', '██████╔╗ ', '╚═════╝╚╝'],
-      'B': ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██████╔╝', '╚═════╝ '],
-      ' ': ['   ', '   ', '   ', '   ', '   ', '   ']
+      '4': [' _  _   ', '| || |  ', '| || |_ ', '|__   _|', '   |_|  '],
+      '3': [' _____ ', '|___ / ', '  |_ \\ ', ' ___) |', '|____/ '],
+      '0': ['  ___  ', ' / _ \\ ', '| | | |', '| |_| |', ' \\___/ '],
+      ':': [' _ ', '(_)', ' _ ', '(_)', '   '],
+      '&': ['  ___    ', ' ( _ )   ', ' / _ \\/\\ ', '| (_>  < ', ' \\___/\\/ '],
+      'B': [' ____  ', '| __ ) ', '|  _ \\ ', '| |_) |', '|____/ '],
+      ' ': ['    ', '    ', '    ', '    ', '    ']
     };
 
     // Renders one line per glyph row. Unknown characters are skipped rather
     // than throwing, so a copy edit cannot blank the screen.
     function blockArt(text) {
-      const rows = ['', '', '', '', '', ''];
+      const rows = ['', '', '', '', ''];
       for (const ch of text.toUpperCase()) {
         const g = GLYPH[ch];
         if (!g) continue;
-        for (let r = 0; r < 6; r++) rows[r] += g[r];
+        for (let r = 0; r < 5; r++) rows[r] += g[r];
       }
       return rows.join('\n');
     }
@@ -369,6 +467,7 @@
       await sleep(320);
       out.textContent = '';
       out.classList.add('app');
+      document.getElementById('chrome').classList.add('on');
       await sleep(220);
 
       // The address in block letters is the anchor now. The program name is
