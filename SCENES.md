@@ -39,14 +39,14 @@ Both are registered with `duration: 0`, which means "never auto-advance".
 
 | Order | id | Duration | Directory |
 |---|---|---|---|
-| 1 | `physarum` | 60 s | `scenes/physarum/` |
+| 1 | `physarum` | 25 s | `scenes/physarum/` |
 | 2 | `kaleidoscope` | 30 s | `scenes/kaleidoscope/` |
 | 3 | `fluidsim` | 60 s | `scenes/fluidsim/` |
 | 4 | `cosmic_symbolism` | 60 s | `scenes/cosmic-symbolism/` |
 | 5 | `tie_dye` | 45 s | `scenes/tie-dye/` |
 | 6 | `kaleidoscope` | 60 s | `scenes/kaleidoscope/` |
 
-Full cycle ≈ 5 min 15 s.
+Full cycle ≈ 4 min 40 s.
 
 `kaleidoscope` appears twice with the same `id`. Cycling is index-based so both
 entries play, but any lookup by id resolves to the first.
@@ -56,8 +56,8 @@ entries play, but any lookup by id resolves to the first.
 
 **Present on disk, never referenced:** `particle-love`.
 
-Durations come from three constants on `SceneManager`: `quickScene = 30`,
-`defaultDuration = 45`, `popularScene = 60`.
+Durations come from four constants on `SceneManager`: `shortScene = 25`,
+`quickScene = 30`, `defaultDuration = 45`, `popularScene = 60`.
 
 ---
 

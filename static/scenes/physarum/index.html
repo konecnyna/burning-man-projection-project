@@ -80,8 +80,10 @@
       // mapped across trail intensity -- 300 degrees means faint edges and
       // bright cores sit at opposite ends of a rainbow rather than being
       // shades of one colour. ROTATE_DPS is degrees per SECOND, not per
-      // frame, so the speed does not change with frame rate. 6 dps is a full
-      // revolution per minute, which lands inside one showing of the scene.
+      // frame, so the speed does not change with frame rate. At 6 dps a full
+      // revolution takes 60s; the scene runs 25s, so one showing sweeps about
+      // 150 degrees rather than the whole wheel. Set 14.4 to complete a full
+      // revolution within a single showing instead.
       HUE_SPAN: 300,
       HUE_ROTATE_DPS: 6,
       SATURATION: 0.95,     // held high; only the hottest cores pale out

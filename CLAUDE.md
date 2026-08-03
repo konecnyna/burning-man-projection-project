@@ -195,7 +195,7 @@ All in `static/index.html`:
 |---|---|---|
 | `idleTimeoutMs` | `45_000` | 795 |
 | `idleHandConfidenceDetectionLevel` | `0.75` | 888 |
-| `quickScene` / `defaultDuration` / `popularScene` | `30` / `45` / `60` | 1247–1249 |
+| `shortScene` / `quickScene` / `defaultDuration` / `popularScene` | `25` / `30` / `45` / `60` | 1435–1438 |
 
 In `hand_tracker.py`: `max_num_hands=4`, `min_detection_confidence=0.6`,
 `min_tracking_confidence=0.2`, `model_complexity=0`, `max_tracking_distance=0.08`.
