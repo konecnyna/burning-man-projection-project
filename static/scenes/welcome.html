@@ -139,17 +139,20 @@
     .addr {
       color: var(--amber);
       text-shadow: 0 0 22px var(--amber-glow);
-      font-size: 2.6em;
-      letter-spacing: 0.22em;
+      /* Measured, not guessed: the content box is 1267x756 at 1080p once the
+         .crt and .screen.app padding is taken off. Everything below is sized so
+         no line wraps and the centred column does not overflow into the chrome. */
+      font-size: 2.2em;
+      letter-spacing: 0.20em;
       line-height: 1.1;
     }
 
     .subtitle {
       color: var(--phos);
-      font-size: 0.95em;
-      letter-spacing: 0.42em;
+      font-size: 0.9em;
+      letter-spacing: 0.24em;
       margin-top: 0.2em;
-      padding-bottom: 0.5em;
+      padding-bottom: 0.45em;
       border-bottom: 2px solid var(--phos-dim);
     }
 
@@ -157,9 +160,9 @@
     /* One idea per line, generous spacing, nothing to parse. */
     .beat {
       color: var(--phos);
-      font-size: 1em;
-      letter-spacing: 0.12em;
-      margin-top: 0.55em;
+      font-size: 0.9em;
+      letter-spacing: 0.08em;
+      margin-top: 0.5em;
       opacity: 0;
       animation: fadein 0.7s ease forwards;
     }
@@ -177,8 +180,8 @@
       padding: 0.5em 1.1em;
       border: 3px solid var(--amber);
       color: var(--amber);
-      font-size: 1.7em;
-      letter-spacing: 0.14em;
+      font-size: 1.5em;
+      letter-spacing: 0.12em;
       line-height: 1.2;
       text-shadow: 0 0 10px var(--amber-glow);
       box-shadow: 0 0 20px rgba(255, 176, 66, 0.32),
@@ -239,16 +242,22 @@
     /* Same shape as .status-indicator in static/index.html: a drawn dot with a
        glow and a slow pulse. Drawn rather than typed because U+25CF is not in
        the font and a fallback would sit on its own baseline. */
+    /* Square, guaranteed. These were rendering as ovals: as a flex item the
+       cross-axis size was being resolved from the line box rather than from the
+       height property. `flex: none` plus an explicit aspect-ratio pins it. */
     .dot {
       display: inline-block;
-      width: 0.55em;
-      height: 0.55em;
+      width: 0.6em;
+      height: 0.6em;
+      aspect-ratio: 1 / 1;
+      flex: none;
+      align-self: center;
+      box-sizing: border-box;
       margin-right: 0.6em;
       border-radius: 50%;
       background: var(--phos-dim);
       box-shadow: 0 0 6px rgba(51, 255, 102, 0.35);
       animation: dot-pulse 2.4s ease-in-out infinite;
-      flex: 0 0 auto;
     }
 
     .dot.ready {
@@ -278,11 +287,12 @@
       background: var(--phos);
       box-shadow: 0 0 6px var(--phos-glow);
     }
-    /* Signal 2-3 of 4. Two bars held, the third coming and going, the fourth
-       never reaching. The third is toggled from JS on randomised intervals
-       rather than by a keyframe -- a fixed period reads as an animation, an
-       irregular one reads as a signal. */
-    .bars b { background: var(--phos-dim); opacity: 0.28; transition: opacity 0.35s ease, background 0.35s ease; }
+    /* Signal 2-3 of 4. Bars one and two are always lit, the third comes and
+       goes on a randomised interval, the fourth never reaches. Previously the
+       first two were never given .lit at all, so the meter showed one bar or
+       none -- which is why it looked wrong. Transition is slow and the dim state
+       is not very dim, so the change is subtle rather than a blink. */
+    .bars b { background: var(--phos-dim); opacity: 0.3; transition: opacity 0.6s ease, background 0.6s ease; }
     .bars b.lit { background: var(--phos); opacity: 1; }
     .bars b:nth-child(1) { height: 30%; }
     .bars b:nth-child(2) { height: 55%; }
@@ -499,7 +509,7 @@
       // not repeated here -- it just went past in the loader, and the vertical
       // space is better spent on the address and the instruction.
       raw('4:30 & B', 'addr');
-      raw('PORTAL   ·   CAMP ATLANTIS', 'subtitle');
+      raw('PORTAL  ·  CAMP ATLANTIS', 'subtitle');
       await sleep(1000);
 
       // The instruction. Everything else on this screen exists to frame it.
@@ -513,7 +523,7 @@
       const beats = [
         'the looking glass is watching',
         'move — and it moves with you',
-        'every thirty seconds it takes you somewhere new',
+        'somewhere new every 30 seconds',
       ];
       for (const b of beats) {
         addLine('beat').textContent = b;
@@ -531,17 +541,25 @@
     // Third bar toggles on irregular intervals. A fixed period reads as an
     // animation; an uneven one reads as a fluctuating signal.
     function meterLoop() {
-      const b3 = document.querySelector('.bars b:nth-child(3)');
-      if (!b3) return;
+      const bars = document.querySelectorAll('.bars b');
+      if (bars.length < 4) return;
+
+      // Bars one and two stay lit; that is the floor. This was the bug -- they
+      // were never given .lit, so the meter read one bar or none instead of the
+      // two-or-three it was supposed to.
+      bars[0].classList.add('lit');
+      bars[1].classList.add('lit');
+
+      // Third comes and goes on an uneven interval, so the total sits at 2 or 3.
+      // Held longer lit than dropped, so 3 is the resting state and 2 is the dip.
+      const third = bars[2];
+      third.classList.add('lit');
       const step = () => {
-        const lit = b3.classList.toggle('lit');
-        // Held longer when lit than when dropped, so it sits mostly at 3 bars.
-        const hold = lit ? 1400 + Math.random() * 2200
-                         : 700 + Math.random() * 1300;
-        setTimeout(step, hold);
+        const lit = third.classList.toggle('lit');
+        setTimeout(step, lit ? 2200 + Math.random() * 3000
+                             : 900 + Math.random() * 1600);
       };
-      b3.classList.add('lit');
-      setTimeout(step, 1800 + Math.random() * 1500);
+      setTimeout(step, 2500 + Math.random() * 2000);
     }
 
     // Real hand count off the tracker's heartbeat, which carries hand_count.
