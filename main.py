@@ -53,7 +53,7 @@ def setup_logging(verbose=False):
     return LOG_FILE
 
 class HandTrackingKiosk:
-    def __init__(self, headless=False, production_mode=False, port=5000):
+    def __init__(self, headless=False, production_mode=False, port=5000, host='0.0.0.0'):
         self.event_bus = EventBus()
         self.hand_tracker = HandTracker(self.event_bus)
         self.web_app = None
@@ -63,6 +63,7 @@ class HandTrackingKiosk:
         self.headless = headless
         self.production_mode = production_mode
         self.port = port
+        self.host = host
         
     def start(self):
         """Start the hand tracking kiosk application"""
@@ -72,11 +73,20 @@ class HandTrackingKiosk:
         
         try:
             # Start web server
-            logger.info("Starting web server on localhost:%s (production=%s)",
-                        self.port, self.production_mode)
+            logger.info("Starting web server on %s:%s (production=%s)",
+                        self.host, self.port, self.production_mode)
+            if self.host not in ('localhost', '127.0.0.1'):
+                # Worth saying out loud: the app has no authentication, so
+                # anything that can reach this port can drive the kiosk and
+                # read /api/*. Harmless on the playa, where there is no
+                # network at all; on a real LAN it is reachable by anyone.
+                logger.warning(
+                    "Bound to %s -- reachable from the network, and there is no "
+                    "authentication. Fine offline; on a shared network anyone "
+                    "who can route to this host can reach it.", self.host)
             self.web_app, self.socketio, self.server_thread = run_web_app(
                 self.event_bus,
-                host='localhost',
+                host=self.host,
                 port=self.port,
                 debug=False,
                 production_mode=self.production_mode
@@ -176,18 +186,24 @@ def main():
     # fallback for a bare `python main.py`.
     parser.add_argument('--port', type=int, default=int(os.environ.get('ATLANTIS_PORT', 5000)),
                         help='Web server port (default: $ATLANTIS_PORT, else 5000)')
+    # Default 0.0.0.0 so the kiosk is reachable by IP for debugging. There is
+    # no internet at the installation, so nothing can route to it there; set
+    # ATLANTIS_HOST=localhost (or --host localhost) to bind locally only.
+    parser.add_argument('--host', default=os.environ.get('ATLANTIS_HOST', '0.0.0.0'),
+                        help='Bind address (default: $ATLANTIS_HOST, else 0.0.0.0)')
     parser.add_argument('--verbose', action='store_true', help='Debug-level logging')
     
     args = parser.parse_args()
 
     log_file = setup_logging(verbose=args.verbose)
     logger.info("=" * 60)
-    logger.info("ATLANTIS starting - port=%s production=%s headless=%s",
-                args.port, args.production, args.headless)
+    logger.info("ATLANTIS starting - host=%s port=%s production=%s headless=%s",
+                args.host, args.port, args.production, args.headless)
     logger.info("Logging to %s", log_file)
 
     # Create and start the application
-    app = HandTrackingKiosk(headless=args.headless, production_mode=args.production, port=args.port)
+    app = HandTrackingKiosk(headless=args.headless, production_mode=args.production,
+                            port=args.port, host=args.host)
     
     try:
         app.start()

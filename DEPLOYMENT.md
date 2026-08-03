@@ -333,6 +333,33 @@ Camera
   ✓ camera opened on the current run — hand tracking is live
 ```
 
+### Reaching it from another machine
+
+The server binds `0.0.0.0` by default, so it is reachable by IP:
+
+```bash
+ipconfig getifaddr en0          # e.g. 10.0.0.171
+# then, from your laptop:
+http://10.0.0.171:5001/
+http://10.0.0.171:5001/scenes/welcome.html          # a scene on its own
+```
+
+The `Content-Security-Policy` names the serving host in `connect-src`, so
+socket.io works whether you arrive by `localhost` or by IP — some browsers
+treat `ws:`/`wss:` as distinct from `'self'`, so the origin has to be named.
+It is still same-origin-only; only the host you connected to is allowed.
+
+**There is no authentication.** Anything that can route to the port can drive
+the kiosk and read `/api/*`. That is harmless at the installation, which has no
+network at all, and convenient on a workbench LAN. If you want it local-only:
+
+```bash
+ATLANTIS_HOST=localhost ./start-atlantis.sh     # or --host localhost
+```
+
+The app logs a warning at startup whenever it is bound non-locally, so the log
+always records which it was.
+
 ### Server-side testing without a window
 
 ```bash

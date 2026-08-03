@@ -1,3 +1,5 @@
+import secrets
+
 from flask import Flask, request, send_from_directory, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import logging
@@ -23,17 +25,20 @@ logger = logging.getLogger(__name__)
 # Every directive is same-origin only, so inline code still cannot fetch
 # anything remote.
 #
-# Keep connect-src explicit about localhost so socket.io's WebSocket upgrade
-# is allowed across browser versions that treat ws: as distinct from 'self'.
+# connect-src is built per request from the Host header rather than hardcoded.
+# Some browsers treat ws:/wss: as distinct from 'self', so the WebSocket origin
+# has to be named explicitly -- and once the server can bind 0.0.0.0 that origin
+# might be localhost, 127.0.0.1, or a LAN IP depending on how you reached it.
+# Naming the serving host keeps this same-origin-only while still working
+# whichever address was used.
 # --------------------------------------------------------------------------
-CSP_DIRECTIVES = [
+CSP_STATIC_DIRECTIVES = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "media-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' ws://localhost:* wss://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*",
     "frame-src 'self'",
     "child-src 'self' blob:",
     "worker-src 'self' blob:",
@@ -42,7 +47,26 @@ CSP_DIRECTIVES = [
     "form-action 'none'",
     "report-uri /csp-report",
 ]
-CONTENT_SECURITY_POLICY = "; ".join(CSP_DIRECTIVES)
+
+
+def build_csp(host_header):
+    """Same-origin-only CSP, with the WebSocket origin named explicitly.
+
+    `host_header` is host:port as the browser sent it. Only that host is
+    allowed, so this stays as strict as the hardcoded version was.
+    """
+    connect = ["'self'"]
+    if host_header:
+        # Strip anything odd; this goes into a response header.
+        h = host_header.strip().replace('\r', '').replace('\n', '').replace(' ', '')
+        if h and all(c.isalnum() or c in '.:-[]_' for c in h):
+            connect += [f"ws://{h}", f"wss://{h}", f"http://{h}"]
+    connect += ["ws://localhost:*", "wss://localhost:*", "ws://127.0.0.1:*"]
+    return "; ".join(CSP_STATIC_DIRECTIVES + ["connect-src " + " ".join(connect)])
+
+
+# Kept for anything that wants a representative policy to display.
+CONTENT_SECURITY_POLICY = build_csp('localhost')
 
 # Ring buffer of CSP violations reported by the browser. This is the runtime
 # proof that offline operation holds: if it stays empty while every scene has
@@ -103,7 +127,11 @@ class WebSocketManager:
 def create_web_app(event_bus: EventBus, production_mode=False):
     """Create Flask app with WebSocket support"""
     app = Flask(__name__, static_folder='static')
-    app.config['SECRET_KEY'] = 'hand-tracking-secret'
+    # Random per process rather than a constant committed to the repo. Nothing
+    # here depends on sessions surviving a restart, and now that the server can
+    # be bound to 0.0.0.0 a hardcoded secret is a real handle for anyone on the
+    # network rather than a theoretical one.
+    app.config['SECRET_KEY'] = secrets.token_hex(32)
     socketio = SocketIO(app, cors_allowed_origins="*")
     
     ws_manager = WebSocketManager(event_bus, socketio)
@@ -115,7 +143,7 @@ def create_web_app(event_bus: EventBus, production_mode=False):
         Applied to all responses, including scene iframes, so a scene cannot
         opt out of it.
         """
-        response.headers['Content-Security-Policy'] = CONTENT_SECURITY_POLICY
+        response.headers['Content-Security-Policy'] = build_csp(request.host)
         return response
 
     @app.route('/csp-report', methods=['POST'])
@@ -158,7 +186,7 @@ def create_web_app(event_bus: EventBus, production_mode=False):
         return jsonify({
             'count': len(violations),
             'violations': violations,
-            'policy': CONTENT_SECURITY_POLICY,
+            'policy': build_csp(request.host),
         })
 
     @app.route('/api/csp-violations', methods=['DELETE'])

@@ -88,6 +88,7 @@ Steps 3 and 5 are unconditional sleeps, not readiness checks.
 | `--port N` | Web server port. Default **5000**. |
 | `--headless` | No webview window; server and tracker only. |
 | `--production` | Exposed to the frontend via `/api/production-mode`. |
+| `--host` | Bind address. Default `$ATLANTIS_HOST`, else `0.0.0.0`. |
 | `--verbose` | Debug-level logging. |
 
 The window is always `fullscreen=True, frameless=True`. There is no non-kiosk
@@ -209,7 +210,9 @@ allocation in the browser for no benefit.
 
 ## 6. HTTP and WebSocket surface
 
-Bound to `localhost` only.
+Bound to `0.0.0.0` by default so the kiosk is reachable by IP for debugging;
+set `ATLANTIS_HOST=localhost` to restrict it. There is no authentication, which
+is safe at the installation because there is no network there at all.
 
 | Route | Method | Purpose |
 |---|---|---|
@@ -225,8 +228,11 @@ Bound to `localhost` only.
 
 An `@app.after_request` hook attaches a same-origin-only
 `Content-Security-Policy` to **every** response, scene iframes included, so the
-browser refuses off-box loads outright rather than hanging on DNS. Directives
-are in `CSP_DIRECTIVES` at the top of `web_app.py`.
+browser refuses off-box loads outright rather than hanging on DNS. Static
+directives are in `CSP_STATIC_DIRECTIVES`; `connect-src` is built per request by
+`build_csp(request.host)` so the WebSocket origin matches however you reached
+the server — `localhost`, `127.0.0.1`, or a LAN IP. Only that host is allowed,
+so it is no looser than a hardcoded policy.
 
 `'unsafe-inline'` and `'unsafe-eval'` are allowed — scenes are self-contained
 HTML with inline scripts, and some vendored libraries build functions
@@ -242,9 +248,9 @@ WebSocket messages: `connect`, `disconnect`, `subscribe` (`{events: [...]}`),
 `unsubscribe`, `get_recent_events`. Each client joins a room keyed by its socket
 id and receives only the event types it subscribed to.
 
-`SECRET_KEY` is the hardcoded string `'hand-tracking-secret'` and
-`cors_allowed_origins="*"`. Both are acceptable only because the server is
-`localhost`-bound on an offline machine.
+`SECRET_KEY` is generated per process with `secrets.token_hex(32)` rather than
+committed to the repo. `cors_allowed_origins="*"` remains, which is what lets a
+browser on another machine connect when you reach the kiosk by IP.
 
 ---
 
