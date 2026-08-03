@@ -100,6 +100,19 @@ case "$running" in
     *) fail "$running app processes running" "kill the extras; only the LaunchAgent should start it" ;;
 esac
 
+# ------------------------------------------------------------------ frontend
+sect "Frontend"
+
+if [ -x "$REPO_DIR/deploy/check-frontend.sh" ]; then
+    if "$REPO_DIR/deploy/check-frontend.sh" >/dev/null 2>&1; then
+        pass "frontend: classes, methods, DOM ids and scene wiring all resolve"
+    else
+        fail "frontend has dangling references" "run ./deploy/check-frontend.sh"
+    fi
+else
+    warn "deploy/check-frontend.sh missing or not executable"
+fi
+
 # ------------------------------------------------------------------- offline
 sect "Offline compliance"
 
