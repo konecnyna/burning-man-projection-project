@@ -56,26 +56,43 @@
     // ---------------------------------------------------------------- tuning
     const CFG = {
       SCALE: 3,             // sim pixel = SCALE screen px. Higher = cheaper.
-      AGENTS: 22000,        // agent count; the main cost knob
+      AGENTS: 55000,        // agent count; the dominant cost. Adds brightness
+                            // and detail within filaments, but NOT spatial
+                            // reach -- coverage plateaus around 15% however
+                            // many you add. DECAY is the knob for reach.
       SENSOR_ANGLE: 0.42,   // radians between centre and side sensors (SA)
       SENSOR_DIST: 9,       // how far ahead it looks, in sim px (SO)
       TURN_ANGLE: 0.55,     // how sharply it turns toward the best sample (RA)
       STEP: 1.05,           // sim px moved per frame (SS)
-      DEPOSIT: 22,          // trail laid per agent per frame
-      DECAY: 0.94,          // trail retained per frame
+      DEPOSIT: 18,          // trail laid per agent per frame; lowered to offset
+                            // the higher agent count so cores do not blow out
+      DECAY: 0.977,         // trail retained per frame. The real density knob:
+                            // 0.94 -> 6% of screen lit, 0.977 -> ~14%,
+                            // 0.985 -> 17%. Higher also means the network
+                            // remembers longer, so paths persist behind a hand.
       WANDER: 0.10,         // random heading jitter, keeps it organic
       HAND_DEPOSIT: 300,    // attractant strength under a hand
       HAND_RADIUS: 26,      // sim px
       MAX_TRAIL: 700,       // clamp, so colour mapping stays stable
       CONFIDENCE_MIN: 0.6,  // own socket gets unfiltered hands, so filter here
-      HUE_DRIFT: 0.0035,    // slow palette rotation, degrees per frame
+
+      // Palette. HUE_SPAN is how much of the spectrum is visible at once,
+      // mapped across trail intensity -- 300 degrees means faint edges and
+      // bright cores sit at opposite ends of a rainbow rather than being
+      // shades of one colour. ROTATE_DPS is degrees per SECOND, not per
+      // frame, so the speed does not change with frame rate. 6 dps is a full
+      // revolution per minute, which lands inside one showing of the scene.
+      HUE_SPAN: 300,
+      HUE_ROTATE_DPS: 6,
+      SATURATION: 0.95,     // held high; only the hottest cores pale out
     };
 
     let W = 0, H = 0;        // sim dimensions
     let trail, scratch;      // Float32Array trail maps (ping-pong for blur)
     let ax, ay, ah;          // agent x, y, heading
     let image;               // ImageData for the sim-resolution render
-    let hue = 190;           // current palette base
+    let hue = 190;           // current palette base, degrees
+    let lastHueTick = 0;     // performance.now() of the last hue update
     let hands = [];          // [{x, y}] in sim coords
 
     // Colour lookup, rebuilt when the hue drifts. Mapping trail -> colour per
@@ -86,14 +103,21 @@
     function buildRamp(h) {
       for (let i = 0; i < 256; i++) {
         const t = i / 255;
-        // Dark violet -> cyan -> hot white. Faint trails stay almost black so
-        // the network reads as light against nothing.
-        const l = Math.pow(t, 0.75);
-        const [r, g, b] = hsvToRgb(
-          (h + t * 55) % 360,
-          Math.max(0, 1 - t * 1.15),
-          Math.min(1, l * 1.5)
-        );
+
+        // Full spectrum across intensity, rotating over time.
+        const hueAt = (h + t * CFG.HUE_SPAN) % 360;
+
+        // Brightness ramps fast so faint trails still read against black.
+        const value = Math.min(1, Math.pow(t, 0.6) * 1.45);
+
+        // Keep saturation high or it stops looking like a rainbow. Only the
+        // top ~15% pales toward white, which gives the filament cores a glow
+        // without washing the colour out of everything.
+        const sat = t > 0.85
+          ? CFG.SATURATION * (1 - (t - 0.85) / 0.15 * 0.8)
+          : CFG.SATURATION;
+
+        const [r, g, b] = hsvToRgb(hueAt, sat, value);
         RAMP[i * 3] = r; RAMP[i * 3 + 1] = g; RAMP[i * 3 + 2] = b;
       }
     }
@@ -273,9 +297,16 @@
     let rampHue = -1;
 
     function frame() {
-      hue = (hue + CFG.HUE_DRIFT) % 360;
-      // Rebuilding 256 entries every frame is wasted work; once per degree is
-      // indistinguishable.
+      // Time-based so the rotation speed is the same whether we are running at
+      // 30fps or 60fps.
+      const now = performance.now();
+      if (lastHueTick) {
+        hue = (hue + CFG.HUE_ROTATE_DPS * (now - lastHueTick) / 1000) % 360;
+      }
+      lastHueTick = now;
+
+      // Rebuilding 256 entries every frame is wasted work; once per degree of
+      // rotation is indistinguishable.
       if ((hue | 0) !== rampHue) { rampHue = hue | 0; buildRamp(hue); }
 
       depositHands();
