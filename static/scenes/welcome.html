@@ -58,22 +58,47 @@
       z-index: 3;
     }
 
+    /* Soft wash: tall enough that some of it is always on screen. */
     .crt::after {
       content: '';
       position: absolute;
       left: 0; right: 0;
-      height: 16vh;
+      height: 55vh;
       background: linear-gradient(to bottom,
           rgba(51, 255, 102, 0) 0%,
-          rgba(51, 255, 102, 0.05) 50%,
+          rgba(51, 255, 102, 0.055) 50%,
           rgba(51, 255, 102, 0) 100%);
-      animation: sweep 7s linear infinite;
+      animation: wash 6s linear infinite;
       pointer-events: none;
       z-index: 2;
     }
 
-    @keyframes sweep {
-      0%   { top: -18vh; }
+    @keyframes wash {
+      0%   { top: -55vh; }
+      100% { top: 100vh; }
+    }
+
+    /* Telescan: a thin bright line crossing the whole glass, faster than the
+       wash so the two never sync into a single pulse. Covers the full width and
+       runs over every act, including after the program takes the screen. */
+    .telescan {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2.5vh;
+      background: linear-gradient(to bottom,
+          rgba(51, 255, 102, 0) 0%,
+          rgba(120, 255, 170, 0.14) 45%,
+          rgba(180, 255, 210, 0.22) 50%,
+          rgba(120, 255, 170, 0.14) 55%,
+          rgba(51, 255, 102, 0) 100%);
+      box-shadow: 0 0 6vh rgba(51, 255, 102, 0.10);
+      animation: telescan 3.4s linear infinite;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    @keyframes telescan {
+      0%   { top: -3vh; }
       100% { top: 100vh; }
     }
 
@@ -85,7 +110,11 @@
       flex-direction: column;
       justify-content: flex-end;   /* shell output grows upward */
       overflow: hidden;
-      animation: flicker 5s infinite steps(1);
+      /* No opacity flicker here. A 5s steps(1) dip read as the projector
+         glitching rather than as CRT character -- at 140" any whole-screen
+         brightness jump looks like a fault. The life in this screen comes from
+         the scan layers instead, which move continuously and never blank
+         anything. */
     }
 
     /* Once the binary takes over it owns the screen. Centred and much larger:
@@ -96,13 +125,6 @@
       align-items: center;
       text-align: center;
       font-size: 1.5em;
-    }
-
-    @keyframes flicker {
-      0%, 95%, 100% { opacity: 1; }
-      96%           { opacity: 0.85; }
-      97%           { opacity: 1; }
-      98%           { opacity: 0.93; }
     }
 
     .line { white-space: pre-wrap; }
@@ -190,6 +212,7 @@
 <body>
   <div class="crt">
     <div class="screen" id="termOut"></div>
+    <div class="telescan"></div>
   </div>
 
   <script>
@@ -223,6 +246,7 @@
 
     const out = document.getElementById('termOut');
     const PROMPT = 'dr_boom_boom@atlantis';
+    const BIN = 'hippie-trap';
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -279,12 +303,15 @@
     }
 
     // Filling progress bar. The label is padded so bars line up in a column.
-    async function bar(label, addr, ms = 560, width = 18) {
+    // Padding and bar width are chosen so the longest line stays under ~80
+    // characters. At 1080p on a 140" screen with 6vw padding only about 80
+    // monospace characters fit; a wrapped progress bar looks broken.
+    async function bar(label, addr, ms = 560, width = 16) {
       const el = addLine();
-      const pad = label.padEnd(24, ' ');
+      const pad = label.padEnd(20, ' ');
       for (let i = 0; i <= width; i++) {
         const pct = String(Math.round((i / width) * 100)).padStart(3, ' ');
-        el.textContent = `[portal] ${pad}${addr}  ${'█'.repeat(i)}${'░'.repeat(width - i)} ${pct}%`;
+        el.textContent = `[${BIN}] ${pad}${addr}  ${'█'.repeat(i)}${'░'.repeat(width - i)} ${pct}%`;
         await sleep(ms / width);
       }
     }
@@ -293,14 +320,14 @@
     async function spin(label, ms = 640) {
       const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
       const el = addLine();
-      const pad = label.padEnd(38, '.');
+      const pad = label.padEnd(32, '.');
       const t0 = Date.now();
       let i = 0;
       while (Date.now() - t0 < ms) {
-        el.textContent = `[portal] ${pad} ${frames[i++ % frames.length]}`;
+        el.textContent = `[${BIN}] ${pad} ${frames[i++ % frames.length]}`;
         await sleep(70);
       }
-      el.textContent = `[portal] ${pad} OK`;
+      el.textContent = `[${BIN}] ${pad} OK`;
       await sleep(90);
     }
 
@@ -311,11 +338,11 @@
       await sleep(340);
 
       await command('ls');
-      raw('looking-glass.dev   portal   scenes/   README.dust', 'dim');
+      raw('hippie-trap   looking-glass.dev   scenes/   README.dust', 'dim');
       spacer();
       await sleep(240);
 
-      await command('./portal --fullscreen');
+      await command('./hippie-trap --fullscreen');
     }
 
     async function actLoad() {
@@ -325,7 +352,7 @@
       await bar('mapping .shaders', '0x0004_a800', 480);
       await spin('opening looking glass /dev/eye0', 560);
       await spin('calibrating landmark model', 700);
-      await type('[portal] portal online', 'amber', 9, 460);
+      await type(`[${BIN}] hippie trap armed`, 'amber', 9, 460);
     }
 
     async function actProgram() {
@@ -337,8 +364,8 @@
       out.classList.add('app');
       await sleep(220);
 
-      raw('P O R T A L', 'title');
-      raw('CAMP ATLANTIS   ·   4:30 & B', 'subtitle');
+      raw('HIPPIE TRAP', 'title');
+      raw('CAMP ATLANTIS   ·   4:30 & B PORTAL', 'subtitle');
       await sleep(900);
 
       // The instruction. Everything else on this screen exists to frame it.

@@ -27,13 +27,13 @@ Two scenes are special and owned by `ModeManager` rather than the cycle:
 | Scene | File | Purpose |
 |---|---|---|
 | `idle` | `static/scenes/idle.html` | Screensaver — "show hands to begin" |
-| `onboarding` | `static/scenes/welcome.html` | TERMLINK: a shell runs `./portal`, the binary loads, then its interface gives the instructions. Self-completing |
+| `onboarding` | `static/scenes/welcome.html` | TERMLINK: a shell runs `./hippie-trap`, the binary loads, then its interface gives the instructions. Self-completing |
 
 Both are registered with `duration: 0`, which means "never auto-advance".
 
 `onboarding` completes itself. The terminal runs three acts over ~12 s — a
-shell logged in as `dr_boom_boom` running `./portal`, the binary loading with
-segment maps and progress bars, then the program clearing the screen and
+shell logged in as `dr_boom_boom` running `./hippie-trap`, the binary loading
+with segment maps and progress bars, then the program clearing the screen and
 presenting its interface — and posts `transition_to_active` to the parent, which
 already listens for that message. The handover is in a `finally`, so a fault
 mid-sequence still advances rather than parking the installation on onboarding. There is no hover target and no hold-to-confirm — reaching onboarding
