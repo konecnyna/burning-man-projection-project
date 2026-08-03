@@ -80,40 +80,6 @@
       100% { opacity: 1; }
     }
 
-    /* Telescan. Horizontal, and OCCASIONAL -- it crosses the glass during only
-       the last fifth of the cycle and is parked off-screen the rest of the
-       time. A band that is always visible becomes wallpaper; one that arrives
-       every few seconds stays an event. Two of them on different cycles so the
-       rhythm does not feel metronomic. */
-    .telescan {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 22vw;
-      background: linear-gradient(to right,
-          rgba(51, 255, 102, 0) 0%,
-          rgba(120, 255, 170, 0.05) 45%,
-          rgba(180, 255, 210, 0.09) 50%,
-          rgba(120, 255, 170, 0.05) 55%,
-          rgba(51, 255, 102, 0) 100%);
-      pointer-events: none;
-      z-index: 2;
-      left: -25vw;
-    }
-
-    .telescan.a { animation: telescan-a 9s infinite linear; }
-    .telescan.b { animation: telescan-b 13s infinite linear; }
-
-    @keyframes telescan-a {
-      0%, 80%, 100% { left: -25vw; }
-      95%           { left: 100vw; }
-    }
-
-    @keyframes telescan-b {
-      0%, 74%, 100% { left: -25vw; }
-      90%           { left: 100vw; }
-    }
-
     .screen {
       position: relative;
       z-index: 1;
@@ -146,20 +112,26 @@
     /* CSS border rather than box-drawing characters: fixed-width ASCII art
        wraps and falls apart the moment the type gets big or the projector is
        an odd aspect. */
-    .title {
+    /* Block-letter address. letter-spacing MUST be 0 and line-height ~1, or
+       the glyph columns shear apart -- .crt sets 0.03em tracking for prose,
+       which is fatal to monospace art. Sized so the widest string (51 chars)
+       clears 1690px of usable width at 1080p, and so six rows plus everything
+       below still fits 972px of usable height. */
+    .art {
       color: var(--amber);
-      text-shadow: 0 0 18px var(--amber-glow);
-      font-size: 2.1em;
-      letter-spacing: 0.34em;
-      line-height: 1.1;
+      text-shadow: 0 0 16px var(--amber-glow);
+      font-size: 0.8em;
+      letter-spacing: 0;
+      line-height: 1;
+      white-space: pre;
     }
 
     .subtitle {
       color: var(--phos);
       font-size: 0.95em;
-      letter-spacing: 0.26em;
-      margin-top: 0.35em;
-      padding-bottom: 0.55em;
+      letter-spacing: 0.42em;
+      margin-top: 0.2em;
+      padding-bottom: 0.5em;
       border-bottom: 2px solid var(--phos-dim);
     }
 
@@ -167,7 +139,7 @@
     /* One idea per line, generous spacing, nothing to parse. */
     .beat {
       color: var(--phos);
-      font-size: 1.06em;
+      font-size: 1em;
       letter-spacing: 0.12em;
       margin-top: 0.55em;
       opacity: 0;
@@ -187,7 +159,7 @@
       padding: 0.5em 1.1em;
       border: 3px solid var(--amber);
       color: var(--amber);
-      font-size: 1.85em;
+      font-size: 1.7em;
       letter-spacing: 0.14em;
       line-height: 1.2;
       text-shadow: 0 0 10px var(--amber-glow);
@@ -222,8 +194,6 @@
 <body>
   <div class="crt">
     <div class="screen" id="termOut"></div>
-    <div class="telescan a"></div>
-    <div class="telescan b"></div>
     <div class="shimmer"></div>
   </div>
 
@@ -261,6 +231,31 @@
     const BIN = 'hippie-trap';
 
     const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    // Block-letter glyphs, six rows each, uniform width per glyph. Only the
+    // characters the address needs. '&' is hand-drawn -- the others follow the
+    // usual ANSI-shadow shapes, but block-art ampersands have no standard form.
+    const GLYPH = {
+      '4': ['██╗  ██╗', '██║  ██║', '███████║', '╚════██║', '     ██║', '     ╚═╝'],
+      '3': ['██████╗ ', '╚════██╗', ' █████╔╝', ' ╚═══██╗', '██████╔╝', '╚═════╝ '],
+      '0': [' ██████╗ ', '██╔═████╗', '██║██╔██║', '████╔╝██║', '╚██████╔╝', ' ╚═════╝ '],
+      ':': ['   ', '██╗', '╚═╝', '██╗', '╚═╝', '   '],
+      '&': ['  ████╗  ', ' ██╔═██╗ ', ' ╚████╔╝ ', ' ██╔██╗  ', '██████╔╗ ', '╚═════╝╚╝'],
+      'B': ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔══██╗', '██████╔╝', '╚═════╝ '],
+      ' ': ['   ', '   ', '   ', '   ', '   ', '   ']
+    };
+
+    // Renders one line per glyph row. Unknown characters are skipped rather
+    // than throwing, so a copy edit cannot blank the screen.
+    function blockArt(text) {
+      const rows = ['', '', '', '', '', ''];
+      for (const ch of text.toUpperCase()) {
+        const g = GLYPH[ch];
+        if (!g) continue;
+        for (let r = 0; r < 6; r++) rows[r] += g[r];
+      }
+      return rows.join('\n');
+    }
 
     let cursor = null;
     function putCursor(el) {
@@ -376,9 +371,12 @@
       out.classList.add('app');
       await sleep(220);
 
-      raw('HIPPIE TRAP', 'title');
-      raw('CAMP ATLANTIS   ·   4:30 & B PORTAL', 'subtitle');
-      await sleep(900);
+      // The address in block letters is the anchor now. The program name is
+      // not repeated here -- it just went past in the loader, and the vertical
+      // space is better spent on the address and the instruction.
+      raw(blockArt('4:30 & B'), 'art');
+      raw('PORTAL   ·   CAMP ATLANTIS', 'subtitle');
+      await sleep(1000);
 
       // The instruction. Everything else on this screen exists to frame it.
       addLine('hero').textContent = 'RAISE YOUR PALM';
