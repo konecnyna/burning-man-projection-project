@@ -124,6 +124,21 @@
       margin-top: 0.4em;
     }
 
+    /* The reassurance line. Kept dim and faded in rather than printed, so it
+       reads as the terminal admitting a deadline rather than as an instruction
+       competing with the one above it. Reserved in the layout from the start so
+       appearing costs no reflow of the centred column. */
+    .wait {
+      opacity: 0;
+      transition: opacity 1.2s ease;
+      color: var(--phos-dim);
+      font-size: 0.52em;
+      letter-spacing: 0.22em;
+      margin-top: 0.9em;
+      min-height: 1.4em;
+    }
+    .wait.on { opacity: 0.5; }
+
     /* Braille exists in exactly one place on this machine: Apple Braille.
        Scoped to the spinner glyph only, which is the last thing on its line, so
        a different advance width cannot shift anything to its right. */
@@ -434,7 +449,9 @@
 
        When the sequence ends it posts `transition_to_active`, which the parent
        listens for. Every wait in act 4 is bounded -- no hand, hand then absent,
-       or no camera at all each give up and hand over. If nobody is actually
+       or no camera at all each give up and hand over. The deadline is shown as a
+       dim countdown, but only after a couple of seconds of nothing happening, so
+       it reaches the people who might feel stuck and nobody else. If nobody is actually
        there, ModeManager's 45s idle timer takes over as well.
 
        NB: the element and variable are deliberately not called `screen`.
@@ -746,7 +763,8 @@
     async function actCalibrate(sensor, beatEls) {
       const NEED_TRAVEL = 1.15;   // normalised units of hand travel to count as learned
       const WIDTH = 16;
-      const GIVE_UP_MS = 30000;   // they walked away mid-onboarding
+      const GIVE_UP_MS = 20000;   // they walked away mid-onboarding
+      const SHOW_WAIT_MS = 2500;  // only tell someone about the deadline if they might feel stuck
       const NO_SENSOR_MS = 4000;  // no heartbeat at all -- do not stall on a dead camera
 
       for (const el of beatEls) el.remove();
@@ -756,6 +774,10 @@
       const meter = addLine('blocks cal');
       const hint = addLine('beat');
       hint.textContent = 'the ring follows your hand';
+
+      // Anyone who raises a hand straight away never sees this. It fades in only
+      // once someone has been still long enough to wonder whether they are stuck.
+      const wait = addLine('wait');
 
       const reticle = document.getElementById('reticle');
       let target = null;
@@ -808,6 +830,12 @@
           if (pct >= 1) { learned = true; break; }
 
           const waited = Date.now() - t0;
+          if (waited > SHOW_WAIT_MS) {
+            const left = Math.max(0, Math.ceil((GIVE_UP_MS - waited) / 1000));
+            wait.textContent = `opens in ${left}s`;
+            wait.classList.add('on');
+          }
+
           if (!sawFrame && waited > NO_SENSOR_MS) break;
           if (waited > GIVE_UP_MS) break;
           await sleep(80);
@@ -817,6 +845,8 @@
           reticle.classList.add('locked');
           prompt.textContent = 'LINKED';
           hint.textContent = 'the portal is yours';
+          // Nothing to reassure them about now; they did it.
+          wait.classList.remove('on');
           await sleep(1800);
         } else {
           hint.textContent = sawFrame ? 'starting anyway' : 'looking glass offline — starting anyway';
