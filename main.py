@@ -171,7 +171,11 @@ def main():
     parser = argparse.ArgumentParser(description='Hand Tracking Kiosk')
     parser.add_argument('--headless', action='store_true', help='Run in headless mode')
     parser.add_argument('--production', action='store_true', help='Run in production mode')
-    parser.add_argument('--port', type=int, default=5000, help='Port to run web server on (default: 5000)')
+    # Default comes from ATLANTIS_PORT so main.py and start-atlantis.sh cannot
+    # disagree. The launcher and the LaunchAgent both set it; 5000 is only the
+    # fallback for a bare `python main.py`.
+    parser.add_argument('--port', type=int, default=int(os.environ.get('ATLANTIS_PORT', 5000)),
+                        help='Web server port (default: $ATLANTIS_PORT, else 5000)')
     parser.add_argument('--verbose', action='store_true', help='Debug-level logging')
     
     args = parser.parse_args()

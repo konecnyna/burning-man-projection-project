@@ -389,40 +389,53 @@ exists in this codebase.
 Ordered by operational impact. Deployment-level risks are in
 [DEPLOYMENT.md](DEPLOYMENT.md#8-failure-modes).
 
-1. **The application has no internal supervision or logging of its own.**
-   `main.py`, `hand_tracker.py`, and `web_app.py` swallow exceptions with bare
-   `except: pass` or `sys.exit(1)` with no message, and `EventBus.emit`
-   discards handler exceptions. Crash recovery and log capture come from the
-   LaunchAgent installed by `deploy/install-kiosk.sh` — `KeepAlive` relaunches
-   the process and `StandardOutPath`/`StandardErrorPath` capture stdout and
-   stderr to `logs/`. Anything swallowed internally still never surfaces.
-   See [DEPLOYMENT.md](DEPLOYMENT.md).
+1. **Any exception inside a PyObjC delegate aborts the process.** AppKit and
+   WebKit call into pywebview's Objective-C delegates; a Python exception
+   raised there becomes an ObjC exception that unwinds into C++ frames with no
+   handler, reaching `std::terminate`. It cannot be caught in Python. This is
+   why `pywebview` is pinned — see `requirements.txt` and
+   [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
-2. **`main.py` still defaults to port `5000`.** The deployed path is driven by
-   `ATLANTIS_PORT` (default `5001`), which `start-atlantis.sh` and the
-   LaunchAgent both use. Running `python main.py` bare gets a different port
-   than the kiosk.
+2. **Exceptions inside the app are logged but not always surfaced.**
+   `EventBus.emit` logs handler failures rather than swallowing them, and
+   `logs/atlantis.log` captures the rest, but several paths still exit via
+   `sys.exit(1)` without explanation.
 
-3. **`EventBus.emit` holds the lock while invoking handlers**, so one slow
-   WebSocket handler stalls the tracking thread.
+3. **Two `loadScene` implementations** with divergent hardcoded scene-id lists
+   — `SceneManager.loadScene` (line 1428) and `HandTrackingKiosk.loadScene`
+   (line 2294). Each covers what its own path needs, so nothing is broken, but
+   adding a cycling scene means editing the right one. See
+   [SCENES.md](SCENES.md#4-the-hardcoded-iframe-list) — this is the most common
+   way a new scene silently fails.
 
-4. **No camera reconnect.** A failed read emits `camera_error`, sleeps 100 ms,
-   and retries the same dead handle forever. Unplug/replug needs a restart.
+4. **Duplicate scene id.** `kaleidoscope` appears twice in the scene array.
+   Cycling is index-based so both entries play, but any lookup by id resolves
+   to the first. Renaming the second requires adding the new id to the iframe
+   list as well.
 
-5. **Two `loadScene` implementations** with divergent hardcoded scene-id lists —
-   `SceneManager.loadScene` (line 1428) and
-   `HandTrackingKiosk.loadScene` (line 2294). See [SCENES.md](SCENES.md#4-the-hardcoded-iframe-list) — this is
-   the most common way a newly added scene silently fails.
+5. **No camera resolution control.** `cv2.VideoCapture(0)` uses the camera
+   default; index 0 is hardcoded and not configurable by flag.
 
-6. **Duplicate scene id.** `kaleidoscope` appears twice in the scene array.
-   Index-based cycling works; any id-based lookup resolves to the first entry.
+6. **Fixed startup sleeps.** `main.py` waits 2s for the server and 1s for
+   MediaPipe rather than checking readiness.
 
-7. **`HandTrackingKiosk.stop()` has an inverted guard.** `self.running` starts
-   `False` and is never set `True` on start; `stop()` returns early *if*
-   `running` is true, then sets it true. It works as an already-stopped latch,
-   but the field name means the opposite of how it reads, and
-   `run_headless()`'s `while not self.running` loop only works by coincidence.
+7. **Most dependencies are lower-bounded.** `pywebview` is pinned because a
+   mismatch crashes the process; the rest use `>=`. `requirements.lock.txt`
+   holds the exact verified set — install from it to reproduce this
+   environment.
 
-9. **Dependencies are lower-bounded, not pinned.** `requirements.txt` uses
-    `>=` throughout, so a fresh install will not reproduce the current
-    environment.
+### Fixed, kept here because the reasoning still matters
+
+- **Unbounded gesture state.** `previous_gestures` grew by one entry per hand
+  ID forever. Hand IDs increase monotonically and are reissued after any frame
+  with no detections, so anything keyed by `hand_id` must be pruned to the live
+  set each frame — `_prune_gesture_state()`.
+- **`EventBus.emit` held its lock across handler dispatch**, so one slow
+  WebSocket client could stall the tracking thread. Handlers now run outside
+  the lock.
+- **Duplicate per-frame payloads.** `hand_moved` and `frame_processed` both
+  carried the full hand blob every frame. `frame_processed` is now a heartbeat
+  with `hand_count` and `fps` only.
+- **No camera reconnect.** A dead handle was retried forever. After 30
+  consecutive failed reads the capture is released and reopened, rate-limited
+  to one attempt every 5s.

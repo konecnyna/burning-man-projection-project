@@ -50,12 +50,21 @@ class HandTracker:
 
         # Latch so a detached camera logs once, not once per frame.
         self._read_failed = False
+
+        # Camera recovery. At ~10 reads/sec while failing, 30 failures is
+        # about 3s of a dead camera before we try to reopen it.
+        self._consecutive_failures = 0
+        self.REOPEN_AFTER_FAILURES = 30
+        self.REOPEN_BACKOFF_SECONDS = 5
+        self._last_reopen = 0
+        self._camera_index = 0
         
     def start(self, camera_index: int = 0):
         """Start the hand tracking system"""
         if self.running:
             return
             
+        self._camera_index = camera_index
         self.cap = cv2.VideoCapture(camera_index)
         if not self.cap.isOpened():
             logger.error(
@@ -100,14 +109,27 @@ class HandTracker:
                     # a detached camera would otherwise flood the log forever.
                     logger.error("Camera read failed; retrying every 100ms")
                     self._read_failed = True
+                self._consecutive_failures += 1
+
                 self.event_bus.emit(Event(
                     type=HandTrackingEvents.CAMERA_ERROR,
                     data={"error": "Failed to read frame"},
                     timestamp=datetime.now(),
                     source="hand_tracker"
                 ))
+
+                # A brief glitch clears itself on the next read. A real
+                # disconnect does not: the handle stays dead and retrying it
+                # forever means the installation is blind until someone
+                # restarts it. After REOPEN_AFTER_FAILURES, throw the handle
+                # away and open a fresh one.
+                if self._consecutive_failures >= self.REOPEN_AFTER_FAILURES:
+                    self._reopen_camera()
+
                 time.sleep(0.1)
                 continue
+
+            self._consecutive_failures = 0
                 
             if self._read_failed:
                 logger.info("Camera recovered")
@@ -173,6 +195,36 @@ class HandTracker:
         ))
 
         self.previous_hands = current_hands
+
+    def _reopen_camera(self):
+        """Drop the current capture handle and open a fresh one.
+
+        Rate-limited: a camera that is genuinely unplugged will fail to reopen
+        too, and hammering VideoCapture in the tracking loop is expensive.
+        """
+        now = time.time()
+        if now - self._last_reopen < self.REOPEN_BACKOFF_SECONDS:
+            return
+        self._last_reopen = now
+
+        logger.warning("Camera unresponsive after %d reads; reopening index %s",
+                       self._consecutive_failures, self._camera_index)
+        try:
+            if self.cap:
+                self.cap.release()
+        except Exception:
+            logger.exception("Error releasing the camera handle")
+
+        try:
+            self.cap = cv2.VideoCapture(self._camera_index)
+            if self.cap.isOpened():
+                logger.info("Camera reopened successfully")
+                self._consecutive_failures = 0
+            else:
+                logger.error("Camera reopen failed; will retry in %ss",
+                             self.REOPEN_BACKOFF_SECONDS)
+        except Exception:
+            logger.exception("Camera reopen raised")
 
     def _prune_gesture_state(self, live_hand_ids: set):
         """Forget gesture state for hands that are gone.
