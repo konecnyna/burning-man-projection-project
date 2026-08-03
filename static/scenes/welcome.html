@@ -629,20 +629,16 @@
       spacer();
       await sleep(520);
 
-      // A beat of flavour before the launch. This exists to give the sequence
-      // somewhere to breathe -- people are still walking up at this point.
-      await command('cat README.dust');
-      raw('the portal answers to hands, not keys.', 'dim');
-      await sleep(360);
-      raw('stand close. be seen. it does the rest.', 'dim');
-      spacer();
-      await sleep(680);
-
       await command('./hippie-trap --fullscreen');
     }
 
     async function actLoad() {
       spacer();
+      // The sequence needs somewhere to breathe -- people are still walking up
+      // at this point. It used to breathe in the shell, on a `cat README.dust`
+      // nobody at the back of a dark camp could read. Here the same three
+      // seconds read as the binary itself being heavy to load.
+      await bar('loading ' + BIN, '0x0000_0000', 3000, 24);
       await spin('verifying signature', 520);
       await bar('mapping .text', '0x0000_1000', 520);
       await bar('mapping .rodata', '0x0002_c000', 460);
