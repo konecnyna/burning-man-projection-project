@@ -211,20 +211,26 @@
 
     .chrome.on { opacity: 1; }
 
-    .chrome i {
+    /* The four corner marks only. This was `.chrome i`, which also caught the
+       <i class="dot"> status indicators nested inside the telemetry row --
+       absolutely positioning them and stretching them to 3.2vw x 3.2vh, which
+       with border-radius 50% is a 61x35 oval. Keep it scoped to the class. */
+    .chrome i.corner {
       position: absolute;
       width: 3.2vw;
       height: 3.2vh;
       border: 2px solid var(--phos-dim);
     }
-    .chrome i.tl { top: 0;    left: 0;    border-right: 0; border-bottom: 0; }
-    .chrome i.tr { top: 0;    right: 0;   border-left: 0;  border-bottom: 0; }
-    .chrome i.bl { bottom: 0; left: 0;    border-right: 0; border-top: 0; }
-    .chrome i.br { bottom: 0; right: 0;   border-left: 0;  border-top: 0; }
+    .chrome i.corner.tl { top: 0;    left: 0;    border-right: 0; border-bottom: 0; }
+    .chrome i.corner.tr { top: 0;    right: 0;   border-left: 0;  border-bottom: 0; }
+    .chrome i.corner.bl { bottom: 0; left: 0;    border-right: 0; border-top: 0; }
+    .chrome i.corner.br { bottom: 0; right: 0;   border-left: 0;  border-top: 0; }
 
     .telemetry {
       position: absolute;
-      left: 0; right: 0; bottom: -0.2vh;
+      /* Inset past the corner marks (3.2vw each) plus breathing room, so the
+         row runs between the brackets rather than across them. */
+      left: 4.6vw; right: 4.6vw; bottom: -0.2vh;
       display: flex;
       justify-content: space-between;
       align-items: baseline;
@@ -323,7 +329,8 @@
 
     <!-- Instrument chrome. Revealed when the binary takes the screen. -->
     <div class="chrome" id="chrome">
-      <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+      <i class="corner tl"></i><i class="corner tr"></i>
+      <i class="corner bl"></i><i class="corner br"></i>
       <div class="telemetry">
         <div class="grp">
           <span class="stat" id="linkStat">
