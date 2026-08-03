@@ -132,8 +132,11 @@ function init() {
   SPRITE_SIZE = Math.ceil(3 * renderTargetWidth / 1600);
 
 
-  THREE.ImageUtils.crossOrigin = '';
-  sprite1 = THREE.ImageUtils.loadTexture("https://s3-us-west-1.amazonaws.com/danielfiles/THEREALGALAXY.png");
+  // Vendored copy of the sprite. The upstream original loaded this from S3,
+  // which offline hangs on DNS and is blocked by the CSP as an img-src
+  // violation -- the particles then draw with a null map and the scene is
+  // black. Same-origin now, so no crossOrigin dance.
+  sprite1 = THREE.ImageUtils.loadTexture("./js/THEREALGALAXY.png");
 
   camera = new THREE.PerspectiveCamera(60, renderTargetWidth / renderTargetHeight, 1, 3 * SCALE_FACTOR);
   camera.position.set(0, 0, SCALE_FACTOR / 2);
