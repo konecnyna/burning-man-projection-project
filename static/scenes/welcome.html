@@ -145,6 +145,14 @@
     .spin { font-family: 'Apple Braille', 'Menlo', monospace; }
 
     .line { white-space: pre-wrap; }
+
+    /* First principle here is that nothing scrolls -- there is no scrollbar on a
+       projector and nobody to drag one, so anything that does not fit is simply
+       gone. On the program screen lines must not wrap either, because a wrapped
+       line is how the overflow starts. nowrap also makes overflow measurable:
+       with wrapping on, scrollWidth never exceeds the box and fitViewport would
+       have nothing to detect. */
+    .screen.app .line { white-space: nowrap; }
     .dim { color: var(--phos-dim); }
     .amber { color: var(--amber); text-shadow: 0 0 8px var(--amber-glow); }
     .bright { color: #b6ffcf; text-shadow: 0 0 10px var(--phos-glow); }
@@ -201,7 +209,12 @@
     }
 
     /* The one instruction that has to survive being read at a glance. */
+    /* Swapped between instructions rather than replaced, so only one is ever on
+       screen. Fades through nothing so the words never cross-read. */
+    .hero.swap { opacity: 0; }
+
     .hero {
+      transition: opacity 0.42s ease;
       margin: 0.85em 0 0.35em 0;
       padding: 0.5em 1.1em;
       border: 3px solid var(--amber);
@@ -237,42 +250,34 @@
 
     .chrome.on { opacity: 1; }
 
-    /* Live hand cursor for the calibration act. This is the only thing on the
-       screen the audience drives, and it is here to teach exactly one idea:
-       your hand moves this. Driven by transform so following a hand costs no
-       layout work. */
+    /* Live hand cursor -- a Pip-Boy style palm, not a reticle. The audience is
+       being told to raise a palm, so the thing that echoes their movement should
+       be a palm. Solid fill rather than outlines: the silhouette is built from
+       overlapping shapes, and any stroke would draw the seams between them.
+       Driven by transform so following a hand costs no layout work. */
     .reticle {
       position: absolute;
       left: 0; top: 0;
-      width: 4.6vh;
-      height: 4.6vh;
-      margin: -2.3vh 0 0 -2.3vh;
-      border: 2px solid var(--phos);
-      border-radius: 50%;
-      background: rgba(51, 255, 102, 0.06);
-      box-shadow: 0 0 22px var(--phos-glow), inset 0 0 14px rgba(51, 255, 102, 0.18);
+      /* 72x92 viewBox, so height leads and width follows the ratio. Margins put
+         the palm centre of the drawing on the tracked point. */
+      width: 7.04vh;
+      height: 9vh;
+      margin: -5.76vh 0 0 -3.73vh;
       opacity: 0;
-      transition: opacity 0.45s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+      transition: opacity 0.45s ease, filter 0.4s ease;
       pointer-events: none;
       z-index: 3;
+      filter: drop-shadow(0 0 12px var(--phos-glow));
     }
-    .reticle.on { opacity: 1; }
+    .reticle svg { display: block; width: 100%; height: 100%; }
+    .reticle .hand { fill: var(--phos); transition: fill 0.4s ease; }
 
-    /* Tick marks, so it reads as an instrument rather than a dot. */
-    .reticle::before,
-    .reticle::after {
-      content: '';
-      position: absolute;
-      background: var(--phos);
-    }
-    .reticle::before { left: 50%; top: -0.9vh; width: 2px; height: 1.8vh; margin-left: -1px; }
-    .reticle::after  { top: 50%; left: -0.9vh; height: 2px; width: 1.8vh; margin-top: -1px; }
+    /* Held just under full so it reads as phosphor rather than paint. Opacity
+       lives on the container, never on the shapes, or the overlaps show. */
+    .reticle.on { opacity: 0.92; }
 
-    .reticle.locked {
-      border-color: var(--amber);
-      box-shadow: 0 0 30px var(--amber-glow), inset 0 0 16px rgba(255, 176, 66, 0.22);
-    }
-    .reticle.locked::before, .reticle.locked::after { background: var(--amber); }
+    .reticle.locked { filter: drop-shadow(0 0 18px var(--amber-glow)); }
+    .reticle.locked .hand { fill: var(--amber); }
 
     /* The four corner marks only. This was `.chrome i`, which also caught the
        <i class="dot"> status indicators nested inside the telemetry row --
@@ -411,8 +416,22 @@
       </div>
     </div>
 
-    <!-- Hand cursor. Revealed during calibration, hidden again on hand-off. -->
-    <div class="reticle" id="reticle"></div>
+    <!-- Hand cursor. Revealed during calibration, hidden again on hand-off.
+         An open palm assembled from rounded primitives -- deliberately blocky,
+         which suits the era and stays legible at 140 inches. -->
+    <div class="reticle" id="reticle">
+      <svg viewBox="0 0 72 92" aria-hidden="true" focusable="false">
+        <g class="hand">
+          <rect x="20" y="14" width="9" height="34" rx="4.5"/>
+          <rect x="31" y="8"  width="9" height="40" rx="4.5"/>
+          <rect x="42" y="13" width="9" height="35" rx="4.5"/>
+          <rect x="53" y="22" width="8" height="26" rx="4"/>
+          <rect x="16" y="40" width="45" height="38" rx="9"/>
+          <rect x="3"  y="42" width="9"  height="28" rx="4.5"
+                transform="rotate(-28 7.5 56)"/>
+        </g>
+      </svg>
+    </div>
 
     <div class="shimmer"></div>
   </div>
@@ -484,7 +503,47 @@
       out.appendChild(el);
       // Bounded: the kiosk runs for days and this replays for every visitor.
       while (out.children.length > 30) out.removeChild(out.firstChild);
+      // Only the program screen is centred and size-critical; the shell scrolls
+      // its own output upward by design and does not need refitting per line.
+      if (out.classList.contains('app')) fitViewport();
       return el;
+    }
+
+    // Nothing scrolls, so nothing may overflow -- shrink the type until the whole
+    // column fits the box in both directions.
+    //
+    // This exists because hand-measured type sizes are guesswork. Estimating
+    // character advances is how lines ended up wrapping and how the column ended
+    // up 73px too tall for its box; the browser knows the real answer, so ask it.
+    //
+    // Measured from the children's own rects rather than scrollHeight: the
+    // program screen is a centred flex column, and centred overflow spills out of
+    // both ends at once, which leaves scrollHeight equal to clientHeight and the
+    // overflow undetected.
+    function fitViewport() {
+      const kids = Array.from(out.children);
+      if (!kids.length) return;
+
+      const cs = getComputedStyle(out);
+      const availH = out.clientHeight
+        - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const availW = out.clientWidth
+        - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+
+      let size = 1.5;   // the .screen.app default; recomputed from scratch each call
+      out.style.fontSize = size + 'em';
+
+      // Floor at 0.75em: past that the instruction stops being readable across a
+      // dark camp, and a too-small line is a worse failure than a clipped one.
+      while (size > 0.75) {
+        const h = kids[kids.length - 1].getBoundingClientRect().bottom
+                - kids[0].getBoundingClientRect().top;
+        let w = 0;
+        for (const k of kids) w = Math.max(w, k.scrollWidth);
+        if (h <= availH && w <= availW) return;
+        size -= 0.05;
+        out.style.fontSize = size + 'em';
+      }
     }
 
     function spacer() { addLine('spacer'); }
@@ -614,7 +673,8 @@
       await sleep(1500);
 
       // The instruction. Everything else on this screen exists to frame it.
-      addLine('hero').textContent = 'RAISE YOUR PALM';
+      const heroEl = addLine('hero');
+      heroEl.textContent = 'RAISE YOUR PALM';
       await sleep(1400);
 
       // Cinematic rather than a manual: one idea a line, fading in on a beat,
@@ -626,8 +686,9 @@
         'move — and it moves with you',
         'somewhere new every 30 seconds',
       ];
-      // Handed back so the calibration act can clear them -- the screen has room
-      // for the address, one instruction and the meter, not for all of it at once.
+      // Handed back with the hero, so the calibration act can clear the beats and
+      // rewrite the instruction in place. The screen has room for the address,
+      // one instruction and the meter -- not for all of it at once.
       const beatEls = [];
       for (const b of beats) {
         const el = addLine('beat');
@@ -637,7 +698,7 @@
       }
 
       await sleep(1100);
-      return beatEls;
+      return { beatEls, heroEl };
     }
 
     // ---------------------------------------------------------- telemetry
@@ -761,7 +822,7 @@
     // hand never appears, the hand appears and wanders off, or there is no
     // camera at all. Each one gives up and hands over rather than parking the
     // installation on this screen.
-    async function actCalibrate(sensor, beatEls) {
+    async function actCalibrate(sensor, beatEls, heroEl) {
       // The gate is a sustained palm, not distance travelled. Three seconds of
       // continuous detection is a deliberately demanding ask: it proves the
       // person is standing where the camera can hold them, which is exactly what
@@ -779,8 +840,15 @@
 
       for (const el of beatEls) el.remove();
 
-      const prompt = addLine('hero');
+      // Rewrite the instruction in place. Adding a second .hero line was leaving
+      // both RAISE YOUR PALM and NOW MOVE IT on screen at once, which is what
+      // pushed the column past the viewport -- each hero box is 3px of border,
+      // 1em of padding and a 1.5em line.
+      const prompt = heroEl;
+      prompt.classList.add('swap');
+      await sleep(420);
       prompt.textContent = 'NOW MOVE IT';
+      prompt.classList.remove('swap');
       const meter = addLine('blocks cal');
       const hint = addLine('beat');
       hint.textContent = 'the ring follows your hand';
@@ -887,8 +955,8 @@
         await actShell();
         await actLoad();
         const sensor = connectSensor();
-        const beatEls = await actProgram(sensor);
-        await actCalibrate(sensor, beatEls);
+        const { beatEls, heroEl } = await actProgram(sensor);
+        await actCalibrate(sensor, beatEls, heroEl);
       } catch (err) {
         console.error('[termlink] sequence failed:', err);
       } finally {
