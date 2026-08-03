@@ -24,7 +24,7 @@ camera ──► MediaPipe ──► EventBus ──► WebSocket ──► full
 # One-time setup
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.lock.txt    # exact verified versions
 
 # Development
 python main.py --port 5000 --verbose

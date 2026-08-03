@@ -62,6 +62,60 @@ sudo pmset -a sleep 0
 
 ---
 
+## "Python quit unexpectedly" / the app crashes outright
+
+A hard crash is different from the app merely exiting. macOS writes a report:
+
+```bash
+ls -t ~/Library/Logs/DiagnosticReports/Python*.ips | head -1
+```
+
+Read the faulting thread and the termination signal:
+
+```bash
+python3 - "$(ls -t ~/Library/Logs/DiagnosticReports/Python*.ips | head -1)" <<'EOF'
+import json, sys
+raw = open(sys.argv[1]).read(); head, _, body = raw.partition('\n')
+rep = json.loads(body); imgs = rep.get('usedImages', [])
+print('exception  :', rep.get('exception'))
+print('termination:', rep.get('termination'))
+for t in rep.get('threads', []):
+    if t.get('triggered'):
+        for fr in t.get('frames', [])[:18]:
+            n = imgs[fr['imageIndex']].get('name', '?') if fr.get('imageIndex', -1) >= 0 else '?'
+            print(f"  {n:26s} {fr.get('symbol','')[:64]}")
+        break
+EOF
+```
+
+**`SIGABRT` with `PyObjCErr_ToObjCWithGILState` in the stack** means a Python
+exception was raised inside a PyObjC delegate that AppKit or WebKit called.
+PyObjC converts it to an Objective-C exception, which then unwinds into C++
+frames that have no handler, so it hits `std::terminate` and aborts.
+
+This is worth understanding as a class of failure: **any** exception in **any**
+PyObjC delegate takes the whole process down. It is not recoverable in Python.
+
+The known instance was pywebview 4.4.1 with pyobjc-core >= 10, crashing in
+`webView_decidePolicyForNavigationAction_decisionHandler_` — it manipulated
+`handler.__block_signature__`, which newer PyObjC does not support. Fixed by
+pinning `pywebview==6.2.1`, which removed that code path.
+
+If you see this again after changing dependencies, check the pin first:
+
+```bash
+venv/bin/pip freeze | grep -iE 'pywebview|pyobjc-core'
+# expect pywebview==6.2.1
+```
+
+Rebuild from the lock file rather than resolving fresh:
+
+```bash
+venv/bin/pip install -r requirements.lock.txt
+```
+
+---
+
 ## Hands aren't detected at all
 
 Work through in order.

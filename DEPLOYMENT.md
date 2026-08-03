@@ -86,9 +86,15 @@ message instead.
 
 ```bash
 # While online
-source venv/bin/activate && pip install -r requirements.txt
+source venv/bin/activate
+pip install -r requirements.lock.txt    # exact known-good set
 ./deploy/check-offline.sh
 ```
+
+`requirements.lock.txt` is the environment this has actually been verified
+against. `requirements.txt` is the looser declaration; `pywebview` is pinned
+there because a version mismatch crashes the process outright rather than
+degrading — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 MediaPipe's hand models ship inside the package as local `.tflite` files, so
 tracking needs no download. `deploy/check-offline.sh` verifies that too.

@@ -1,8 +1,19 @@
 # Core dependencies
+#
+# pywebview is PINNED, not lower-bounded. 4.4.1 with pyobjc-core >= 10 hard
+# crashes the whole process: WebKit calls pywebview's navigation-policy
+# delegate, the Python callback raises (it manipulated handler.__block_signature__,
+# which newer PyObjC does not support), PyObjC converts that to an ObjC
+# exception, and it unwinds into C++ WebKit frames with no handler ->
+# std::terminate -> SIGABRT. 6.2.1 removed that code path.
+#
+# Any exception inside a PyObjC delegate aborts the process, so a version
+# mismatch here is not a degraded feature, it is the installation going dark.
+pywebview==6.2.1
+
 opencv-python>=4.8.0
 flask>=2.3.0
 flask-socketio>=5.3.0
-pywebview>=4.4.0
 numpy>=1.24.0
 python-socketio>=5.8.0
 mediapipe>=0.10.21
