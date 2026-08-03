@@ -638,7 +638,9 @@
       // at this point. It used to breathe in the shell, on a `cat README.dust`
       // nobody at the back of a dark camp could read. Here the same three
       // seconds read as the binary itself being heavy to load.
-      await bar('loading ' + BIN, '0x0000_0000', 3000, 24);
+      // Default width, like every other bar -- they share a column, and one
+      // longer track reads as a rendering bug rather than a bigger job.
+      await bar('loading ' + BIN, '0x0000_0000', 3000);
       await spin('verifying signature', 520);
       await bar('mapping .text', '0x0000_1000', 520);
       await bar('mapping .rodata', '0x0002_c000', 460);
