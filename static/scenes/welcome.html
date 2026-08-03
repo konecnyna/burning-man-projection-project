@@ -13,6 +13,7 @@
       --phos-dim: #1a8a3a;
       --phos-glow: rgba(51, 255, 102, 0.55);
       --amber: rgb(255, 176, 66);
+      --amber-glow: rgba(255, 176, 66, 0.55);
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,22 +27,21 @@
       color: var(--phos);
     }
 
-    /* CRT enclosure: vignette plus a heavy inset shadow for tube curvature. */
+    /* CRT enclosure. */
     .crt {
       position: absolute;
       inset: 0;
-      padding: 6vh 7vw;
+      padding: 5vh 6vw;
       background:
         radial-gradient(ellipse at center, rgba(12, 46, 24, 0.5) 0%, rgba(0, 0, 0, 0.92) 125%),
         #030c06;
       box-shadow: inset 0 0 20vh rgba(0, 0, 0, 0.95);
       text-shadow: 0 0 6px var(--phos-glow);
-      font-size: clamp(15px, 1.7vw, 27px);
-      line-height: 1.5;
-      letter-spacing: 0.04em;
+      font-size: clamp(14px, 1.55vw, 25px);
+      line-height: 1.48;
+      letter-spacing: 0.03em;
     }
 
-    /* Scanlines. */
     .crt::before {
       content: '';
       position: absolute;
@@ -53,12 +53,10 @@
       z-index: 3;
     }
 
-    /* Refresh band drifting down the tube. */
     .crt::after {
       content: '';
       position: absolute;
-      left: 0;
-      right: 0;
+      left: 0; right: 0;
       height: 16vh;
       background: linear-gradient(to bottom,
           rgba(51, 255, 102, 0) 0%,
@@ -74,60 +72,75 @@
       100% { top: 100vh; }
     }
 
-    /* Output builds from the bottom, so long boots scroll rather than overflow. */
     .screen {
       position: relative;
       z-index: 1;
       height: 100%;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
+      justify-content: flex-end;   /* shell output grows upward */
       overflow: hidden;
       animation: flicker 5s infinite steps(1);
     }
 
+    /* Once the binary takes over it owns the screen, top-aligned. */
+    .screen.app { justify-content: flex-start; }
+
     @keyframes flicker {
       0%, 95%, 100% { opacity: 1; }
-      96%           { opacity: 0.84; }
+      96%           { opacity: 0.85; }
       97%           { opacity: 1; }
-      98%           { opacity: 0.92; }
+      98%           { opacity: 0.93; }
     }
 
     .line { white-space: pre-wrap; }
     .dim { color: var(--phos-dim); }
-    .amber { color: var(--amber); text-shadow: 0 0 8px rgba(255, 176, 66, 0.6); }
-    .rule { color: var(--phos-dim); }
+    .amber { color: var(--amber); text-shadow: 0 0 8px var(--amber-glow); }
+    .bright { color: #b6ffcf; text-shadow: 0 0 10px var(--phos-glow); }
+    .spacer { height: 0.75em; }
 
-    .big {
-      font-size: 1.6em;
-      letter-spacing: 0.13em;
-      line-height: 1.28;
+    .banner {
+      color: var(--amber);
+      text-shadow: 0 0 12px var(--amber-glow);
+      font-size: 1.1em;
+      line-height: 1.24;
     }
 
-    /* The instruction that actually matters. Boxed and pulsing so it reads
-       from a distance, in the dark, to someone who is not concentrating. */
-    .callout {
+    .heading {
+      color: var(--phos-dim);
+      letter-spacing: 0.22em;
+      font-size: 0.82em;
+      margin-top: 0.5em;
+    }
+
+    .step { padding-left: 1.2em; }
+    .step .k { color: var(--amber); }
+
+    /* The one instruction that has to survive being read at a glance. */
+    .hero {
       align-self: flex-start;
-      margin: 0.35em 0;
-      padding: 0.4em 0.8em;
+      margin: 0.45em 0 0.15em 1.2em;
+      padding: 0.35em 0.85em;
       border: 2px solid var(--amber);
       color: var(--amber);
-      text-shadow: 0 0 10px rgba(255, 176, 66, 0.85);
-      box-shadow: 0 0 20px rgba(255, 176, 66, 0.35),
-                  inset 0 0 16px rgba(255, 176, 66, 0.12);
-      animation: pulse 1.15s ease-in-out infinite;
+      font-size: 1.2em;
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 10px var(--amber-glow);
+      box-shadow: 0 0 20px rgba(255, 176, 66, 0.32),
+                  inset 0 0 16px rgba(255, 176, 66, 0.1);
+      animation: pulse 1.2s ease-in-out infinite;
     }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
-      50%      { opacity: 0.5; }
+      50%      { opacity: 0.52; }
     }
 
     .cursor {
       display: inline-block;
-      width: 0.6em;
-      height: 1.05em;
-      margin-left: 0.1em;
+      width: 0.58em;
+      height: 1.02em;
+      margin-left: 0.08em;
       vertical-align: text-bottom;
       background: var(--phos);
       box-shadow: 0 0 8px var(--phos-glow);
@@ -153,106 +166,198 @@
     /* =====================================================================
        ATLANTIS TERMLINK — onboarding.
 
-       Replaces the hover-and-hold welcome screen. That flow asked people to
-       find an invisible target and hold still for three seconds, which is a
-       lot to ask of someone walking past in the dark. This just tells them
-       what the camp is, where they are, and what to do with their hand.
+       Three acts, because a story is easier to follow than a boot log:
 
-       It drives its own completion: when the boot sequence finishes it posts
-       `transition_to_active` to the parent, which already listens for that
-       message. There is no hand tracking in here at all -- getting this far
-       already required a confident hand to wake the kiosk out of idle.
+         1. a shell, logged in as dr_boom_boom, who runs ./portal
+         2. the binary loading -- segment maps, progress bars, a spinner
+         3. the program clearing the screen and taking over with the
+            instructions, the way a real terminal program would
 
-       Timing is deliberately brisk, about 16 seconds end to end. Nobody reads
-       a long boot log at a party. The lines that matter are the camp name, the
-       address, and the palm instruction, so those get the emphasis and the
-       pauses; the rest is texture that scrolls by.
+       Act 3 clearing the screen is the point of the structure: it turns the
+       instructions into a program's interface rather than one more line of log
+       output, so they read as the thing you are meant to act on.
+
+       No hand tracking here -- reaching this scene already required a
+       confident hand to leave idle. When the sequence ends it posts
+       `transition_to_active`, which the parent listens for. If nobody is
+       actually there, ModeManager's 45s idle timer takes over.
+
+       NB: the element and variable are deliberately not called `screen`.
+       window.screen exists, and an element id also gets named access on
+       window, so a top-level const of that name can be a SyntaxError that
+       kills the whole file with nothing rendered and no visible error.
        ===================================================================== */
 
-    // NB: wrapped in an IIFE and deliberately not called `screen`.
-    // `window.screen` already exists, and an element with id="screen" also
-    // gets named access on window -- a top-level `const screen` can therefore
-    // be a SyntaxError, which kills the whole script with no visible error.
     const out = document.getElementById('termOut');
+    const PROMPT = 'dr_boom_boom@atlantis';
 
-    // type = characters revealed per tick (higher is faster).
-    // pause = ms held after the line finishes. Empty text is a spacer.
-    const SCRIPT = [
-      { t: 'ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL',            cls: 'dim',   type: 9,  pause: 200 },
-      { t: 'ATLANTIS PORTAL INTERFACE  v4.20.69',                cls: 'dim',   type: 9,  pause: 300 },
-      { t: '' },
-      { t: 'INITIALISING OPTICAL SENSOR ........ OK',                           type: 7,  pause: 150 },
-      { t: 'LOADING LANDMARK MODEL ............. OK',                           type: 7,  pause: 150 },
-      { t: 'CALIBRATING LOOKING GLASS .......... OK',                           type: 7,  pause: 150 },
-      { t: 'PORTAL SUBSYSTEM ............... ONLINE',                           type: 7,  pause: 400 },
-      { t: '' },
-      { t: '==================================================', cls: 'rule',  type: 50, pause: 100 },
-      { t: 'CAMP ATLANTIS',                                      cls: 'big amber', type: 4, pause: 560 },
-      { t: 'PORTAL ADDRESS   4:30 & B',                          cls: 'big',   type: 5,  pause: 520 },
-      { t: '==================================================', cls: 'rule',  type: 50, pause: 240 },
-      { t: '' },
-      { t: 'LOGGED IN AS ...... SYSADMIN',                                      type: 7,  pause: 180 },
-      { t: 'CLEARANCE ......... DR. BOOM BOOM, PhD',                            type: 7,  pause: 180 },
-      { t: 'STATUS ............ UNRESTRICTED',                    cls: 'amber', type: 7,  pause: 500 },
-      { t: '' },
-      { t: 'You have control of the portal.',                                   type: 13, pause: 400 },
-      { t: '' },
-      { t: 'SHOW YOUR PALM TO THE LOOKING GLASS',                cls: 'callout big', type: 4, pause: 950 },
-      { t: '' },
-      { t: 'The portal transports you every 30 seconds.',                       type: 15, pause: 700 },
-      { t: 'Move your hands. See what answers.',                 cls: 'amber', type: 15, pause: 1200 },
-    ];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    let cursorEl = null;
-
-    function moveCursorTo(el) {
-      if (cursorEl) cursorEl.remove();
-      cursorEl = document.createElement('span');
-      cursorEl.className = 'cursor';
-      el.appendChild(cursorEl);
+    let cursor = null;
+    function putCursor(el) {
+      if (cursor) cursor.remove();
+      cursor = document.createElement('span');
+      cursor.className = 'cursor';
+      el.appendChild(cursor);
+    }
+    function dropCursor() {
+      if (cursor) { cursor.remove(); cursor = null; }
     }
 
-    // Bound the DOM. This scene is short, but the kiosk runs for days and the
-    // onboarding replays every time somebody walks up.
-    function trimHistory() {
-      while (out.children.length > 26) out.removeChild(out.firstChild);
+    function addLine(cls) {
+      const el = document.createElement('div');
+      el.className = 'line ' + (cls || '');
+      out.appendChild(el);
+      // Bounded: the kiosk runs for days and this replays for every visitor.
+      while (out.children.length > 30) out.removeChild(out.firstChild);
+      return el;
     }
 
-    function typeLine(spec) {
-      return new Promise(resolve => {
-        const el = document.createElement('div');
-        el.className = 'line ' + (spec.cls || '');
-        out.appendChild(el);
-        trimHistory();
+    function spacer() { addLine('spacer'); }
+    function raw(text, cls) { addLine(cls).textContent = text; }
 
-        if (!spec.t) { resolve(); return; }   // spacer
+    // Machine output: fast and even.
+    async function type(text, cls, cps = 7, hold = 90) {
+      const el = addLine(cls);
+      for (let i = 0; i < text.length; i += cps) {
+        el.textContent = text.slice(0, i + cps);
+        putCursor(el);
+        await sleep(26);
+      }
+      el.textContent = text;
+      putCursor(el);
+      await sleep(hold);
+    }
 
-        const text = spec.t;
-        const step = spec.type || 8;
-        let i = 0;
-        moveCursorTo(el);
+    // A person typing at a prompt: slower, uneven, with a beat before Enter.
+    async function command(cmd) {
+      const el = addLine('bright');
+      const label = PROMPT + ' ~ % ';
+      el.textContent = label;
+      putCursor(el);
+      await sleep(420);
+      for (let i = 0; i < cmd.length; i++) {
+        el.textContent = label + cmd.slice(0, i + 1);
+        putCursor(el);
+        // Uneven cadence reads as hands rather than a loop.
+        await sleep(52 + Math.random() * 68);
+      }
+      await sleep(430);
+    }
 
-        const tick = setInterval(() => {
-          i = Math.min(text.length, i + step);
-          el.textContent = text.slice(0, i);
-          moveCursorTo(el);
-          if (i >= text.length) {
-            clearInterval(tick);
-            setTimeout(resolve, spec.pause || 120);
-          }
-        }, 28);
-      });
+    // Filling progress bar. The label is padded so bars line up in a column.
+    async function bar(label, addr, ms = 560, width = 18) {
+      const el = addLine();
+      const pad = label.padEnd(24, ' ');
+      for (let i = 0; i <= width; i++) {
+        const pct = String(Math.round((i / width) * 100)).padStart(3, ' ');
+        el.textContent = `[portal] ${pad}${addr}  ${'█'.repeat(i)}${'░'.repeat(width - i)} ${pct}%`;
+        await sleep(ms / width);
+      }
+    }
+
+    // Spinner resolving to OK, for work without a measurable size.
+    async function spin(label, ms = 640) {
+      const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+      const el = addLine();
+      const pad = label.padEnd(38, '.');
+      const t0 = Date.now();
+      let i = 0;
+      while (Date.now() - t0 < ms) {
+        el.textContent = `[portal] ${pad} ${frames[i++ % frames.length]}`;
+        await sleep(70);
+      }
+      el.textContent = `[portal] ${pad} OK`;
+      await sleep(90);
+    }
+
+    async function actShell() {
+      raw('ATLANTIS TERMLINK  ·  bash 4.20.69', 'dim');
+      raw('Last login: Sun Aug  3 04:20 on ttys000', 'dim');
+      spacer();
+      await sleep(340);
+
+      await command('ls');
+      raw('looking-glass.dev   portal   scenes/   README.dust', 'dim');
+      spacer();
+      await sleep(240);
+
+      await command('./portal --fullscreen');
+    }
+
+    async function actLoad() {
+      spacer();
+      await spin('verifying signature', 480);
+      await bar('mapping .text', '0x0000_1000', 480);
+      await bar('mapping .shaders', '0x0004_a800', 480);
+      await spin('opening looking glass /dev/eye0', 560);
+      await spin('calibrating landmark model', 700);
+      await type('[portal] portal online', 'amber', 9, 460);
+    }
+
+    async function actProgram() {
+      // The binary takes the terminal.
+      dropCursor();
+      await sleep(300);
+      out.textContent = '';
+      out.classList.add('app');
+      await sleep(170);
+
+      raw('╔══════════════════════════════════════════════════╗', 'banner');
+      raw('║   P O R T A L   v4.20.69                         ║', 'banner');
+      raw('║   CAMP ATLANTIS   ·   4:30 & B                   ║', 'banner');
+      raw('╚══════════════════════════════════════════════════╝', 'banner');
+      await sleep(480);
+
+      raw('SESSION', 'heading');
+      raw('  sysadmin — dr. boom boom, phd', 'dim');
+      raw('  clearance: unrestricted', 'dim');
+      await sleep(380);
+
+      raw('HOW TO USE', 'heading');
+      spacer();
+
+      addLine('hero').textContent = 'SHOW YOUR PALM TO THE LOOKING GLASS';
+      await sleep(850);
+
+      const steps = [
+        ['MOVE ', 'your hands to steer the portal'],
+        ['WATCH', 'it transports you every 30 seconds'],
+        ['STAY ', 'it follows you for as long as you are here'],
+      ];
+      for (const [k, rest] of steps) {
+        const el = addLine('step dim');
+        const key = document.createElement('span');
+        key.className = 'k';
+        key.textContent = k;
+        el.appendChild(key);
+        el.appendChild(document.createTextNode('  ' + rest));
+        await sleep(320);
+      }
+
+      spacer();
+      const waiting = addLine('amber');
+      waiting.textContent = '> awaiting hands';
+      putCursor(waiting);
+      await sleep(1100);
     }
 
     async function run() {
-      for (const spec of SCRIPT) await typeLine(spec);
-      if (cursorEl) cursorEl.remove();
-
-      // Hand over to the scene cycle.
       try {
-        window.parent.postMessage({ type: 'transition_to_active' }, '*');
+        await actShell();
+        await actLoad();
+        await actProgram();
       } catch (err) {
-        console.error('[termlink] could not signal the parent frame:', err);
+        console.error('[termlink] sequence failed:', err);
+      } finally {
+        dropCursor();
+        // Hand over regardless of what happened above; never leave the
+        // installation parked on the onboarding screen.
+        try {
+          window.parent.postMessage({ type: 'transition_to_active' }, '*');
+        } catch (err) {
+          console.error('[termlink] could not signal the parent frame:', err);
+        }
       }
     }
 
