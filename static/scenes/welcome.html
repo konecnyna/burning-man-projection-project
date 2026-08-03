@@ -459,8 +459,10 @@
        Act 4 is the one that does the actual onboarding. Acts 1-3 are watched;
        act 4 is done, and using the control is the only way it gets learned. It
        talks to the tracker over its own socket, so the hands it sees are
-       unfiltered by the parent's confidence gate -- a tentative first wave
-       should still move the ring.
+       unfiltered by the parent's confidence gate -- a tentative first wave should
+       still move the cursor. The telemetry count is the opposite: filtered at 0.7
+       and settled over 600ms, because a number a person reads should not flicker
+       even when the raw signal does.
 
        The parent HUD is deliberately hidden for this scene (HUDManager
        showForMode), because this screen brings its own chrome and the scene bar
@@ -730,6 +732,21 @@
       setTimeout(step, 2500 + Math.random() * 2000);
     }
 
+    // hand_moved / hand_detected both carry `hands` as a list, each entry with
+    // palm_center, wrist, landmarks and confidence. Highest confidence wins so the
+    // cursor does not flip between two hands mid-hold.
+    function pickHand(d) {
+      const hands = (d && d.hands) || [];
+      if (!hands.length) return null;
+      let best = hands[0];
+      for (const h of hands) {
+        const c = (h.confidence && h.confidence.overall) || 0;
+        const b = (best.confidence && best.confidence.overall) || 0;
+        if (c > b) best = h;
+      }
+      return best;
+    }
+
     // One socket for the whole page. The telemetry row and the hand cursor both
     // want tracker events, and a second connection would double per-frame
     // delivery to no end. Note the event key is `type`, not `event_type`.
@@ -778,8 +795,25 @@
       const stat = document.getElementById('trackStat');
       if (!dot || !label || !stat) return;
 
+      // The label is read by a person, so it is allowed to lag the data. A count
+      // that flickers 1/2/1 within a few frames is noise, and printing it makes
+      // the instrument look unreliable even when tracking is fine.
+      //
+      // Note this is a display concern only, deliberately not pushed into the
+      // tracker: settling the count upstream would delay every scene's reaction to
+      // a real hand by the same window, and the scenes want the raw signal.
+      const CONF_MIN = 0.7;       // same gate the parent applies before scenes see hands
+      const SETTLE_MS = 600;      // a changed count must hold this long to be shown
+      const HAND_GAP_MS = 500;    // no hand event for this long means zero hands
+
       const started = Date.now();
       let lastSeen = 0;
+      let lastHandAt = 0;
+      let rawConfident = 0;   // hands the parent would also accept
+      let rawPresent = 0;     // hands the tracker reports at all
+      let shownKey = null;
+      let candidate = null;
+      let candidateAt = 0;
 
       // Three distinct states, because they mean different things to whoever is
       // standing there: hands absent, sensor gone quiet, sensor never came up.
@@ -789,16 +823,56 @@
         stat.classList.toggle('error', !ok);
       }
 
-      function show(n) {
-        if (n > 0) set(`TRACK ${n} HAND${n === 1 ? '' : 'S'}`, true);
+      // Four states rather than three. ACQUIRING is the one that stops the strip
+      // contradicting the rest of the screen: the palm-lock gate accepts any hand
+      // the tracker reports, so without it the gauge could be filling while this
+      // said NO HANDS DETECTED. Now "something is there but not resolved" has its
+      // own words instead of being rounded to nothing.
+      function show(key, n) {
+        if (key === 'count') set(`TRACK ${n} HAND${n === 1 ? '' : 'S'}`, true);
+        else if (key === 'acquiring') set('ACQUIRING', true);
         else set('NO HANDS DETECTED', false);
       }
       set('TRACK --', false);
 
-      sensor.onFrame((data) => {
-        lastSeen = Date.now();
-        show(data.hand_count || 0);
+      // Liveness comes off the heartbeat; the count does not. frame_processed
+      // carries hand_count but no confidence, and an unfiltered count is exactly
+      // what was reporting two hands on one.
+      sensor.onFrame(() => { lastSeen = Date.now(); });
+
+      sensor.onHand((d) => {
+        const hands = (d && d.hands) || [];
+        rawPresent = hands.length;
+        rawConfident = hands.filter(
+          (h) => ((h.confidence && h.confidence.overall) || 0) >= CONF_MIN).length;
+        lastHandAt = Date.now();
       });
+
+      // hand_moved stops arriving entirely when the hands go, so zero has to be
+      // inferred from the gap rather than waited for.
+      setInterval(() => {
+        const now = Date.now();
+        if (!lastSeen || now - lastSeen > 2000) return;   // sensor states win below
+
+        const fresh = (now - lastHandAt) < HAND_GAP_MS;
+        const confident = fresh ? rawConfident : 0;
+        const present = fresh ? rawPresent : 0;
+
+        // Debounce the whole state, not just the number, so 1 -> ACQUIRING -> 1
+        // does not flicker either.
+        const key = confident > 0 ? `count:${confident}`
+                  : present > 0 ? 'acquiring'
+                  : 'none';
+
+        if (key !== candidate) {
+          candidate = key;
+          candidateAt = now;
+        } else if (candidate !== shownKey && now - candidateAt >= SETTLE_MS) {
+          shownKey = candidate;
+          show(candidate.startsWith('count') ? 'count' : candidate,
+               parseInt(candidate.split(':')[1] || '0', 10));
+        }
+      }, 100);
 
       // A missing heartbeat is not the same as zero hands. Distinguish never
       // having started from having stopped -- with no camera attached the
@@ -864,10 +938,15 @@
 
       sensor.onFrame(() => { sawFrame = true; });
       sensor.onHand((d) => {
-        const p = d && (d.palm_center || d.wrist);
+        // hand_moved and hand_detected both carry data.hands as a LIST -- there is
+        // no palm_center at the top level. Reading one there is why the gauge sat
+        // at zero with a hand plainly detected: every event returned early.
+        const hand = pickHand(d);
+        if (!hand) return;
+        const p = hand.palm_center || hand.wrist;
         if (!p) return;
         // The tracker already mirrors the frame (cv2.flip in hand_tracker), so x
-        // maps straight to screen x -- moving right moves the ring right. Do not
+        // maps straight to screen x -- moving right moves the cursor right. Do not
         // mirror again here.
         target = { x: p.x, y: p.y };
         lastHandAt = Date.now();
