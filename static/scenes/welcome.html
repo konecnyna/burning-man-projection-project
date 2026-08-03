@@ -216,11 +216,18 @@
 
     /* Status lamps on deliberately unrelated periods, so the panel reads as
        several independent subsystems rather than one blinking thing. */
+    /* Drawn, not typed. U+25CF BLACK CIRCLE is not in Share Tech Mono, and a
+       fallback glyph would sit on a different baseline at a different size. */
     .lamp::before {
-      content: '\u25CF';
-      color: var(--phos);
-      margin-right: 0.45em;
-      text-shadow: 0 0 8px var(--phos-glow);
+      content: '';
+      display: inline-block;
+      width: 0.42em;
+      height: 0.42em;
+      margin-right: 0.5em;
+      border-radius: 50%;
+      background: var(--phos);
+      box-shadow: 0 0 8px var(--phos-glow);
+      vertical-align: baseline;
     }
     .lamp.l1::before { animation: lamp 2.3s infinite steps(1); }
     .lamp.l2::before { animation: lamp 3.1s infinite steps(1); }
@@ -240,14 +247,17 @@
       background: var(--phos);
       box-shadow: 0 0 6px var(--phos-glow);
     }
-    .bars b:nth-child(1) { height: 30%; animation: sig 1.9s infinite ease-in-out; }
-    .bars b:nth-child(2) { height: 55%; animation: sig 1.9s infinite ease-in-out 0.15s; }
-    .bars b:nth-child(3) { height: 78%; animation: sig 1.9s infinite ease-in-out 0.3s; }
-    .bars b:nth-child(4) { height: 100%; animation: sig 1.9s infinite ease-in-out 0.45s; }
+    /* Reads as a real meter rather than a decoration: two bars held, the third
+       flicking in and out, the fourth never reaching. Signal 2-3 of 4. */
+    .bars b { background: var(--phos-dim); opacity: 0.3; }
+    .bars b:nth-child(1) { height: 30%;  background: var(--phos); opacity: 1; }
+    .bars b:nth-child(2) { height: 55%;  background: var(--phos); opacity: 1; }
+    .bars b:nth-child(3) { height: 78%;  animation: sig3 1.7s infinite steps(1); }
+    .bars b:nth-child(4) { height: 100%; }
 
-    @keyframes sig {
-      0%, 100% { opacity: 0.35; }
-      45%      { opacity: 1; }
+    @keyframes sig3 {
+      0%,  54% { background: var(--phos); opacity: 1; }
+      55%, 100% { background: var(--phos-dim); opacity: 0.3; }
     }
 
     .cursor {
@@ -416,14 +426,15 @@
       const pad = label.padEnd(20, ' ');
       for (let i = 0; i <= width; i++) {
         const pct = String(Math.round((i / width) * 100)).padStart(3, ' ');
-        el.textContent = `[${BIN}] ${pad}${addr}  ${'█'.repeat(i)}${'░'.repeat(width - i)} ${pct}%`;
+        el.textContent = `[${BIN}] ${pad}${addr}  [${'#'.repeat(i)}${'.'.repeat(width - i)}] ${pct}%`;
         await sleep(ms / width);
       }
     }
 
     // Spinner resolving to OK, for work without a measurable size.
     async function spin(label, ms = 640) {
-      const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+      // ASCII spinner: the braille frames this used are not in the webfont.
+      const frames = ['|', '/', '-', '\\'];
       const el = addLine();
       const pad = label.padEnd(32, '.');
       const t0 = Date.now();
