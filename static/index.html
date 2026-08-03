@@ -843,7 +843,7 @@
     <!-- Persistent strip: what is playing and what is next -->
     <div class="status-bar hud-element" id="status-bar">
       <div class="status-item">
-        <span id="currentScene">Scene: Loading</span>
+        <span id="currentScene">Portal: Loading</span>
       </div>
       <div class="status-item">
         <span class="countdown-label" id="sceneCountdownLabel">NEXT</span>
@@ -1709,7 +1709,7 @@
 
           // Persistent "what is playing" readout.
           const sceneLabel = document.getElementById('currentScene');
-          if (sceneLabel) sceneLabel.textContent = `Scene: ${scene.name || scene.id}`;
+          if (sceneLabel) sceneLabel.textContent = `Portal: ${scene.name || scene.id}`;
 
           const container = document.getElementById('scene-container');
 
