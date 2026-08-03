@@ -449,9 +449,10 @@
 
        When the sequence ends it posts `transition_to_active`, which the parent
        listens for. Every wait in act 4 is bounded -- no hand, hand then absent,
-       or no camera at all each give up and hand over. The deadline is shown as a
-       dim countdown, but only after a couple of seconds of nothing happening, so
-       it reaches the people who might feel stuck and nobody else. If nobody is actually
+       or no camera at all each give up and hand over -- but a present palm is
+       never overridden by a timer. The dim countdown says how much longer to
+       hold, and only mentions a missing palm after a couple of seconds of
+       nothing, so it reaches whoever might feel stuck and nobody else. If nobody is actually
        there, ModeManager's 45s idle timer takes over as well.
 
        NB: the element and variable are deliberately not called `screen`.
@@ -761,11 +762,20 @@
     // camera at all. Each one gives up and hands over rather than parking the
     // installation on this screen.
     async function actCalibrate(sensor, beatEls) {
-      const NEED_TRAVEL = 1.15;   // normalised units of hand travel to count as learned
+      // The gate is a sustained palm, not distance travelled. Three seconds of
+      // continuous detection is a deliberately demanding ask: it proves the
+      // person is standing where the camera can hold them, which is exactly what
+      // the rest of the piece needs and what a quick wave does not establish.
+      const HOLD_MS = 3000;
+      const GRACE_MS = 600;       // a dropped frame or two is not losing the palm
       const WIDTH = 16;
-      const GIVE_UP_MS = 20000;   // they walked away mid-onboarding
-      const SHOW_WAIT_MS = 2500;  // only tell someone about the deadline if they might feel stuck
+      const SHOW_WAIT_MS = 2500;
       const NO_SENSOR_MS = 4000;  // no heartbeat at all -- do not stall on a dead camera
+      // Last resort only, for hands that flicker in and out so badly the hold can
+      // never complete. In that state the parent sees hand_detected often enough
+      // to keep clearing its idle timer, so nothing else would ever free this
+      // screen. Long enough that no ordinary visitor reaches it.
+      const STALL_CAP_MS = 90000;
 
       for (const el of beatEls) el.remove();
 
@@ -781,8 +791,7 @@
 
       const reticle = document.getElementById('reticle');
       let target = null;
-      let last = null;
-      let travel = 0;
+      let lastHandAt = 0;
       let sawFrame = false;
 
       sensor.onFrame(() => { sawFrame = true; });
@@ -793,8 +802,7 @@
         // maps straight to screen x -- moving right moves the ring right. Do not
         // mirror again here.
         target = { x: p.x, y: p.y };
-        if (last) travel += Math.hypot(p.x - last.x, p.y - last.y);
-        last = { x: p.x, y: p.y };
+        lastHandAt = Date.now();
       });
 
       // Smoothed follow: one element, one rAF, cancelled on the way out. Raw
@@ -818,26 +826,42 @@
 
       const t0 = Date.now();
       let learned = false;
+      let held = 0;
+      let prev = Date.now();
       try {
         for (;;) {
-          const pct = Math.min(1, travel / NEED_TRAVEL);
+          const now = Date.now();
+          const dt = now - prev;
+          prev = now;
+          const fresh = lastHandAt > 0 && (now - lastHandAt) < GRACE_MS;
+
+          // Continuous is the requirement, so losing the palm past the grace
+          // window sends them back to zero rather than pausing the gauge.
+          held = fresh ? held + dt : 0;
+
+          const pct = Math.min(1, held / HOLD_MS);
           const fill = Math.round(pct * WIDTH);
           // No [BIN] prefix: that belongs to loader log output, not to the
           // program's own interface.
-          meter.textContent = `CALIBRATION  `
+          meter.textContent = `PALM LOCK  `
             + `${'\u2588'.repeat(fill)}${'\u2591'.repeat(WIDTH - fill)} `
             + `${String(Math.round(pct * 100)).padStart(3, ' ')}%`;
           if (pct >= 1) { learned = true; break; }
 
-          const waited = Date.now() - t0;
-          if (waited > SHOW_WAIT_MS) {
-            const left = Math.max(0, Math.ceil((GIVE_UP_MS - waited) / 1000));
-            wait.textContent = `opens in ${left}s`;
+          // The countdown is now what they asked for rather than a deadline: how
+          // much longer to hold. Only prompts about a missing palm once someone
+          // has been standing there long enough to wonder.
+          const waited = now - t0;
+          if (fresh) {
+            wait.textContent = `hold ${Math.max(1, Math.ceil((HOLD_MS - held) / 1000))}s`;
+            wait.classList.add('on');
+          } else if (waited > SHOW_WAIT_MS) {
+            wait.textContent = 'show your palm to the looking glass';
             wait.classList.add('on');
           }
 
           if (!sawFrame && waited > NO_SENSOR_MS) break;
-          if (waited > GIVE_UP_MS) break;
+          if (waited > STALL_CAP_MS) break;
           await sleep(80);
         }
 
