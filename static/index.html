@@ -1438,6 +1438,14 @@
 
         // Scene configurations
         this.scenes = [  
+          {
+            id: 'physarum',
+            name: 'Slime Mould',
+            description: 'A living network grows toward your hands and reroutes as you move',
+            duration: this.popularScene,
+            html_file: 'scenes/physarum/index.html',
+            background_color: '#000000'
+          },
            {
             id: 'kaleidoscope',
             name: 'Kaleidoscope',
@@ -1713,7 +1721,7 @@
           // Anything not listed is injected with innerHTML, which does NOT run
           // scripts -- the scene renders as inert markup with no error.
           // Adding a cycling scene means adding its id to this list.
-          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'kaleidoscope', 'finger_paint', 'idle'].includes(scene.id)) {
+          if (['fluidsim', 'cosmic_symbolism', 'psychedelic_waves', 'tie_dye', 'orbits', 'wireframe_geometry', 'pong', 'kaleidoscope', 'finger_paint', 'physarum', 'idle'].includes(scene.id)) {
             container.innerHTML = `<iframe id="scene-iframe" src="/${scene.html_file}" style="width: 100%; height: 100%; border: none;"></iframe>`;
 
             setTimeout(() => {

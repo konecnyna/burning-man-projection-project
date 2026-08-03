@@ -39,13 +39,14 @@ Both are registered with `duration: 0`, which means "never auto-advance".
 
 | Order | id | Duration | Directory |
 |---|---|---|---|
-| 1 | `kaleidoscope` | 30 s | `scenes/kaleidoscope/` |
-| 2 | `fluidsim` | 60 s | `scenes/fluidsim/` |
-| 3 | `cosmic_symbolism` | 60 s | `scenes/cosmic-symbolism/` |
-| 4 | `tie_dye` | 45 s | `scenes/tie-dye/` |
-| 5 | `kaleidoscope` | 60 s | `scenes/kaleidoscope/` |
+| 1 | `physarum` | 60 s | `scenes/physarum/` |
+| 2 | `kaleidoscope` | 30 s | `scenes/kaleidoscope/` |
+| 3 | `fluidsim` | 60 s | `scenes/fluidsim/` |
+| 4 | `cosmic_symbolism` | 60 s | `scenes/cosmic-symbolism/` |
+| 5 | `tie_dye` | 45 s | `scenes/tie-dye/` |
+| 6 | `kaleidoscope` | 60 s | `scenes/kaleidoscope/` |
 
-Full cycle ≈ 4 min 15 s.
+Full cycle ≈ 5 min 15 s.
 
 `kaleidoscope` appears twice with the same `id`. Cycling is index-based so both
 entries play, but any lookup by id resolves to the first.
@@ -100,7 +101,7 @@ The two lists have diverged:
 
 | List | Line | Contents |
 |---|---|---|
-| `SceneManager.loadScene` | 1446 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `wireframe_geometry`, `pong`, `kaleidoscope`, `finger_paint`, `idle` |
+| `SceneManager.loadScene` | 1446 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `wireframe_geometry`, `pong`, `kaleidoscope`, `finger_paint`, `physarum`, `idle` |
 | `HandTrackingKiosk.loadScene` | 2309 | `fluidsim`, `cosmic_symbolism`, `psychedelic_waves`, `tie_dye`, `orbits`, `finger_paint`, `idle`, `onboarding` |
 
 Each list happens to cover what its own path needs today, so nothing is broken

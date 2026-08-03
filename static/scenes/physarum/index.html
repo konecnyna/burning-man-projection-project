@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>PHYSARUM</title>
+  <script src="/static/socket.io.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      /* The simulation runs at reduced resolution and is scaled up. Smoothing
+         is what makes it read as glowing filaments rather than chunky pixels. */
+      image-rendering: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="stage"></canvas>
+
+  <script>
+    /* =====================================================================
+       PHYSARUM — slime mould growth, steered by hands.
+
+       Jones (2010): each agent has a position and a heading. It samples the
+       trail map at three points ahead (left, centre, right), turns toward
+       whichever is strongest, steps forward, and deposits trail. The trail
+       map then diffuses and decays. Nothing tells the colony what to build;
+       the network is emergent.
+
+       Hands deposit a strong attractant, so the colony grows toward whoever
+       is standing there and reroutes when they move.
+
+       Why CPU and not WebGL: the sensing step needs to read the trail map
+       every frame. On the GPU that means a readPixels stall, so the usual
+       fix is keeping agent state in a float texture, which is a lot of
+       shader machinery. Running the whole thing on typed arrays at reduced
+       resolution is simpler, easier to tune, and leaves the GPU alone --
+       which matters because fluidsim already leans on it and there is 8GB
+       shared with the rest of the system.
+       ===================================================================== */
+
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    // ---------------------------------------------------------------- tuning
+    const CFG = {
+      SCALE: 3,             // sim pixel = SCALE screen px. Higher = cheaper.
+      AGENTS: 22000,        // agent count; the main cost knob
+      SENSOR_ANGLE: 0.42,   // radians between centre and side sensors (SA)
+      SENSOR_DIST: 9,       // how far ahead it looks, in sim px (SO)
+      TURN_ANGLE: 0.55,     // how sharply it turns toward the best sample (RA)
+      STEP: 1.05,           // sim px moved per frame (SS)
+      DEPOSIT: 22,          // trail laid per agent per frame
+      DECAY: 0.94,          // trail retained per frame
+      WANDER: 0.10,         // random heading jitter, keeps it organic
+      HAND_DEPOSIT: 300,    // attractant strength under a hand
+      HAND_RADIUS: 26,      // sim px
+      MAX_TRAIL: 700,       // clamp, so colour mapping stays stable
+      CONFIDENCE_MIN: 0.6,  // own socket gets unfiltered hands, so filter here
+      HUE_DRIFT: 0.0035,    // slow palette rotation, degrees per frame
+    };
+
+    let W = 0, H = 0;        // sim dimensions
+    let trail, scratch;      // Float32Array trail maps (ping-pong for blur)
+    let ax, ay, ah;          // agent x, y, heading
+    let image;               // ImageData for the sim-resolution render
+    let hue = 190;           // current palette base
+    let hands = [];          // [{x, y}] in sim coords
+
+    // Colour lookup, rebuilt when the hue drifts. Mapping trail -> colour per
+    // pixel every frame is the second-biggest cost after diffusion, so it is
+    // a 256-entry table rather than per-pixel maths.
+    const RAMP = new Uint8Array(256 * 3);
+
+    function buildRamp(h) {
+      for (let i = 0; i < 256; i++) {
+        const t = i / 255;
+        // Dark violet -> cyan -> hot white. Faint trails stay almost black so
+        // the network reads as light against nothing.
+        const l = Math.pow(t, 0.75);
+        const [r, g, b] = hsvToRgb(
+          (h + t * 55) % 360,
+          Math.max(0, 1 - t * 1.15),
+          Math.min(1, l * 1.5)
+        );
+        RAMP[i * 3] = r; RAMP[i * 3 + 1] = g; RAMP[i * 3 + 2] = b;
+      }
+    }
+
+    function hsvToRgb(h, s, v) {
+      const c = v * s;
+      const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+      const m = v - c;
+      let r = 0, g = 0, b = 0;
+      if (h < 60) { r = c; g = x; }
+      else if (h < 120) { r = x; g = c; }
+      else if (h < 180) { g = c; b = x; }
+      else if (h < 240) { g = x; b = c; }
+      else if (h < 300) { r = x; b = c; }
+      else { r = c; b = x; }
+      return [((r + m) * 255) | 0, ((g + m) * 255) | 0, ((b + m) * 255) | 0];
+    }
+
+    function resize() {
+      W = Math.max(160, Math.floor(window.innerWidth / CFG.SCALE));
+      H = Math.max(120, Math.floor(window.innerHeight / CFG.SCALE));
+
+      canvas.width = W;
+      canvas.height = H;
+
+      trail = new Float32Array(W * H);
+      scratch = new Float32Array(W * H);
+      image = ctx.createImageData(W, H);
+
+      // Opaque alpha once; only RGB changes per frame.
+      const d = image.data;
+      for (let i = 3; i < d.length; i += 4) d[i] = 255;
+
+      seedAgents();
+    }
+
+    function seedAgents() {
+      ax = new Float32Array(CFG.AGENTS);
+      ay = new Float32Array(CFG.AGENTS);
+      ah = new Float32Array(CFG.AGENTS);
+
+      // Start on a ring: the colony then grows outward and inward at once,
+      // which looks far better than a uniform scatter.
+      const cx = W / 2, cy = H / 2;
+      const r0 = Math.min(W, H) * 0.28;
+      for (let i = 0; i < CFG.AGENTS; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = r0 * (0.75 + Math.random() * 0.5);
+        ax[i] = cx + Math.cos(a) * r;
+        ay[i] = cy + Math.sin(a) * r;
+        ah[i] = a + Math.PI / 2 + (Math.random() - 0.5);
+      }
+    }
+
+    // Trail sample with wrapping, so the colony has no edges to pile up on.
+    function sample(x, y) {
+      let ix = x | 0, iy = y | 0;
+      ix = ((ix % W) + W) % W;
+      iy = ((iy % H) + H) % H;
+      return trail[iy * W + ix];
+    }
+
+    function stepAgents() {
+      const { SENSOR_ANGLE, SENSOR_DIST, TURN_ANGLE, STEP, DEPOSIT, WANDER } = CFG;
+
+      for (let i = 0; i < CFG.AGENTS; i++) {
+        const x = ax[i], y = ay[i], h = ah[i];
+
+        // Three sensors ahead.
+        const fc = sample(x + Math.cos(h) * SENSOR_DIST,
+                          y + Math.sin(h) * SENSOR_DIST);
+        const hl = h - SENSOR_ANGLE;
+        const fl = sample(x + Math.cos(hl) * SENSOR_DIST,
+                          y + Math.sin(hl) * SENSOR_DIST);
+        const hr = h + SENSOR_ANGLE;
+        const fr = sample(x + Math.cos(hr) * SENSOR_DIST,
+                          y + Math.sin(hr) * SENSOR_DIST);
+
+        let nh = h;
+        if (fc > fl && fc > fr) {
+          // Straight ahead is best: hold course.
+        } else if (fl > fr) {
+          nh -= TURN_ANGLE;
+        } else if (fr > fl) {
+          nh += TURN_ANGLE;
+        } else {
+          // Tie (usually empty space): pick a side, or it deadlocks.
+          nh += (Math.random() < 0.5 ? -TURN_ANGLE : TURN_ANGLE);
+        }
+
+        nh += (Math.random() - 0.5) * WANDER;
+
+        let nx = x + Math.cos(nh) * STEP;
+        let ny = y + Math.sin(nh) * STEP;
+
+        // Wrap rather than reflect: reflecting builds a bright rim.
+        if (nx < 0) nx += W; else if (nx >= W) nx -= W;
+        if (ny < 0) ny += H; else if (ny >= H) ny -= H;
+
+        ax[i] = nx; ay[i] = ny; ah[i] = nh;
+
+        const idx = (ny | 0) * W + (nx | 0);
+        trail[idx] += DEPOSIT;
+      }
+    }
+
+    function depositHands() {
+      if (!hands.length) return;
+      const r = CFG.HAND_RADIUS, r2 = r * r;
+
+      for (const hand of hands) {
+        const hx = hand.x | 0, hy = hand.y | 0;
+        for (let dy = -r; dy <= r; dy++) {
+          const y = hy + dy;
+          if (y < 0 || y >= H) continue;
+          for (let dx = -r; dx <= r; dx++) {
+            const x = hx + dx;
+            if (x < 0 || x >= W) continue;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > r2) continue;
+            // Soft falloff, so it is an attractant gradient rather than a
+            // hard disc the agents would orbit.
+            const f = 1 - Math.sqrt(d2) / r;
+            trail[y * W + x] += CFG.HAND_DEPOSIT * f * f;
+          }
+        }
+      }
+    }
+
+    // Separable 3-tap blur plus decay. Separable because a 9-tap box would
+    // roughly triple the per-frame cost for no visible gain at this scale.
+    function diffuseAndDecay() {
+      const decay = CFG.DECAY;
+
+      // Horizontal pass, wrapping.
+      for (let y = 0; y < H; y++) {
+        const row = y * W;
+        for (let x = 0; x < W; x++) {
+          const l = trail[row + (x === 0 ? W - 1 : x - 1)];
+          const c = trail[row + x];
+          const r = trail[row + (x === W - 1 ? 0 : x + 1)];
+          scratch[row + x] = (l + c + r) * 0.3333333;
+        }
+      }
+
+      // Vertical pass, wrapping, with decay folded in.
+      const maxT = CFG.MAX_TRAIL;
+      for (let y = 0; y < H; y++) {
+        const row = y * W;
+        const up = (y === 0 ? H - 1 : y - 1) * W;
+        const dn = (y === H - 1 ? 0 : y + 1) * W;
+        for (let x = 0; x < W; x++) {
+          let v = (scratch[up + x] + scratch[row + x] + scratch[dn + x]) * 0.3333333 * decay;
+          if (v > maxT) v = maxT;
+          else if (v < 0.02) v = 0;   // snap to zero, keeps the background black
+          trail[row + x] = v;
+        }
+      }
+    }
+
+    function render() {
+      const d = image.data;
+      const scaleToByte = 255 / CFG.MAX_TRAIL;
+      const n = W * H;
+
+      for (let i = 0, p = 0; i < n; i++, p += 4) {
+        let v = trail[i] * scaleToByte;
+        if (v > 255) v = 255;
+        const c = (v | 0) * 3;
+        d[p] = RAMP[c];
+        d[p + 1] = RAMP[c + 1];
+        d[p + 2] = RAMP[c + 2];
+      }
+      ctx.putImageData(image, 0, 0);
+    }
+
+    let rampHue = -1;
+
+    function frame() {
+      hue = (hue + CFG.HUE_DRIFT) % 360;
+      // Rebuilding 256 entries every frame is wasted work; once per degree is
+      // indistinguishable.
+      if ((hue | 0) !== rampHue) { rampHue = hue | 0; buildRamp(hue); }
+
+      depositHands();
+      stepAgents();
+      diffuseAndDecay();
+      render();
+
+      requestAnimationFrame(frame);
+    }
+
+    // ------------------------------------------------------------- hand feed
+    // Own socket connection (mechanism A in SCENES.md). Hands arrive
+    // unfiltered on this path, so confidence filtering happens here.
+    const socket = io();
+
+    socket.on('connect', () => {
+      socket.emit('subscribe', {
+        events: ['hand_moved', 'hand_detected', 'hand_lost']
+      });
+    });
+
+    function handleHands(list) {
+      const out = [];
+      for (const h of (list || [])) {
+        if (!h.palm_center) continue;
+        if ((h.confidence && h.confidence.overall || 0) < CFG.CONFIDENCE_MIN) continue;
+        out.push({
+          x: h.palm_center.x * W,
+          y: h.palm_center.y * H
+        });
+      }
+      hands = out;
+    }
+
+    socket.on('event', (event) => {
+      try {
+        if (event.type === 'hand_lost' && !(event.data.hands || []).length) {
+          hands = [];
+          return;
+        }
+        if (event.data && event.data.hands) handleHands(event.data.hands);
+      } catch (err) {
+        console.error('[physarum] hand event failed:', err);
+      }
+    });
+
+    // --------------------------------------------------------------- startup
+    window.addEventListener('resize', resize);
+    resize();
+    buildRamp(hue);
+    frame();
+  </script>
+</body>
+
+</html>
