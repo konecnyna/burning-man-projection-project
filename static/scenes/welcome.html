@@ -113,6 +113,17 @@
        line, so one consistent set of metrics keeps the bar aligned. */
     .blocks { font-family: 'Menlo', 'SF Mono', 'Monaco', monospace; }
 
+    /* The calibration meter lives on the program screen, where .screen.app
+       raises font-size to 1.5em. At the loader's size it measured 1544px
+       against a 1267px content box, i.e. it wrapped. Sized down to sit with the
+       telemetry row rather than with the headline. */
+    .cal {
+      font-size: 0.6em;
+      letter-spacing: 0.14em;
+      color: var(--phos-dim);
+      margin-top: 0.4em;
+    }
+
     /* Braille exists in exactly one place on this machine: Apple Braille.
        Scoped to the spinner glyph only, which is the last thing on its line, so
        a different advance width cannot shift anything to its right. */
@@ -210,6 +221,43 @@
     }
 
     .chrome.on { opacity: 1; }
+
+    /* Live hand cursor for the calibration act. This is the only thing on the
+       screen the audience drives, and it is here to teach exactly one idea:
+       your hand moves this. Driven by transform so following a hand costs no
+       layout work. */
+    .reticle {
+      position: absolute;
+      left: 0; top: 0;
+      width: 4.6vh;
+      height: 4.6vh;
+      margin: -2.3vh 0 0 -2.3vh;
+      border: 2px solid var(--phos);
+      border-radius: 50%;
+      background: rgba(51, 255, 102, 0.06);
+      box-shadow: 0 0 22px var(--phos-glow), inset 0 0 14px rgba(51, 255, 102, 0.18);
+      opacity: 0;
+      transition: opacity 0.45s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .reticle.on { opacity: 1; }
+
+    /* Tick marks, so it reads as an instrument rather than a dot. */
+    .reticle::before,
+    .reticle::after {
+      content: '';
+      position: absolute;
+      background: var(--phos);
+    }
+    .reticle::before { left: 50%; top: -0.9vh; width: 2px; height: 1.8vh; margin-left: -1px; }
+    .reticle::after  { top: 50%; left: -0.9vh; height: 2px; width: 1.8vh; margin-top: -1px; }
+
+    .reticle.locked {
+      border-color: var(--amber);
+      box-shadow: 0 0 30px var(--amber-glow), inset 0 0 16px rgba(255, 176, 66, 0.22);
+    }
+    .reticle.locked::before, .reticle.locked::after { background: var(--amber); }
 
     /* The four corner marks only. This was `.chrome i`, which also caught the
        <i class="dot"> status indicators nested inside the telemetry row --
@@ -348,6 +396,9 @@
       </div>
     </div>
 
+    <!-- Hand cursor. Revealed during calibration, hidden again on hand-off. -->
+    <div class="reticle" id="reticle"></div>
+
     <div class="shimmer"></div>
   </div>
 
@@ -360,19 +411,31 @@
 
        Three acts, because a story is easier to follow than a boot log:
 
-         1. a shell, logged in as dr_boom_boom, who runs ./portal
-         2. the binary loading -- segment maps, progress bars, a spinner
+         1. a shell, logged in as dr_boom_boom, who runs ./hippie-trap
+         2. the binary loading -- segment maps, progress bars, spinners
          3. the program clearing the screen and taking over with the
             instructions, the way a real terminal program would
+         4. calibration -- a ring that follows the hand, which the audience
+            has to move before the portal opens
 
        Act 3 clearing the screen is the point of the structure: it turns the
        instructions into a program's interface rather than one more line of log
        output, so they read as the thing you are meant to act on.
 
-       No hand tracking here -- reaching this scene already required a
-       confident hand to leave idle. When the sequence ends it posts
-       `transition_to_active`, which the parent listens for. If nobody is
-       actually there, ModeManager's 45s idle timer takes over.
+       Act 4 is the one that does the actual onboarding. Acts 1-3 are watched;
+       act 4 is done, and using the control is the only way it gets learned. It
+       talks to the tracker over its own socket, so the hands it sees are
+       unfiltered by the parent's confidence gate -- a tentative first wave
+       should still move the ring.
+
+       The parent HUD is deliberately hidden for this scene (HUDManager
+       showForMode), because this screen brings its own chrome and the scene bar
+       on top of it reads as two interfaces fighting.
+
+       When the sequence ends it posts `transition_to_active`, which the parent
+       listens for. Every wait in act 4 is bounded -- no hand, hand then absent,
+       or no camera at all each give up and hand over. If nobody is actually
+       there, ModeManager's 45s idle timer takes over as well.
 
        NB: the element and variable are deliberately not called `screen`.
        window.screen exists, and an element id also gets named access on
@@ -480,27 +543,40 @@
       raw('ATLANTIS TERMLINK  ·  bash 4.20.69', 'dim');
       raw('Last login: Sun Aug  3 04:20 on ttys000', 'dim');
       spacer();
-      await sleep(340);
+      await sleep(900);
 
       await command('ls');
       raw('hippie-trap   looking-glass.dev   scenes/   README.dust', 'dim');
       spacer();
-      await sleep(240);
+      await sleep(520);
+
+      // A beat of flavour before the launch. This exists to give the sequence
+      // somewhere to breathe -- people are still walking up at this point.
+      await command('cat README.dust');
+      raw('the portal answers to hands, not keys.', 'dim');
+      await sleep(360);
+      raw('stand close. be seen. it does the rest.', 'dim');
+      spacer();
+      await sleep(680);
 
       await command('./hippie-trap --fullscreen');
     }
 
     async function actLoad() {
       spacer();
-      await spin('verifying signature', 480);
-      await bar('mapping .text', '0x0000_1000', 480);
-      await bar('mapping .shaders', '0x0004_a800', 480);
-      await spin('opening looking glass /dev/eye0', 560);
-      await spin('calibrating landmark model', 700);
-      await type(`[${BIN}] hippie trap armed`, 'amber', 9, 460);
+      await spin('verifying signature', 520);
+      await bar('mapping .text', '0x0000_1000', 520);
+      await bar('mapping .rodata', '0x0002_c000', 460);
+      await bar('mapping .shaders', '0x0004_a800', 560);
+      await spin('seeding entropy from dust', 520);
+      await spin('opening looking glass /dev/eye0', 640);
+      await spin('calibrating landmark model', 780);
+      await bar('loading scene table', '0x0011_0000', 620);
+      await spin('warming frame buffer', 560);
+      await type(`[${BIN}] hippie trap armed`, 'amber', 9, 520);
     }
 
-    async function actProgram() {
+    async function actProgram(sensor) {
       // The binary takes the terminal. Clearing is what turns the instructions
       // into a program's interface rather than more log output.
       dropCursor();
@@ -509,7 +585,7 @@
       out.classList.add('app');
       document.getElementById('chrome').classList.add('on');
       meterLoop();
-      trackTelemetry();
+      trackTelemetry(sensor);
       await sleep(220);
 
       // The address in block letters is the anchor now. The program name is
@@ -517,11 +593,11 @@
       // space is better spent on the address and the instruction.
       raw('4:30 & B', 'addr');
       raw('PORTAL  ·  CAMP ATLANTIS', 'subtitle');
-      await sleep(1000);
+      await sleep(1500);
 
       // The instruction. Everything else on this screen exists to frame it.
       addLine('hero').textContent = 'RAISE YOUR PALM';
-      await sleep(1000);
+      await sleep(1400);
 
       // Cinematic rather than a manual: one idea a line, fading in on a beat,
       // written to be understood at a glance from across a dark camp. The
@@ -532,12 +608,18 @@
         'move — and it moves with you',
         'somewhere new every 30 seconds',
       ];
+      // Handed back so the calibration act can clear them -- the screen has room
+      // for the address, one instruction and the meter, not for all of it at once.
+      const beatEls = [];
       for (const b of beats) {
-        addLine('beat').textContent = b;
-        await sleep(1050);
+        const el = addLine('beat');
+        el.textContent = b;
+        beatEls.push(el);
+        await sleep(1300);
       }
 
-      await sleep(700);
+      await sleep(1100);
+      return beatEls;
     }
 
     // ---------------------------------------------------------- telemetry
@@ -569,8 +651,49 @@
       setTimeout(step, 2500 + Math.random() * 2000);
     }
 
+    // One socket for the whole page. The telemetry row and the hand cursor both
+    // want tracker events, and a second connection would double per-frame
+    // delivery to no end. Note the event key is `type`, not `event_type`.
+    //
+    // This page talks to the tracker directly rather than through the parent, so
+    // the hands here are unfiltered -- the parent's confidence >= 0.7 gate does
+    // not apply. That is what we want while teaching the control: a tentative
+    // first wave should still move the ring.
+    function connectSensor() {
+      const frameFns = [];
+      const handFns = [];
+      let socket = null;
+
+      try {
+        socket = io();
+      } catch (err) {
+        console.error('[termlink] socket unavailable:', err);
+      }
+
+      if (socket) {
+        socket.on('connect', () => {
+          socket.emit('subscribe', {
+            events: ['frame_processed', 'hand_moved', 'hand_detected'],
+          });
+        });
+        socket.on('event', (event) => {
+          if (!event) return;
+          if (event.type === 'frame_processed') {
+            for (const fn of frameFns) fn(event.data || {});
+          } else if (event.type === 'hand_moved' || event.type === 'hand_detected') {
+            for (const fn of handFns) fn(event.data || {});
+          }
+        });
+      }
+
+      return {
+        onFrame(fn) { frameFns.push(fn); },
+        onHand(fn) { handFns.push(fn); },
+      };
+    }
+
     // Real hand count off the tracker's heartbeat, which carries hand_count.
-    function trackTelemetry() {
+    function trackTelemetry(sensor) {
       const dot = document.querySelector('#trackStat .dot');
       const label = document.getElementById('trackText');
       const stat = document.getElementById('trackStat');
@@ -593,23 +716,9 @@
       }
       set('TRACK --', false);
 
-      let socket;
-      try {
-        socket = io();
-      } catch (err) {
-        console.error('[termlink] socket unavailable:', err);
-        return;
-      }
-
-      socket.on('connect', () => {
-        socket.emit('subscribe', { events: ['frame_processed'] });
-      });
-
-      socket.on('event', (event) => {
-        if (event && event.type === 'frame_processed') {
-          lastSeen = Date.now();
-          show(event.data.hand_count || 0);
-        }
+      sensor.onFrame((data) => {
+        lastSeen = Date.now();
+        show(data.hand_count || 0);
       });
 
       // A missing heartbeat is not the same as zero hands. Distinguish never
@@ -626,11 +735,106 @@
       }, 1000);
     }
 
+    // The act that actually onboards. Everything before it is a story the
+    // audience watches; this is the part they do, and doing it is the only way
+    // the control gets learned.
+    //
+    // Fails soft in three directions, because nobody is here to unstick it: the
+    // hand never appears, the hand appears and wanders off, or there is no
+    // camera at all. Each one gives up and hands over rather than parking the
+    // installation on this screen.
+    async function actCalibrate(sensor, beatEls) {
+      const NEED_TRAVEL = 1.15;   // normalised units of hand travel to count as learned
+      const WIDTH = 16;
+      const GIVE_UP_MS = 30000;   // they walked away mid-onboarding
+      const NO_SENSOR_MS = 4000;  // no heartbeat at all -- do not stall on a dead camera
+
+      for (const el of beatEls) el.remove();
+
+      const prompt = addLine('hero');
+      prompt.textContent = 'NOW MOVE IT';
+      const meter = addLine('blocks cal');
+      const hint = addLine('beat');
+      hint.textContent = 'the ring follows your hand';
+
+      const reticle = document.getElementById('reticle');
+      let target = null;
+      let last = null;
+      let travel = 0;
+      let sawFrame = false;
+
+      sensor.onFrame(() => { sawFrame = true; });
+      sensor.onHand((d) => {
+        const p = d && (d.palm_center || d.wrist);
+        if (!p) return;
+        // The tracker already mirrors the frame (cv2.flip in hand_tracker), so x
+        // maps straight to screen x -- moving right moves the ring right. Do not
+        // mirror again here.
+        target = { x: p.x, y: p.y };
+        if (last) travel += Math.hypot(p.x - last.x, p.y - last.y);
+        last = { x: p.x, y: p.y };
+      });
+
+      // Smoothed follow: one element, one rAF, cancelled on the way out. Raw
+      // landmark positions jitter enough to look broken at 140 inches.
+      let raf = 0;
+      let cx = 0.5, cy = 0.5, shown = false;
+      const follow = () => {
+        if (target) {
+          if (!shown) {
+            cx = target.x; cy = target.y; shown = true;
+            reticle.classList.add('on');
+          }
+          cx += (target.x - cx) * 0.22;
+          cy += (target.y - cy) * 0.22;
+          reticle.style.transform =
+            `translate(${cx * window.innerWidth}px, ${cy * window.innerHeight}px)`;
+        }
+        raf = requestAnimationFrame(follow);
+      };
+      raf = requestAnimationFrame(follow);
+
+      const t0 = Date.now();
+      let learned = false;
+      try {
+        for (;;) {
+          const pct = Math.min(1, travel / NEED_TRAVEL);
+          const fill = Math.round(pct * WIDTH);
+          // No [BIN] prefix: that belongs to loader log output, not to the
+          // program's own interface.
+          meter.textContent = `CALIBRATION  `
+            + `${'\u2588'.repeat(fill)}${'\u2591'.repeat(WIDTH - fill)} `
+            + `${String(Math.round(pct * 100)).padStart(3, ' ')}%`;
+          if (pct >= 1) { learned = true; break; }
+
+          const waited = Date.now() - t0;
+          if (!sawFrame && waited > NO_SENSOR_MS) break;
+          if (waited > GIVE_UP_MS) break;
+          await sleep(80);
+        }
+
+        if (learned) {
+          reticle.classList.add('locked');
+          prompt.textContent = 'LINKED';
+          hint.textContent = 'the portal is yours';
+          await sleep(1800);
+        } else {
+          hint.textContent = sawFrame ? 'starting anyway' : 'looking glass offline — starting anyway';
+          await sleep(1100);
+        }
+      } finally {
+        cancelAnimationFrame(raf);
+        reticle.classList.remove('on');
+      }
+    }
+
     async function run() {
       try {
         await actShell();
         await actLoad();
-        await actProgram();
+        const sensor = connectSensor();
+        const beatEls = await actProgram(sensor);
+        await actCalibrate(sensor, beatEls);
       } catch (err) {
         console.error('[termlink] sequence failed:', err);
       } finally {

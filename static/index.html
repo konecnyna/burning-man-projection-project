@@ -1006,8 +1006,9 @@
     // change, and when the piece is about to return to idle. This is UI, not
     // instrumentation; the old debug readouts are deliberately not here.
     //
-    // Visibility is per-mode: hidden in idle (the screensaver should be clean),
-    // shown in onboarding and active.
+    // Visibility is per-mode: shown in active only. Idle is the screensaver and
+    // should be clean, and onboarding draws its own terminal chrome -- the
+    // scene bar and countdown on top of that read as two competing interfaces.
     // ============================================================================
     class HUDManager {
       constructor(appState) {
@@ -1026,8 +1027,9 @@
       hideForMode() { this.hide(); }
 
       showForMode(mode) {
-        // Idle is the screensaver -- nothing on top of it.
-        if (mode === 'idle') this.hide(); else this.show();
+        // Idle is the screensaver and onboarding is a full-screen terminal that
+        // brings its own status row; neither wants the parent HUD over it.
+        if (mode === 'idle' || mode === 'onboarding') this.hide(); else this.show();
       }
 
 
@@ -1272,7 +1274,8 @@
       }
 
       onEnterOnboarding() {
-        this.hudManager.showForMode('onboarding');
+        // Onboarding runs its own chrome; the parent HUD stays down for it.
+        this.hudManager.hide();
         this.clearIdleTimer();
         this.hideIdleWarning();
 
