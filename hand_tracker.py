@@ -425,44 +425,60 @@ class HandTracker:
         # Larger size = closer = higher score
         distance_score = max(0.0, min(1.0, (hand_size - 0.05) / 0.10))
         
-        # Boost for very large hands (very close)
-        if hand_size > 0.12:
-            distance_score = min(1.0, distance_score * 1.1)
-        
-        # 6. Overall confidence. mediapipe_confidence was already read above --
-        #    it used to be extracted twice, identically, per hand per frame.
+        # 6. Overall confidence.
         #
-        #    NOTE: these weights are known to be wrong and are left alone on
-        #    purpose. distance_score is 45% of a number the frontend treats as
-        #    "is this a hand", and avg_visibility is always 0.0 because MediaPipe
-        #    never populates visibility on hand landmarks. Measured at 6ft: a
-        #    still palm clears the 0.7 scene gate in 30% of frames, a moving one
-        #    in 8%, and the 0.75 idle-wake gate has never been reached at all.
-        #    Retune from recorded samples using /calibrate rather than by
-        #    guesswork -- its model lab re-scores real hands against candidate
-        #    weightings, which is why the components below are all reported.
-        # Blend MediaPipe confidence with our metrics, heavily weighting distance
+        #    This answers one question -- is this a hand we can track -- and so it
+        #    is dominated by the only term that is actually a model's opinion on
+        #    that. The previous blend gave 45% of the weight to apparent hand
+        #    size, which made the score largely a proximity meter, and the
+        #    frontend gates interaction on it at 0.70 and idle wake at 0.75.
+        #
+        #    Measured at 6 feet, the working distance of the installation, with a
+        #    hand plainly in view (451 and 450 samples):
+        #
+        #      still palm    overall p50 0.690   cleared 0.70 in 30.2% of frames
+        #      moving palm   overall p50 0.677   cleared 0.70 in  8.2% of frames
+        #      idle wake at 0.75                 never reached, 0 of ~1350 samples
+        #
+        #    MediaPipe's own score was 0.933 and 0.930 across those two -- it was
+        #    certain both times. The blend was discarding a clean signal and
+        #    replacing it with noise about where the person stood and whether they
+        #    were moving, and it penalised movement, which is the one thing the
+        #    onboarding explicitly asks for.
+        #
+        #    Two terms are gone from the blend rather than reweighted:
+        #
+        #      visibility  MediaPipe never populates it on hand landmarks, so it
+        #                  was 0.000 in all 388 samples checked. It was a flat
+        #                  0.05 of the scale that could never be earned.
+        #      stability   a moving hand is not less likely to be a hand. This was
+        #                  measuring intent, badly, inside a detection score.
+        #
+        #    Both are still reported below, so /calibrate can model them.
+        #
+        #    distance keeps a small share. It is not evidence of hand-ness, but it
+        #    does discriminate the phantom detections seen at 6ft, which had a
+        #    hand_size of 0.038 against a real 0.096. At 0.10 it cannot gate out a
+        #    legitimate hand: a real hand too far to register any distance score
+        #    still lands near 0.85.
         if mediapipe_confidence > 0:
             overall_confidence = (
-                mediapipe_confidence * 0.35 +  # MediaPipe base confidence
-                distance_score * 0.45 +       # Heavily weight distance (closer = better)
-                presence_score * 0.1 +
-                avg_visibility * 0.05 +
-                stability_score * 0.05
+                mediapipe_confidence * 0.75 +
+                presence_score * 0.15 +
+                distance_score * 0.10
             )
         else:
-            # Fallback to our own calculation with heavy distance weighting
+            # No handedness score to lean on, so fall back to the sanity checks.
+            # Deliberately cannot reach 0.75: without MediaPipe's opinion this
+            # should never be confident enough to wake the installation.
             overall_confidence = (
-                distance_score * 0.45 +       # Distance is dominant factor
-                presence_score * 0.25 +
-                avg_visibility * 0.2 +
-                stability_score * 0.1
+                presence_score * 0.45 +
+                distance_score * 0.25
             )
-        
-        # Apply confidence boost for close, high-quality detections
-        if distance_score > 0.8 and presence_score > 0.95:
-            overall_confidence = min(1.0, overall_confidence * 1.1)
-        
+
+        # No multiplicative boosts. There were two, both keyed on apparent size,
+        # and with these weights the blend already reaches 1.0 on its own.
+
         confidence_result = {
             'overall': round(overall_confidence, 3),
             'visibility': round(avg_visibility, 3),
