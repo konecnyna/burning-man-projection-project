@@ -910,8 +910,6 @@
         this.state = {
           // Core application state
           isConnected: false,
-          confidence: 0,
-          eventCount: 0,
 
           // Mode state
           currentMode: 'idle', // idle, onboarding, active, transitioning
@@ -1835,30 +1833,6 @@
         const sceneManager = this;
 
         // Idle scene handler
-        this.sceneHandlers.idle = {
-          onInit: function () {
-          },
-          onHandDetected: function (hands) {
-            // Mode manager will handle transition
-          },
-          onHandMove: function (hands) {
-            // No interaction needed
-          },
-          onHandLost: function () {
-            // No action needed
-          }
-        };
-
-        // Onboarding scene handler
-        // TERMLINK boot screen drives itself; see the note on the other
-        // onboarding handler. Nothing to do from the parent.
-        this.sceneHandlers.onboarding = {
-          onInit: function () { },
-          onHandDetected: function () { },
-          onHandMove: function () { },
-          onHandLost: function () { },
-          onCleanup: function () { }
-        };
       }
     }
 
@@ -1878,29 +1852,11 @@
         // UI state
 
         // Subscribe to application state changes
-        this.setupStateSubscriptions();
 
         // Initialize components
         this.initializeSocket();
 
         // Start in idle mode
-      }
-
-      // Setup subscriptions to state changes
-      setupStateSubscriptions() {
-
-        // Subscribe to confidence updates
-        this.appState.subscribe('confidence', () => {
-        });
-
-        // Subscribe to mode changes for HUD visibility
-        this.appState.subscribe('currentMode', (mode) => {
-          this.updateHUDVisibility(mode);
-        });
-      }
-
-      // Update HUD visibility based on mode
-      updateHUDVisibility(mode) {
       }
 
       initializeSocket() {
@@ -1926,11 +1882,9 @@
       }
 
       handleEvent(event) {
-        // Update event count
-        this.appState.setState({
-          eventCount: this.appState.get('eventCount') + 1
-        });
-
+        // No bookkeeping here on purpose: this runs 30-60x/second, and the
+        // counter that used to live here was written on every event and read by
+        // nothing. Removing it halves the setState calls on the hot path.
         switch (event.type) {
           case 'hand_moved':
             this.processHandEvent(event.data.hands);
