@@ -78,7 +78,24 @@ class HandTracker:
                 source="hand_tracker"
             ))
             return
-            
+
+        # Log what the camera actually negotiated. Nothing sets the capture size,
+        # so this is whatever the device defaults to -- and until now it was
+        # unknowable without attaching a debugger, which made "is the frame big
+        # enough to see a hand at six feet" an unanswerable question.
+        #
+        # Deliberately not forced to a smaller size. Less data over USB would be
+        # cheaper, but MediaPipe costs ~11ms/frame at any input resolution, and
+        # downscaling could cost detection range on the distant hands that are
+        # already marginal. Change it only with /calibrate measurements either
+        # side of the change.
+        logger.info(
+            "Camera %s opened: %dx%d @ %.0f fps (device default, not set by us)",
+            camera_index,
+            int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            self.cap.get(cv2.CAP_PROP_FPS))
+
         self.running = True
         self.thread = threading.Thread(target=self._tracking_loop)
         self.thread.daemon = True
@@ -352,31 +369,39 @@ class HandTracker:
                 valid_landmarks += 1
         presence_score = valid_landmarks / total_landmarks if total_landmarks > 0 else 0.0
         
-        # 3. Hand classification confidence (if available)
-        classification_score = 0.95  # Higher default score
+        # 3. MediaPipe's own handedness score. This is the only number here that
+        #    is actually a model's confidence that it is looking at a hand.
+        mediapipe_confidence = 0.0
         if hasattr(results, 'multi_handedness') and results.multi_handedness:
             if hand_idx < len(results.multi_handedness):
                 handedness = results.multi_handedness[hand_idx]
                 if hasattr(handedness, 'classification') and handedness.classification:
-                    classification_score = handedness.classification[0].score
-        
-        # 4. Stability score (how much the hand moved since last frame)
-        stability_score = 1.0  # Start with perfect stability
-        if self.previous_hands and hand_idx < len(self.previous_hands):
-            prev_palm = self.previous_hands[hand_idx].get('palm_center', {})
-            if prev_palm:
-                # Calculate palm center from current landmarks
-                wrist = landmarks[0]
-                palm_x = (wrist.x + landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 5
-                palm_y = (wrist.y + landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 5
-                
-                # Calculate movement distance
-                dx = palm_x - prev_palm.get('x', palm_x)
-                dy = palm_y - prev_palm.get('y', palm_y)
-                movement = (dx*dx + dy*dy) ** 0.5
-                
-                # Convert movement to stability score (less movement = higher stability)
-                stability_score = max(0.0, 1.0 - (movement * 8))  # Reduced sensitivity
+                    mediapipe_confidence = handedness.classification[0].score
+        classification_score = mediapipe_confidence or 0.95
+
+        # 4. Stability score (how much this hand moved since last frame).
+        #
+        #    Matched to the NEAREST hand in the previous frame, not to whichever
+        #    hand held the same index. MediaPipe's detection order is not stable
+        #    and _assign_persistent_ids reorders on top of that, so indexing by
+        #    position could measure hand A against hand B's last location and
+        #    report a still hand as violently unstable. Nearest-neighbour is also
+        #    what the ID assignment itself does, so the two now agree.
+        wrist = landmarks[0]
+        palm_x = (wrist.x + landmarks[5].x + landmarks[9].x + landmarks[13].x + landmarks[17].x) / 5
+        palm_y = (wrist.y + landmarks[5].y + landmarks[9].y + landmarks[13].y + landmarks[17].y) / 5
+
+        stability_score = 1.0  # No previous frame to compare against
+        nearest = None
+        for prev in self.previous_hands:
+            prev_palm = prev.get('palm_center') or {}
+            if 'x' not in prev_palm or 'y' not in prev_palm:
+                continue
+            d = ((palm_x - prev_palm['x']) ** 2 + (palm_y - prev_palm['y']) ** 2) ** 0.5
+            if nearest is None or d < nearest:
+                nearest = d
+        if nearest is not None:
+            stability_score = max(0.0, 1.0 - (nearest * 8))
         
         # 5. Distance score based on hand size (closer hands appear larger)
         # Calculate hand span using key landmarks
@@ -404,15 +429,18 @@ class HandTracker:
         if hand_size > 0.12:
             distance_score = min(1.0, distance_score * 1.1)
         
-        # 6. Overall confidence calculation with distance weighting
-        # Use MediaPipe's actual confidence if available, otherwise compute our own
-        mediapipe_confidence = 0.0
-        if hasattr(results, 'multi_handedness') and results.multi_handedness:
-            if hand_idx < len(results.multi_handedness):
-                handedness = results.multi_handedness[hand_idx]
-                if hasattr(handedness, 'classification') and handedness.classification:
-                    mediapipe_confidence = handedness.classification[0].score
-        
+        # 6. Overall confidence. mediapipe_confidence was already read above --
+        #    it used to be extracted twice, identically, per hand per frame.
+        #
+        #    NOTE: these weights are known to be wrong and are left alone on
+        #    purpose. distance_score is 45% of a number the frontend treats as
+        #    "is this a hand", and avg_visibility is always 0.0 because MediaPipe
+        #    never populates visibility on hand landmarks. Measured at 6ft: a
+        #    still palm clears the 0.7 scene gate in 30% of frames, a moving one
+        #    in 8%, and the 0.75 idle-wake gate has never been reached at all.
+        #    Retune from recorded samples using /calibrate rather than by
+        #    guesswork -- its model lab re-scores real hands against candidate
+        #    weightings, which is why the components below are all reported.
         # Blend MediaPipe confidence with our metrics, heavily weighting distance
         if mediapipe_confidence > 0:
             overall_confidence = (
