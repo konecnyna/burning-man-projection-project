@@ -93,6 +93,15 @@
 
     canvas { display: block; width: 100%; border: 1px solid var(--line); background: #030603; }
 
+    /* Per-hand identity. The open question is whether two hands are ever seen at
+       the same instant, and one colour for everything cannot show that -- two
+       hands alternating and one hand jumping look identical. */
+    .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 10px; margin-top: 6px; }
+    .legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; vertical-align: -1px; }
+    .simul { display: flex; gap: 16px; align-items: baseline; margin: 8px 0 2px; }
+    .simul b { font-size: 20px; font-weight: normal; font-variant-numeric: tabular-nums; }
+    .simul .lab { font-size: 10px; letter-spacing: 0.1em; }
+
     button {
       font: inherit; font-size: 11px; letter-spacing: 0.14em;
       background: transparent; color: var(--phos); border: 1px solid var(--line);
@@ -176,10 +185,18 @@
   <div class="panel">
     <h2>Frame coverage — where hands are seen</h2>
     <canvas id="map" width="640" height="360"></canvas>
+    <div class="simul">
+      <div><div class="dim lab">SIMULTANEOUS</div><b id="simNow">0</b></div>
+      <div><div class="dim lab">MAX SEEN</div><b id="simMax">0</b></div>
+      <div><div class="dim lab">2+ HANDS, LAST 10s</div><b id="simRate">--</b></div>
+      <div><div class="dim lab">SEPARATION</div><b id="simSep">--</b></div>
+    </div>
+    <div class="legend" id="legend"></div>
     <div class="note">
-      Live positions plus a fading trail of everywhere a hand has been detected.
-      If a second hand never appears, this shows whether it was outside the
-      frame or simply not detected inside it.
+      Live positions plus a fading trail, coloured per hand. MAX SEEN latches the
+      most hands ever present in one event, so a second hand that appeared only
+      briefly still registers. If a second hand never appears, the trail shows
+      whether it was outside the frame or simply not detected inside it.
       <button id="clearMap" style="margin-left:6px">CLEAR</button>
     </div>
   </div>
@@ -248,6 +265,12 @@
   const $ = (id) => document.getElementById(id);
   const TERMS = ['overall', 'mediapipe', 'distance', 'stability', 'presence', 'hand_size'];
 
+  // Hand IDs are reissued after any zero-hand frame, so these cycle. That is
+  // fine -- the colours only need to separate hands within one moment, not
+  // across a session.
+  const HAND_COLORS = ['#33ff66', '#ffb042', '#4fd2ff', '#ff6bd6', '#c8ff5a', '#ff5252'];
+  const colorFor = (id) => HAND_COLORS[(Number(id) || 0) % HAND_COLORS.length];
+
   // ------------------------------------------------------------- state
   let hands = [];            // latest raw hands
   let fps = 0;
@@ -255,6 +278,8 @@
   const roll = [];           // {t, best} for the rolling pass rate
   let holdSince = 0;
   const trail = [];          // fading detection positions, bounded
+  const simRoll = [];        // {t, n} simultaneous-hand counts, last 10s
+  let simMax = 0;            // latched: most hands ever seen in one event
   let trial = null;          // {label, t0, rows[], perEvent[]}
   let recorded = null;       // last completed trial
 
@@ -294,10 +319,17 @@
     for (const h of hs) {
       const p = h.palm_center;
       if (p) {
-        trail.push({ x: p.x, y: p.y, t: now });
+        trail.push({ x: p.x, y: p.y, t: now, id: h.hand_id });
         if (trail.length > 1200) trail.shift();   // bounded; this page can be left open
       }
     }
+
+    // Latched rather than sampled: a second hand present for three frames is
+    // still the answer to "can it see two at once", and a live readout would
+    // blink past it.
+    if (hs.length > simMax) simMax = hs.length;
+    simRoll.push({ t: now, n: hs.length });
+    while (simRoll.length && now - simRoll[0].t > 10000) simRoll.shift();
     const best = bestOverall(hs);
     roll.push({ t: now, best });
     while (roll.length && now - roll[0].t > 10000) roll.shift();
@@ -360,6 +392,24 @@
     $('szFill').style.width = Math.min(100, (sz / 0.2) * 100) + '%';
     $('szLbl').textContent = sz ? sz.toFixed(3) : '—';
 
+    // Simultaneity readout
+    $('simNow').textContent = live.length;
+    $('simMax').textContent = simMax;
+    const rr = simRoll.filter((r) => now - r.t <= 10000);
+    $('simRate').textContent = rr.length
+      ? Math.round(rr.filter((r) => r.n >= 2).length / rr.length * 100) + '%' : '--';
+    if (live.length > 1) {
+      const p = live.map((h) => h.palm_center).filter(Boolean);
+      let d = 0;
+      for (let i = 1; i < p.length; i++)
+        d = Math.max(d, Math.hypot(p[i].x - p[i-1].x, p[i].y - p[i-1].y));
+      $('simSep').textContent = d.toFixed(2);
+    } else $('simSep').textContent = '--';
+
+    $('legend').innerHTML = live.length
+      ? live.map((h) => `<span><i style="background:${colorFor(h.hand_id)}"></i>hand #${h.hand_id ?? '?'}</span>`).join('')
+      : '<span class="dim">no hands</span>';
+
     $('holdSec').textContent = holdSince ? ((now - holdSince) / 1000).toFixed(1) + 's' : '0.0s';
     const seen = roll.filter((r) => r.best > 0);
     $('rollPass').textContent = seen.length
@@ -390,27 +440,50 @@
     for (const p of trail) {
       const age = (now - p.t) / 20000;
       if (age > 1) continue;
-      cx.fillStyle = `rgba(51,255,102,${0.28 * (1 - age)})`;
+      cx.globalAlpha = 0.3 * (1 - age);
+      cx.fillStyle = colorFor(p.id);
       cx.fillRect(p.x * W - 1.5, p.y * H - 1.5, 3, 3);
     }
+    cx.globalAlpha = 1;
 
     const stale = !lastFrameAt || now - lastFrameAt > 1500;
     if (!stale) {
+      const pts = [];
       for (const h of hands) {
         const p = h.palm_center; if (!p) continue;
         const c = h.confidence || {};
         const ok = (c.overall || 0) >= parseFloat($('w_gate').value);
-        cx.strokeStyle = ok ? '#33ff66' : '#ff5252';
+        const col = colorFor(h.hand_id);
+        pts.push({ x: p.x * W, y: p.y * H, nx: p.x, ny: p.y });
+
+        // Colour is identity, the dashed ring is the gate. Keeping those on
+        // separate channels means a failing second hand is still identifiable
+        // as the second hand.
+        cx.strokeStyle = col;
         cx.lineWidth = 2;
+        cx.setLineDash(ok ? [] : [4, 4]);
         cx.beginPath(); cx.arc(p.x * W, p.y * H, 16, 0, Math.PI * 2); cx.stroke();
-        cx.fillStyle = ok ? '#33ff66' : '#ff5252';
+        cx.setLineDash([]);
+        cx.fillStyle = col;
         cx.font = '11px Menlo, monospace';
-        cx.fillText(`#${h.hand_id ?? '?'} ${(c.overall || 0).toFixed(2)}`, p.x * W + 21, p.y * H + 4);
+        cx.fillText(`#${h.hand_id ?? '?'} ${(c.overall || 0).toFixed(2)}${ok ? '' : ' ✕'}`,
+                    p.x * W + 21, p.y * H + 4);
+      }
+
+      // Join simultaneous hands, so two-at-once is unmistakable on the wall.
+      if (pts.length > 1) {
+        cx.strokeStyle = 'rgba(255,176,66,0.5)';
+        cx.lineWidth = 1;
+        cx.setLineDash([3, 3]);
+        for (let i = 1; i < pts.length; i++) {
+          cx.beginPath(); cx.moveTo(pts[i-1].x, pts[i-1].y); cx.lineTo(pts[i].x, pts[i].y); cx.stroke();
+        }
+        cx.setLineDash([]);
       }
     }
   }
 
-  $('clearMap').onclick = () => { trail.length = 0; };
+  $('clearMap').onclick = () => { trail.length = 0; simMax = 0; simRoll.length = 0; };
 
   // ---------------------------------------------------------------- trial
   function median(a) {
