@@ -60,17 +60,20 @@
     }
     // this is here because all my js was being cached forever and i aint got no version control okay?
     var hue;
-    function linee(width) {
+    // Draws one pointer's ribbon. Takes the chain rather than reaching for the
+    // global Mouse.xA/yA, because there is one of these per hand now.
+    function linee(width, chain) {
+      var xA = chain.xA, yA = chain.yA;
       ctx.lineCap = "round";
       ctx.lineJoin = "miter";
       ctx.lineWidth = width || 2;
       ctx.beginPath();
       for (var i = 64; i > 0; i--) {
-        ctx.moveTo(Mouse.xA[i - 1], Mouse.yA[i - 1]);
-        ctx.lineTo(Mouse.xA[i], Mouse.yA[i]);
-        var a = (Mouse.xA[i] - Mouse.xA[i - 1]) || 1;
-        var b = (Mouse.yA[i] - Mouse.yA[i - 1]) || 1;
-        hue = (-time / 9) + (i * 2) + (hypotenuse(a, b) * 6) + aRandomNumber;
+        ctx.moveTo(xA[i - 1], yA[i - 1]);
+        ctx.lineTo(xA[i], yA[i]);
+        var a = (xA[i] - xA[i - 1]) || 1;
+        var b = (yA[i] - yA[i - 1]) || 1;
+        hue = (-time / 9) + (i * 2) + (hypotenuse(a, b) * 6) + aRandomNumber + chain.hueShift;
         ctx.strokeStyle = hsla(hue, 100, 50, 1);
         ctx.lineWidth = Math.max(width - (hypotenuse(a, b) / 2), 2);
         ctx.stroke();
@@ -91,15 +94,21 @@
         decay2(0, 0, -32, Math.PI + Mouse.clicks + 1)
       }
 
-      if ((Mouse.x <= 20 && Mouse.y <= 20)  /*top left*/ ||
-        (Mouse.x >= cw - 20 && Mouse.y <= 20)  /*top right*/ ||
-        (Mouse.x >= cw - 20 && Mouse.y >= ch - 20)  /*bottom right*/ ||
-        (Mouse.x <= 20 && Mouse.y >= ch - 20)  /* bottom left*/) {
-        clearCanvas(0.1);
-      }
+      // One ribbon per hand, up to the tracker's four. Corner-hold still
+      // clears, and any hand can do it -- not just whichever one is first.
+      var chains = Mouse.chains;
+      for (var n = 0; n < chains.length; n++) {
+        var c = chains[n];
+        if (c.x === -1 && c.y === -1) continue;
 
-      if (Mouse.x !== -1 && Mouse.y !== -1) {
-        linee(12);
+        if ((c.x <= 20 && c.y <= 20)  /*top left*/ ||
+          (c.x >= cw - 20 && c.y <= 20)  /*top right*/ ||
+          (c.x >= cw - 20 && c.y >= ch - 20)  /*bottom right*/ ||
+          (c.x <= 20 && c.y >= ch - 20)  /* bottom left*/) {
+          clearCanvas(0.1);
+        }
+
+        linee(12, c);
       }
     }
     animloop();
