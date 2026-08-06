@@ -729,10 +729,12 @@
       // actually about the audience -- the hand model warming up -- so it should
       // show progress rather than just eventually claim success.
       //
-      // Label is exactly 20 characters so it fills bar()'s padEnd column and the
-      // addresses stay aligned with the row above; 'calibrating landmark model'
-      // would have overrun it by six and pushed that row's address out of line.
-      await bar('landmark calibration', '0x0008_2c00', 1350);
+      // Label kept under bar()'s padEnd(20) column so the addresses stay aligned
+      // with the row above. 'calibrating landmark model' overran it by six and
+      // pushed the address out of line; 'landmark calibration' was worse, being
+      // exactly 20, which left padEnd nothing to add and butted the label
+      // straight against the address with no gap at all.
+      await bar('calibrating model', '0x0008_2c00', 1350);
       // Tag passed as a flag, not baked into the string: the tag is a span now,
       // and typing rewrites only the body after it.
       await type('hippie trap armed', 'blocks amber', 9, 520, true);
