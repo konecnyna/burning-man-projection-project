@@ -641,14 +641,16 @@
       const label = PROMPT + ' ~ % ';
       el.textContent = label;
       putCursor(el);
-      await sleep(420);
+      await sleep(260);
       for (let i = 0; i < cmd.length; i++) {
         el.textContent = label + cmd.slice(0, i + 1);
         putCursor(el);
-        // Uneven cadence reads as hands rather than a loop.
-        await sleep(52 + Math.random() * 68);
+        // Uneven cadence reads as hands rather than a loop. Quick: this is
+        // somebody who has typed it a hundred times, and the boot is the part
+        // the audience is waiting through rather than watching.
+        await sleep(30 + Math.random() * 38);
       }
-      await sleep(430);
+      await sleep(280);
     }
 
     // Filling progress bar. The label is padded so bars line up in a column.
@@ -694,12 +696,12 @@
       raw('ATLANTIS TERMLINK  ·  bash 4.20.69', 'dim');
       raw('Last login: Sun Aug  3 04:20 on ttys000', 'dim');
       spacer();
-      await sleep(900);
+      await sleep(450);
 
       await command('ls');
       raw('hippie-trap   looking-glass.dev   scenes/   README.dust', 'dim');
       spacer();
-      await sleep(520);
+      await sleep(300);
 
       await command('./hippie-trap --fullscreen');
     }
@@ -722,9 +724,9 @@
       //
       // Each remaining step is slower, so the act still takes about as long as
       // it did. Fewer lines, same pacing.
-      await spin('verifying signature', 800);
-      await bar('mapping image', '0x0000_1000', 1200);
-      await spin('opening looking glass /dev/eye0', 1150);
+      await spin('verifying signature', 520);
+      await bar('mapping image', '0x0000_1000', 820);
+      await spin('opening looking glass /dev/eye0', 720);
       // A filling bar, not a spinner resolving to OK. This is the step that is
       // actually about the audience -- the hand model warming up -- so it should
       // show progress rather than just eventually claim success.
@@ -734,10 +736,65 @@
       // pushed the address out of line; 'landmark calibration' was worse, being
       // exactly 20, which left padEnd nothing to add and butted the label
       // straight against the address with no gap at all.
-      await bar('calibrating model', '0x0008_2c00', 1350);
+      await bar('calibrating model', '0x0008_2c00', 900);
       // Tag passed as a flag, not baked into the string: the tag is a span now,
       // and typing rewrites only the body after it.
-      await type('hippie trap armed', 'blocks amber', 9, 520, true);
+      await type('hippie trap armed', 'blocks amber', 9, 380, true);
+    }
+
+    // Live hand cursor, running from the moment the program takes the screen
+    // until hand-off.
+    //
+    // It used to start only when the calibration act began, which taught the
+    // wrong thing: people raise a hand while still reading RAISE YOUR PALM, and
+    // for those several seconds nothing on screen answered them. Now the first
+    // thing they try works, and the instructions are describing something they
+    // have already felt.
+    //
+    // Shows and hides with the hand rather than latching on, so an empty frame
+    // reads as "it is not seeing you" instead of a stuck cursor.
+    function startHandCursor(sensor) {
+      const reticle = document.getElementById('reticle');
+      const state = { target: null, lastHandAt: 0, sawFrame: false, raf: 0 };
+
+      sensor.onFrame(() => { state.sawFrame = true; });
+      sensor.onHand((d) => {
+        const hand = pickHand(d);
+        if (!hand) return;
+        const p = hand.palm_center || hand.wrist;
+        if (!p) return;
+        // The tracker already mirrors the frame (cv2.flip in hand_tracker), so x
+        // maps straight to screen x. Do not mirror again here.
+        state.target = { x: p.x, y: p.y };
+        state.lastHandAt = Date.now();
+      });
+
+      // Smoothed follow: one element, one rAF, driven by transform so there is
+      // no layout work per frame. Raw landmark positions jitter enough to look
+      // broken at 140 inches.
+      let cx = 0.5, cy = 0.5, placed = false;
+      const follow = () => {
+        const fresh = state.lastHandAt && (Date.now() - state.lastHandAt) < 500;
+        if (state.target && fresh) {
+          if (!placed) { cx = state.target.x; cy = state.target.y; placed = true; }
+          cx += (state.target.x - cx) * 0.22;
+          cy += (state.target.y - cy) * 0.22;
+          reticle.style.transform =
+            `translate(${cx * window.innerWidth}px, ${cy * window.innerHeight}px)`;
+        } else if (!fresh) {
+          placed = false;   // next hand snaps to where it actually is
+        }
+        reticle.classList.toggle('on', !!fresh);
+        state.raf = requestAnimationFrame(follow);
+      };
+      state.raf = requestAnimationFrame(follow);
+
+      state.lock = () => reticle.classList.add('locked');
+      state.stop = () => {
+        cancelAnimationFrame(state.raf);
+        reticle.classList.remove('on');
+      };
+      return state;
     }
 
     async function actProgram(sensor) {
@@ -750,6 +807,7 @@
       document.getElementById('chrome').classList.add('on');
       meterLoop();
       trackTelemetry(sensor);
+      const handCursor = startHandCursor(sensor);
       await sleep(220);
 
       // The address in block letters is the anchor now. The program name is
@@ -787,7 +845,7 @@
       }
 
       await sleep(1100);
-      return { beatEls, heroEl };
+      return { beatEls, heroEl, handCursor };
     }
 
     // ---------------------------------------------------------- telemetry
@@ -983,7 +1041,7 @@
     // hand never appears, the hand appears and wanders off, or there is no
     // camera at all. Each one gives up and hands over rather than parking the
     // installation on this screen.
-    async function actCalibrate(sensor, beatEls, heroEl) {
+    async function actCalibrate(sensor, beatEls, heroEl, handCursor) {
       // The gate is a sustained palm, not distance travelled. Three seconds of
       // continuous detection is a deliberately demanding ask: it proves the
       // person is standing where the camera can hold them, which is exactly what
@@ -1045,114 +1103,84 @@
       // one. Re-fit now that everything has stopped moving.
       fitViewport();
 
-      const reticle = document.getElementById('reticle');
-      let target = null;
-      let lastHandAt = 0;
-      let sawFrame = false;
-
-      sensor.onFrame(() => { sawFrame = true; });
-      sensor.onHand((d) => {
-        // hand_moved and hand_detected both carry data.hands as a LIST -- there is
-        // no palm_center at the top level. Reading one there is why the gauge sat
-        // at zero with a hand plainly detected: every event returned early.
-        const hand = pickHand(d);
-        if (!hand) return;
-        const p = hand.palm_center || hand.wrist;
-        if (!p) return;
-        // The tracker already mirrors the frame (cv2.flip in hand_tracker), so x
-        // maps straight to screen x -- moving right moves the cursor right. Do not
-        // mirror again here.
-        target = { x: p.x, y: p.y };
-        lastHandAt = Date.now();
-      });
-
-      // Smoothed follow: one element, one rAF, cancelled on the way out. Raw
-      // landmark positions jitter enough to look broken at 140 inches.
-      let raf = 0;
-      let cx = 0.5, cy = 0.5, shown = false;
-      const follow = () => {
-        if (target) {
-          if (!shown) {
-            cx = target.x; cy = target.y; shown = true;
-            reticle.classList.add('on');
-          }
-          cx += (target.x - cx) * 0.22;
-          cy += (target.y - cy) * 0.22;
-          reticle.style.transform =
-            `translate(${cx * window.innerWidth}px, ${cy * window.innerHeight}px)`;
-        }
-        raf = requestAnimationFrame(follow);
-      };
-      raf = requestAnimationFrame(follow);
+      // The cursor has been running since the program took the screen, so this
+      // act reads its state rather than starting a second copy. Registering
+      // another pair of sensor listeners and another rAF here would have run two
+      // followers against one element for the rest of the scene.
+      const freshHand = () =>
+        handCursor.lastHandAt > 0 && (Date.now() - handCursor.lastHandAt) < GRACE_MS;
 
       const t0 = Date.now();
       let learned = false;
       let held = 0;
       let prev = Date.now();
-      try {
-        for (;;) {
-          const now = Date.now();
-          const dt = now - prev;
-          prev = now;
-          const fresh = lastHandAt > 0 && (now - lastHandAt) < GRACE_MS;
+      for (;;) {
+        const now = Date.now();
+        const dt = now - prev;
+        prev = now;
+        const fresh = freshHand();
 
-          // Continuous is the requirement, so losing the palm past the grace
-          // window sends them back to zero rather than pausing the gauge.
-          held = fresh ? held + dt : 0;
+        // Continuous is the requirement, so losing the palm past the grace
+        // window sends them back to zero rather than pausing the gauge.
+        held = fresh ? held + dt : 0;
 
-          const pct = Math.min(1, held / HOLD_MS);
-          const fill = Math.round(pct * WIDTH);
-          // No [BIN] prefix: that belongs to loader log output, not to the
-          // program's own interface.
-          meter.textContent = `PALM LOCK  `
-            + `${'\u2588'.repeat(fill)}${'\u2591'.repeat(WIDTH - fill)} `
-            + `${String(Math.round(pct * 100)).padStart(3, ' ')}%`;
-          if (pct >= 1) { learned = true; break; }
+        const pct = Math.min(1, held / HOLD_MS);
+        const fill = Math.round(pct * WIDTH);
+        // No [BIN] prefix: that belongs to loader log output, not to the
+        // program's own interface.
+        meter.textContent = `PALM LOCK  `
+          + `${'\u2588'.repeat(fill)}${'\u2591'.repeat(WIDTH - fill)} `
+          + `${String(Math.round(pct * 100)).padStart(3, ' ')}%`;
+        if (pct >= 1) { learned = true; break; }
 
-          // The countdown is now what they asked for rather than a deadline: how
-          // much longer to hold. Only prompts about a missing palm once someone
-          // has been standing there long enough to wonder.
-          const waited = now - t0;
-          if (fresh) {
-            wait.textContent = `hold ${Math.max(1, Math.ceil((HOLD_MS - held) / 1000))}s`;
-            wait.classList.add('on');
-          } else if (waited > SHOW_WAIT_MS) {
-            wait.textContent = 'show your palm to the looking glass';
-            wait.classList.add('on');
-          }
-
-          if (!sawFrame && waited > NO_SENSOR_MS) break;
-          if (waited > STALL_CAP_MS) break;
-          await sleep(80);
+        // The countdown is now what they asked for rather than a deadline: how
+        // much longer to hold. Only prompts about a missing palm once someone
+        // has been standing there long enough to wonder.
+        const waited = now - t0;
+        if (fresh) {
+          wait.textContent = `hold ${Math.max(1, Math.ceil((HOLD_MS - held) / 1000))}s`;
+          wait.classList.add('on');
+        } else if (waited > SHOW_WAIT_MS) {
+          wait.textContent = 'show your palm to the looking glass';
+          wait.classList.add('on');
         }
 
-        if (learned) {
-          reticle.classList.add('locked');
-          prompt.textContent = 'LINKED';
-          hint.textContent = 'the portal is yours';
-          // Nothing to reassure them about now; they did it.
-          wait.classList.remove('on');
-          await sleep(1800);
-        } else {
-          hint.textContent = sawFrame ? 'starting anyway' : 'looking glass offline — starting anyway';
-          await sleep(1100);
-        }
-      } finally {
-        cancelAnimationFrame(raf);
-        reticle.classList.remove('on');
+        if (!handCursor.sawFrame && waited > NO_SENSOR_MS) break;
+        if (waited > STALL_CAP_MS) break;
+        await sleep(80);
       }
+
+      if (learned) {
+        handCursor.lock();
+        prompt.textContent = 'LINKED';
+        hint.textContent = 'the portal is yours';
+        // Nothing to reassure them about now; they did it.
+        wait.classList.remove('on');
+        await sleep(1800);
+      } else {
+        hint.textContent = handCursor.sawFrame
+          ? 'starting anyway'
+          : 'looking glass offline — starting anyway';
+        await sleep(1100);
+      }
+      // Deliberately no teardown here. The cursor outlives this act and is
+      // stopped at hand-off in run(), so the hand stays answerable right up to
+      // the moment the portal opens.
     }
 
     async function run() {
+      let handCursor = null;
       try {
         await actShell();
         await actLoad();
         const sensor = connectSensor();
-        const { beatEls, heroEl } = await actProgram(sensor);
-        await actCalibrate(sensor, beatEls, heroEl);
+        const program = await actProgram(sensor);
+        handCursor = program.handCursor;
+        await actCalibrate(sensor, program.beatEls, program.heroEl, handCursor);
       } catch (err) {
         console.error('[termlink] sequence failed:', err);
       } finally {
+        if (handCursor) handCursor.stop();
         dropCursor();
         // Hand over regardless of what happened above; never leave the
         // installation parked on the onboarding screen.
