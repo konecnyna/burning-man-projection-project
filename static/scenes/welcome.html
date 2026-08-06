@@ -130,6 +130,7 @@
        against a 1267px content box, i.e. it wrapped. Sized down to sit with the
        telemetry row rather than with the headline. */
     .cal {
+      animation: fadein 0.5s ease both;
       font-size: 0.6em;
       letter-spacing: 0.14em;
       color: var(--phos-dim);
@@ -222,11 +223,25 @@
 
     /* The one instruction that has to survive being read at a glance. */
     /* Swapped between instructions rather than replaced, so only one is ever on
-       screen. Fades through nothing so the words never cross-read. */
-    .hero.swap { opacity: 0; }
+       screen.
+       
+       The swap deliberately does not touch opacity. .hero runs `pulse` on
+       opacity forever, and a running animation outranks a transition in the
+       cascade, so the previous `.hero.swap { opacity: 0 }` was silently doing
+       nothing -- the text snapped. transform and filter are untouched by pulse,
+       so they are ours to animate.
+       
+       Collapsing to a bright horizontal line and reopening is an old CRT
+       changing channel, which is the right idiom for this screen and, unlike a
+       crossfade, is legible from across a dark camp. */
+    .hero.swap {
+      transform: scaleY(0.05) scaleX(1.06);
+      filter: brightness(2.6);
+    }
 
     .hero {
-      transition: opacity 0.42s ease;
+      transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+                  filter 0.26s ease;
       margin: 0.85em 0 0.35em 0;
       padding: 0.5em 1.1em;
       border: 3px solid var(--amber);
@@ -949,7 +964,24 @@
       // screen. Long enough that no ordinary visitor reaches it.
       const STALL_CAP_MS = 90000;
 
+      // Clear the beats out before the instruction changes, rather than
+      // vanishing them on the same frame. They each carry `animation: fadein
+      // ... forwards`, whose filled final value would outrank an inline opacity,
+      // so the animation has to be dropped and the current value pinned before
+      // anything can fade it.
+      for (const el of beatEls) {
+        el.style.animation = 'none';
+        el.style.opacity = '1';
+      }
+      if (beatEls.length) void beatEls[0].offsetHeight;   // commit before transitioning
+      beatEls.forEach((el, i) => {
+        el.style.transition = `opacity 0.3s ease ${i * 70}ms, transform 0.3s ease ${i * 70}ms`;
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-8px)';
+      });
+      await sleep(300 + 70 * beatEls.length);
       for (const el of beatEls) el.remove();
+      await sleep(120);
 
       // Rewrite the instruction in place. Adding a second .hero line was leaving
       // both RAISE YOUR PALM and NOW MOVE IT on screen at once, which is what
@@ -957,9 +989,10 @@
       // 1em of padding and a 1.5em line.
       const prompt = heroEl;
       prompt.classList.add('swap');
-      await sleep(420);
+      await sleep(260);                       // matches the collapse transition
       prompt.textContent = 'NOW MOVE YOUR PALM';
       prompt.classList.remove('swap');
+      await sleep(260);                       // let it reopen before more arrives
       const meter = addLine('blocks cal');
       const hint = addLine('beat');
       // Says palm, and says flat. "hand" leaves people pointing, waving
@@ -971,6 +1004,11 @@
       // Anyone who raises a hand straight away never sees this. It fades in only
       // once someone has been still long enough to wonder whether they are stuck.
       const wait = addLine('wait');
+
+      // The lines above were added while the hero was mid-transform, so the
+      // heights fitViewport measured were the collapsing box, not the settled
+      // one. Re-fit now that everything has stopped moving.
+      fitViewport();
 
       const reticle = document.getElementById('reticle');
       let target = null;
