@@ -27,6 +27,21 @@ PIDFILE="$SCRIPT_DIR/logs/atlantis.pid"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
+log "ATLANTIS starting — dir=$SCRIPT_DIR port=$ATLANTIS_PORT pid=$$"
+
+# ---------------------------------------------------------------------------
+# The settle delay comes FIRST, before the single-instance guards below.
+#
+# It used to come after them, which defeated both: two copies starting at
+# login (LaunchAgent + a Login Item, say) would each run the guards while the
+# other was still asleep, see a free port and no live process, and both
+# proceed. Delaying first means the guards run against real state.
+# ---------------------------------------------------------------------------
+if [ "$ATLANTIS_BOOT_DELAY" -gt 0 ] 2>/dev/null; then
+    log "Waiting ${ATLANTIS_BOOT_DELAY}s for the desktop to settle"
+    sleep "$ATLANTIS_BOOT_DELAY"
+fi
+
 # ---------------------------------------------------------------------------
 # Single instance.
 #
@@ -36,38 +51,53 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 # next to the LaunchAgent.
 #
 # `exec` at the end of this script replaces the shell with Python, keeping the
-# same PID, so $$ recorded here stays the live process ID.
+# same PID, so $$ recorded here stays the live process ID -- which is why the
+# liveness check below has to accept BOTH forms. Between here and the exec we
+# are still bash running this script; only afterwards are we `main.py`. The
+# old check matched `main.py` alone, so a copy that was still in its settle
+# delay looked like a recycled PID and got its pidfile deleted out from under
+# it. Under the LaunchAgent the bundle execs us, so `MacOS/atlantis` can show
+# up too if we are read at exactly the wrong moment.
 # ---------------------------------------------------------------------------
-if [ -f "$PIDFILE" ]; then
+ATLANTIS_PROC_RE='start-atlantis\.sh|main\.py|MacOS/atlantis'
+
+# Atomic claim: with noclobber, `>` fails rather than truncates if the file
+# already exists, and the test-and-create happens in one syscall. Two copies
+# racing here cannot both win, however closely they are interleaved.
+claim_pidfile() { (set -o noclobber; echo $$ > "$PIDFILE") 2>/dev/null; }
+
+# Is this PID one of ours, or a number the kernel has since handed to someone
+# else? Guards against acting on a recycled PID from a stale pidfile.
+is_ours() { ps -p "$1" -o command= 2>/dev/null | grep -Eq "$ATLANTIS_PROC_RE"; }
+
+if ! claim_pidfile; then
     existing=$(cat "$PIDFILE" 2>/dev/null)
-    if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
-        # Confirm it is actually ours and not a recycled PID.
-        if ps -p "$existing" -o command= 2>/dev/null | grep -q 'main\.py'; then
-            log "ALREADY RUNNING as PID $existing — refusing to start a second copy."
-            log "  Stop it first:  kill $existing"
-            log "  Or under the LaunchAgent:  launchctl kickstart -k gui/\$(id -u)/com.atlantis.kiosk"
-            exit 1
-        fi
+    if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null && is_ours "$existing"; then
+        log "ALREADY RUNNING as PID $existing — refusing to start a second copy."
+        log "  Stop it first:  kill $existing"
+        log "  Or under the LaunchAgent:  launchctl kickstart -k gui/\$(id -u)/com.atlantis.kiosk"
+        exit 1
     fi
-    log "Removing stale pidfile (PID ${existing:-unknown} is gone)"
+    log "Removing stale pidfile (PID ${existing:-unknown} is not a live ATLANTIS)"
     rm -f "$PIDFILE"
+    # Re-claim atomically. If another copy took it in the gap, it won: back off
+    # rather than racing it, so exactly one of us continues.
+    if ! claim_pidfile; then
+        log "Another copy claimed the pidfile first — refusing to start."
+        exit 1
+    fi
 fi
 
+# From here on we own the pidfile and must clean it up on every exit path.
+trap 'rm -f "$PIDFILE"' EXIT INT TERM
+
 # Belt and braces: if anything else already holds the port, do not pile on.
+# Python would otherwise fail to bind but keep running (see run_web_app), and
+# open a second fullscreen window onto the *other* instance's server.
 if lsof -iTCP:"$ATLANTIS_PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
     holder=$(lsof -iTCP:"$ATLANTIS_PORT" -sTCP:LISTEN -P -n 2>/dev/null | awk 'NR==2 {print $2}')
     log "Port $ATLANTIS_PORT is already in use by PID ${holder:-unknown} — refusing to start."
     exit 1
-fi
-
-echo $$ > "$PIDFILE"
-trap 'rm -f "$PIDFILE"' EXIT INT TERM
-
-log "ATLANTIS starting — dir=$SCRIPT_DIR port=$ATLANTIS_PORT pid=$$"
-
-if [ "$ATLANTIS_BOOT_DELAY" -gt 0 ] 2>/dev/null; then
-    log "Waiting ${ATLANTIS_BOOT_DELAY}s for the desktop to settle"
-    sleep "$ATLANTIS_BOOT_DELAY"
 fi
 
 if [ ! -d venv ]; then

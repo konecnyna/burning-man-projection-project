@@ -130,6 +130,42 @@
 - [ ] Backup and recovery procedures
 - [ ] Security hardening
 
+## Duplicate-instance defects (Session 5)
+
+Symptom: two terminals opening at login and two fullscreen webviews running at
+once. Three independent causes; two are fixed in code, one needs a change to
+system state on the deployment box.
+
+- [x] **Settle delay ran before the single-instance guards** — two copies
+      starting together each ran the guards while the other slept, so both saw
+      a free port and proceeded. Delay now happens first (`start-atlantis.sh`).
+- [x] **Pidfile guard matched only `main.py`** — during the settle delay the
+      recorded PID is still bash, so a live copy looked like a recycled PID and
+      had its pidfile deleted. Now matches every phase of the launch, and the
+      claim itself is atomic via `noclobber`.
+- [x] **A failed bind did not stop startup** — `socketio.run()` raises inside
+      the server thread (as `SystemExit`, via Werkzeug), which was discarded;
+      the process went on to open a webview onto the other instance's server.
+      `run_web_app` now checks the port up front and raises `ServerStartupError`.
+- [ ] **Remove the `start-atlantis.sh` Login Item on the kiosk box** — it is
+      still enabled alongside the LaunchAgent, so the app is registered to
+      autostart twice. `install-kiosk.sh` offers to remove it but the prompt was
+      declined. Changes system state, not the repo:
+      `osascript -e 'tell application "System Events" to delete login item "start-atlantis.sh"'`
+
+### Newly discovered, not yet investigated
+
+- [ ] **KeepAlive restart loop** — on 2026-08-06 the app restarted roughly every
+      60s (16:00:42, 16:01:48, 16:02:55, 16:03:52 in `logs/kiosk.out.log`). The
+      webview closes and launchd relaunches. Unrelated to the duplicate-instance
+      work above.
+- [ ] **Camera never opens** — `Could not open camera at index 0` on every
+      recent start, with `OpenCV: not authorized ... (status 0)` meaning never
+      asked. The TCC/responsible-process path in DEPLOYMENT.md §5b.
+- [ ] **`kiosk-ctl.sh console` hardcodes Terminal.app** (`deploy/kiosk-ctl.sh:214`)
+      regardless of the operator's default terminal. Harmless but confusing when
+      it opens a second terminal next to iTerm.
+
 ## Priority Tasks (Next Session)
 
 ### HIGH PRIORITY

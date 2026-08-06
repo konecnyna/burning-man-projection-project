@@ -71,15 +71,34 @@ thread is owned by `webview.start()`, which blocks until the window closes.
 ### Startup sequence
 
 1. Install `SIGINT` / `SIGTERM` handlers.
-2. `run_web_app(...)` builds the Flask app and starts `socketio.run()` on a
-   daemon thread, bound to `localhost` only.
-3. `time.sleep(2)` — fixed wait for the server.
-4. `hand_tracker.start()` opens the camera and spawns the tracking thread.
-5. `time.sleep(1)` — fixed wait for MediaPipe.
-6. `webview.create_window(...)` then `webview.start()` blocks the main thread.
+2. `run_web_app(...)` checks the port is free, builds the Flask app, starts
+   `socketio.run()` on a daemon thread, and blocks until the port answers.
+   Raises `ServerStartupError` if it cannot bind; `main.py` logs it and exits 1.
+3. `hand_tracker.start()` opens the camera and spawns the tracking thread.
+4. `time.sleep(1)` — fixed wait for MediaPipe.
+5. `webview.create_window(...)` then `webview.start()` blocks the main thread.
    With `--headless`, a `while` sleep loop takes its place.
 
-Steps 3 and 5 are unconditional sleeps, not readiness checks.
+Step 4 is an unconditional sleep, not a readiness check.
+
+#### Why the bind check is up front
+
+A failed bind used to be invisible. `socketio.run()` raises inside the server
+thread, and Werkzeug handles `EADDRINUSE` by calling `sys.exit()` — a
+`SystemExit`, which a thread discards without a traceback. `run_web_app` had
+already returned, so startup continued and opened a fullscreen webview onto a
+port served by *another instance*: two windows, two MediaPipe graphs, two
+camera grabs, and nothing in the log explaining it.
+
+Probing the port afterwards cannot detect this, because the other instance is
+listening on exactly the port you would probe. So `_assert_port_free()` runs in
+the main thread before the server starts, using `SO_REUSEADDR` to match
+Werkzeug's own bind — strictness there would reject a port merely in
+`TIME_WAIT`, which is the normal state right after a restart and would turn
+every `KeepAlive` relaunch into a failure.
+
+This is the second of two layers. The first is `start-atlantis.sh`, which
+refuses to launch Python at all if the port or the pidfile is taken.
 
 ### CLI flags
 

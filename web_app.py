@@ -1,6 +1,8 @@
 import json
 import os
 import secrets
+import socket
+import time
 
 from flask import Flask, request, send_from_directory, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -333,15 +335,115 @@ def create_web_app(event_bus: EventBus, production_mode=False):
         
     return app, socketio
 
+class ServerStartupError(RuntimeError):
+    """The web server could not be started. Fatal: there is nothing to show."""
+
+
+# Generous, because a cold start on the Mac mini is slow. This is only ever
+# reached when something is badly wrong, so waiting a while costs nothing.
+SERVER_START_TIMEOUT = 20.0
+
+
+def _assert_port_free(host, port):
+    """Raise ServerStartupError if something already holds host:port.
+
+    This has to happen here, in the main thread, before the server starts.
+    Neither of the obvious alternatives works:
+
+      * Watching the server thread for an error. Werkzeug handles EADDRINUSE by
+        printing to stderr and calling sys.exit(), which raises SystemExit --
+        not an Exception -- inside a thread, where Python discards it silently.
+      * Probing the port afterwards. When the conflict is a second copy of the
+        kiosk, the other instance is listening on exactly the port we would
+        probe, so the probe *succeeds* and reports our dead server as healthy.
+        That is the original bug, not a fix for it.
+
+    SO_REUSEADDR is set deliberately, to match what Werkzeug's HTTPServer does
+    (allow_reuse_address = 1). Without it this check would be stricter than the
+    real bind and would reject a port merely sitting in TIME_WAIT -- which is
+    the normal state right after a restart, and under KeepAlive that would turn
+    every relaunch into a failure. SO_REUSEADDR permits TIME_WAIT reuse but
+    still refuses a port with a live listener, which is the case we care about.
+    """
+    bind_host = '0.0.0.0' if host in ('', '*') else host
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind((bind_host, port))
+    except OSError as exc:
+        raise ServerStartupError(f"cannot bind {bind_host}:{port}: {exc}") from exc
+    finally:
+        probe.close()
+
+
+def _wait_until_serving(server_thread, startup_error, host, port,
+                        timeout=SERVER_START_TIMEOUT):
+    """Block until the server accepts a connection, or raise ServerStartupError.
+
+    Only meaningful because _assert_port_free() ran first: it establishes that
+    nobody else was on this port a moment ago, so a connection that answers now
+    is ours.
+    """
+    # 0.0.0.0 and :: mean "every interface" -- you cannot connect *to* them,
+    # so probe the loopback address they include.
+    probe_host = '127.0.0.1' if host in ('0.0.0.0', '', '*', '::') else host
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if startup_error:
+            raise ServerStartupError(
+                f"could not bind {host}:{port}: {startup_error[0]}") from startup_error[0]
+        if not server_thread.is_alive():
+            raise ServerStartupError(
+                f"server thread for {host}:{port} exited during startup")
+        try:
+            with socket.create_connection((probe_host, port), timeout=0.5):
+                logger.info("Web server accepting connections on %s:%s", probe_host, port)
+                return
+        except OSError:
+            time.sleep(0.1)
+
+    raise ServerStartupError(
+        f"server did not accept connections on {probe_host}:{port} within {timeout:.0f}s")
+
+
 def run_web_app(event_bus: EventBus, host: str = 'localhost', port: int = 5000, debug: bool = False, production_mode: bool = False):
-    """Run the web application"""
+    """Start the web server and block until it is actually serving.
+
+    Raises ServerStartupError if it never comes up -- most often "Address
+    already in use", when a second copy of the kiosk is starting.
+
+    Returning only once the port is live is the point. socketio.run() raises
+    inside the server thread, where the exception used to die unnoticed: this
+    function had already returned its tuple, so main.py carried on and opened a
+    fullscreen webview onto a port served by the *other* instance. Two windows,
+    two MediaPipe graphs, two cameras grabs, on a box with 8 GB. Failing here
+    makes the losing copy exit instead.
+
+    It also replaces the fixed sleep main.py used to do afterwards, so startup
+    takes as long as it takes rather than a guess.
+    """
+    _assert_port_free(host, port)
+
     app, socketio = create_web_app(event_bus, production_mode)
-    
+
+    # A list, not a plain name: assigning to a closed-over variable from the
+    # thread would need `nonlocal`, and append is atomic under the GIL.
+    startup_error = []
+
     def run_server():
-        socketio.run(app, host=host, port=port, debug=debug, use_reloader=False, allow_unsafe_werkzeug=True)
-    
-    server_thread = threading.Thread(target=run_server)
+        try:
+            socketio.run(app, host=host, port=port, debug=debug, use_reloader=False, allow_unsafe_werkzeug=True)
+        # BaseException, not Exception: Werkzeug raises SystemExit for a bind
+        # failure, and a thread that dies of SystemExit leaves no trace at all.
+        except BaseException as exc:  # noqa: BLE001 - anything here is fatal
+            startup_error.append(exc)
+            logger.exception("Web server thread exited")
+
+    server_thread = threading.Thread(target=run_server, name='web-server')
     server_thread.daemon = True
     server_thread.start()
-    
+
+    _wait_until_serving(server_thread, startup_error, host, port)
+
     return app, socketio, server_thread

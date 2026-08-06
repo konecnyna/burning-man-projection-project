@@ -9,7 +9,7 @@ import logging.handlers
 import argparse
 import webview
 from event_system import EventBus, HandTrackingEvents
-from web_app import run_web_app
+from web_app import run_web_app, ServerStartupError
 from hand_tracker import HandTracker
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,9 @@ class HandTrackingKiosk:
                     "Bound to %s -- reachable from the network, and there is no "
                     "authentication. Fine offline; on a shared network anyone "
                     "who can route to this host can reach it.", self.host)
+            # Blocks until the port is actually serving, so there is no fixed
+            # sleep here and no window is ever opened onto a server that never
+            # came up. Raises ServerStartupError if it cannot bind.
             self.web_app, self.socketio, self.server_thread = run_web_app(
                 self.event_bus,
                 host=self.host,
@@ -91,10 +94,7 @@ class HandTrackingKiosk:
                 debug=False,
                 production_mode=self.production_mode
             )
-            
-            # Give server time to start
-            time.sleep(2)
-            
+
             # Start hand tracking
             logger.info("Starting hand tracker")
             self.hand_tracker.start()
@@ -108,11 +108,21 @@ class HandTrackingKiosk:
             else:
                 self.run_headless()
             
+        except ServerStartupError as exc:
+            # Almost always a second copy of the kiosk holding the port. Exit
+            # without opening a window: two fullscreen webviews onto one server
+            # is worse than one clear failure, and start-atlantis.sh's port
+            # guard should have caught this before Python was ever launched.
+            logger.error("Web server did not start: %s", exc)
+            logger.error("  Another copy is probably running. Check: "
+                         "lsof -iTCP:%s -sTCP:LISTEN", self.port)
+            self.stop()
+            sys.exit(1)
         except Exception:
             logger.exception("Fatal error during startup")
             self.stop()
             sys.exit(1)
-            
+
     def create_window(self):
         """Create the webview window"""
         try:
