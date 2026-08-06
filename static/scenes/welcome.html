@@ -183,7 +183,19 @@
        does not have, and once it was rebuilt in plain ASCII it read as ASCII
        art rather than as an address. Large tracked type is cleaner and scales
        properly to the projector. */
+    /* Phosphor coming into focus: dim, soft and low, resolving into place. The
+       address, subtitle, hero and beats all use it, staggered, so the program
+       screen assembles as one movement instead of four separate pop-ins. Blur
+       and brightness rather than opacity alone, because a plain fade at 140
+       inches reads as a dropped frame. */
+    @keyframes text-in {
+      0%   { opacity: 0; transform: translateY(8px); filter: blur(6px) brightness(2.2); }
+      55%  { opacity: 1; }
+      100% { opacity: 1; transform: none; filter: blur(0) brightness(1); }
+    }
+
     .addr {
+      animation: text-in 0.85s cubic-bezier(0.2, 0.7, 0.3, 1) both;
       color: var(--amber);
       text-shadow: 0 0 22px var(--amber-glow);
       /* Measured, not guessed: the content box is 1267x756 at 1080p once the
@@ -195,6 +207,8 @@
     }
 
     .subtitle {
+      /* Trails the address rather than landing with it. */
+      animation: text-in 0.85s cubic-bezier(0.2, 0.7, 0.3, 1) 0.24s both;
       color: var(--phos);
       font-size: 0.9em;
       letter-spacing: 0.24em;
@@ -211,7 +225,9 @@
       letter-spacing: 0.08em;
       margin-top: 0.5em;
       opacity: 0;
-      animation: fadein 0.7s ease forwards;
+      /* Was a plain fade, which made the beats arrive differently from the two
+         lines above them. Same movement now, quicker. */
+      animation: text-in 0.62s cubic-bezier(0.2, 0.7, 0.3, 1) both;
     }
 
     .beat .q { color: var(--phos-dim); }
@@ -234,6 +250,14 @@
        Collapsing to a bright horizontal line and reopening is an old CRT
        changing channel, which is the right idiom for this screen and, unlike a
        crossfade, is legible from across a dark camp. */
+    /* Entrance as a throwaway class, not a permanent animation. The shorthand
+       on .hero.enter replaces `pulse` outright while it runs, then removing the
+       class hands opacity back to pulse -- and nothing is left filling a
+       transform that would outrank the .swap collapse later. */
+    .hero.enter {
+      animation: text-in 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    }
+
     .hero.swap {
       transform: scaleY(0.05) scaleX(1.06);
       filter: brightness(2.6);
@@ -701,7 +725,14 @@
       await spin('verifying signature', 800);
       await bar('mapping image', '0x0000_1000', 1200);
       await spin('opening looking glass /dev/eye0', 1150);
-      await spin('calibrating landmark model', 1350);
+      // A filling bar, not a spinner resolving to OK. This is the step that is
+      // actually about the audience -- the hand model warming up -- so it should
+      // show progress rather than just eventually claim success.
+      //
+      // Label is exactly 20 characters so it fills bar()'s padEnd column and the
+      // addresses stay aligned with the row above; 'calibrating landmark model'
+      // would have overrun it by six and pushed that row's address out of line.
+      await bar('landmark calibration', '0x0008_2c00', 1350);
       // Tag passed as a flag, not baked into the string: the tag is a span now,
       // and typing rewrites only the body after it.
       await type('hippie trap armed', 'blocks amber', 9, 520, true);
@@ -727,9 +758,11 @@
       await sleep(1500);
 
       // The instruction. Everything else on this screen exists to frame it.
-      const heroEl = addLine('hero');
+      const heroEl = addLine('hero enter');
       heroEl.textContent = 'RAISE YOUR PALM';
-      await sleep(1400);
+      await sleep(720);
+      heroEl.classList.remove('enter');   // pulse takes over from here
+      await sleep(680);
 
       // Cinematic rather than a manual: one idea a line, fading in on a beat,
       // written to be understood at a glance from across a dark camp. The
