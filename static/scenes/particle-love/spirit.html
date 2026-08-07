@@ -36,7 +36,14 @@
             box-shadow: 0 0 20px #d95151;
             pointer-events: none;
             z-index: 10;
-            transition: all 0.1s ease;
+            /* Only opacity. This used to be `all 0.1s ease`, while the JS
+               below writes style.left/top on every hand event -- so each of
+               ~30 updates a second started a fresh 100ms eased animation of
+               two layout properties. The dot could never catch up: it trailed
+               the hand by about a tenth of a second and floated after it had
+               stopped, which reads as laggy tracking rather than as a
+               deliberate effect. Position now lands immediately. */
+            transition: opacity 0.1s ease;
             transform: translate(-50%, -50%);
             opacity: 0;
         }

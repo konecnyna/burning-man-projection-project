@@ -64,6 +64,11 @@ class HandTracker:
         self.OPEN_RETRY_SECONDS = 30
         self.OPEN_RETRY_INTERVAL = 2
 
+        # Periodic fps line in the log, so tracking health is answerable after
+        # the fact. Not per-frame -- see _update_fps().
+        self.FPS_LOG_INTERVAL = 30
+        self._last_fps_log = 0
+
     def _open_camera_with_retry(self, camera_index: int):
         """Open the camera, retrying for OPEN_RETRY_SECONDS before giving up.
 
@@ -181,7 +186,15 @@ class HandTracker:
             # No handle at all: either start() came up blind, or a reopen
             # failed. _reopen_camera() rate-limits itself, so this spins at
             # REOPEN_BACKOFF_SECONDS rather than at frame rate.
-            if self.cap is None or not self.cap.isOpened():
+            #
+            # Deliberately `is None` and not `isOpened()`. This runs 30-60x a
+            # second, and isOpened() is a call across into OpenCV on every one
+            # of them -- per-frame work in the tracking loop, which is exactly
+            # what the performance constraint forbids. An identity check costs
+            # nothing, and a handle that is open but dead is already covered:
+            # reads fail, _consecutive_failures climbs, and the existing path
+            # reopens it.
+            if self.cap is None:
                 self._reopen_camera()
                 time.sleep(0.5)
                 continue
@@ -726,4 +739,16 @@ class HandTracker:
             self.fps = self.frame_count / (current_time - self.last_fps_time)
             self.frame_count = 0
             self.last_fps_time = current_time
+
+            # Put the frame rate in the log. The testing checklist says to
+            # check fps in logs/atlantis.log, but nothing ever wrote it there,
+            # so "is tracking responsive" could not be answered after the fact
+            # -- which is the only way it can be answered about an installation
+            # that ran unattended overnight.
+            #
+            # Throttled to FPS_LOG_INTERVAL, and inside the once-a-second
+            # branch, so this costs nothing per frame.
+            if current_time - self._last_fps_log >= self.FPS_LOG_INTERVAL:
+                self._last_fps_log = current_time
+                logger.info("Tracking at %.1f fps", self.fps)
             
