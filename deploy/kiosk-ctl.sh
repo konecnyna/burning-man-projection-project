@@ -19,19 +19,21 @@
 #
 # There are two ways round it, and they are good at different things.
 #
-#   'console'  Ask Terminal.app on the console to run the launcher, over Apple
-#              Events. Terminal holds a camera grant, and macOS attributes
-#              camera access to the responsible process -- so the python child
-#              inherits it and THE CAMERA WORKS. Requires Terminal.app to
-#              already be running on the console (it is, if you are screen
-#              sharing). This is the development path.
-#
 #   'start'    Drive the LaunchAgent in gui/<uid>. Survives logout, restarts on
-#              crash via KeepAlive, and is what runs at boot. But launchd is
-#              the responsible process, so there is NO CAMERA. This is the
-#              production/supervision path.
+#              crash via KeepAlive, is what runs at boot, and HAS A CAMERA --
+#              it launches deploy/ATLANTIS-Kiosk.app via `open`, and the app
+#              bundle is what holds the TCC grant. This is the production path
+#              and the one to trust.
 #
-# Neither needs sudo.
+#   'console'  Ask Terminal.app on the console to run the launcher, over Apple
+#              Events. The python child inherits TERMINAL'S camera grant, so
+#              the camera works for that run only -- it proves nothing about
+#              whether boot will work, because no Terminal is involved then.
+#              Requires Terminal.app already running on the console (it is, if
+#              you are screen sharing). A debugging aid.
+#
+# Neither needs sudo. The camera grant itself needs one click on the console,
+# once: ./deploy/grant-camera.sh
 #
 # Usage:
 #   ./deploy/kiosk-ctl.sh status     # where it is running, health, camera
@@ -39,8 +41,8 @@
 #   ./deploy/kiosk-ctl.sh stop       # stop it
 #   ./deploy/kiosk-ctl.sh restart    # restart in place (most useful after edits)
 #   ./deploy/kiosk-ctl.sh logs       # follow the application log
-#   ./deploy/kiosk-ctl.sh console    # start via Terminal.app on the console.
-#                                    # THE ONE THAT GETS YOU A CAMERA OVER SSH.
+#   ./deploy/kiosk-ctl.sh console    # start via Terminal.app on the console,
+#                                    # borrowing its camera grant for one run
 #   ./deploy/kiosk-ctl.sh headless   # run here in the SSH session, no window,
 #                                    # no camera -- for server-side testing only
 #
@@ -76,6 +78,17 @@ app_pid() {
     done | head -1
 }
 
+# Block until /health answers, or give up. Used before reporting status so a
+# slow but healthy start is not reported as a failure.
+wait_for_health() {
+    local i
+    for i in $(seq 1 45); do
+        curl -fsS -m 2 "http://localhost:$PORT/health" >/dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
+}
+
 cmd_status() {
     head_ "Session"
     local mgr; mgr=$(launchctl managername 2>/dev/null)
@@ -100,14 +113,19 @@ cmd_status() {
     local pid; pid=$(app_pid)
     if [ -n "$pid" ]; then
         ok "running, pid $pid, up $(ps -o etime= -p "$pid" | tr -d ' ')"
-        # Compare against the agent's OWN pid. Grepping the whole gui-domain
-        # dump for the number gives false positives.
-        local agent_pid
-        agent_pid=$(launchctl print "$DOMAIN/$LABEL" 2>/dev/null | awk -F'= ' '/^\tpid = /{print $2; exit}')
-        if [ -n "$agent_pid" ] && [ "$agent_pid" = "$pid" ]; then
-            echo "        launched by: LaunchAgent (survives logout, no camera)"
+        # The agent's own pid is `open -W`, never python, so comparing the two
+        # is meaningless now. Ask instead whether the app bundle is python's
+        # ancestor: that is what actually determines the TCC identity, and so
+        # whether this run can see the camera.
+        if pgrep -f 'ATLANTIS-Kiosk.app/Contents/MacOS/applet' >/dev/null 2>&1; then
+            if agent_loaded; then
+                echo "        launched by: LaunchAgent via the app bundle (supervised, camera OK)"
+            else
+                echo "        launched by: the app bundle, unsupervised (grant-camera.sh, or a stray copy)"
+            fi
         else
-            echo "        launched by: a shell or Terminal.app (not launchd-supervised)"
+            echo "        launched by: a shell or Terminal.app — inherits that app's camera grant,"
+            echo "                     which it will lose at the next boot"
         fi
     else
         warn "not running"
@@ -130,9 +148,13 @@ cmd_status() {
                                "$REPO_DIR/logs/atlantis.log" 2>/dev/null)
     if [ -z "$tail_log" ]; then
         warn "no tracker start found in the log"
+    elif echo "$tail_log" | grep -q 'Camera acquired after starting blind'; then
+        ok "camera came up late, after a blind start — hand tracking is live"
     elif echo "$tail_log" | grep -q 'Could not open camera'; then
         err "camera NOT open on the current run"
-        echo "        Launched over SSH? Use:  ./deploy/kiosk-ctl.sh console"
+        echo "        The tracker is running blind and retrying, so this can"
+        echo "        still fix itself. If it does not:"
+        echo "          ./deploy/grant-camera.sh   (needs a click on the console)"
     else
         ok "camera opened on the current run — hand tracking is live"
     fi
@@ -148,7 +170,10 @@ cmd_start() {
         || launchctl load -w "$AGENT_PLIST" 2>/dev/null \
         || { err "failed to load"; exit 1; }
     ok "started in the Aqua session"
-    sleep 6
+    # Poll rather than guess. The tracker's camera-open retry can hold
+    # startup for ~30s, and a fixed sleep reported a false "no response
+    # on port" every time it ran long.
+    wait_for_health
     cmd_status
 }
 
@@ -159,23 +184,62 @@ cmd_stop() {
     else
         warn "agent was not loaded"
     fi
-    # A copy started by hand will not be managed by launchd; clear it too.
+
+    # Booting out the agent is NOT enough any more.
+    #
+    # The agent runs `open -W`, and LaunchServices apps are not children of
+    # whoever asked for them. bootout kills the `open` wrapper and leaves the
+    # applet and python running, unsupervised -- and the next start then hits
+    # the single-instance guard and refuses, so the kiosk looks dead while a
+    # copy is still holding the camera and the port.
+    osascript -e 'tell application id "xyz.atlantis.kiosk" to quit' 2>/dev/null
+    pkill -f 'ATLANTIS-Kiosk.app/Contents/MacOS/applet' 2>/dev/null
+
+    # Give SIGTERM a chance -- main.py's handler releases the camera and the
+    # pidfile -- then escalate. A camera left open by a SIGKILLed process is
+    # not released until the device is re-enumerated.
     local pid; pid=$(app_pid)
     if [ -n "$pid" ]; then
-        kill "$pid" 2>/dev/null && ok "stopped stray process $pid"
+        kill "$pid" 2>/dev/null && ok "stopping process $pid"
+        for _ in $(seq 1 20); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.5
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            warn "pid $pid ignored SIGTERM; sending SIGKILL"
+            kill -9 "$pid" 2>/dev/null
+        fi
+    fi
+
+    sleep 1
+    if [ -n "$(app_pid)" ]; then
+        err "something is still running: $(app_pid)"
+    else
+        ok "stopped"
+        rm -f "$REPO_DIR/logs/atlantis.pid"
     fi
 }
 
 cmd_restart() {
     require_agent
-    if agent_loaded; then
-        launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null && ok "restarted in the Aqua session" \
-            || { err "kickstart failed"; exit 1; }
-    else
-        cmd_start
-        return
-    fi
-    sleep 6
+    # `kickstart -k` is NOT enough and is actively misleading here. It kills
+    # the agent's process, which is the `open -W` wrapper -- not the app.
+    # LaunchServices then declines to start a second copy of an app that is
+    # already running, so the new wrapper attaches to the OLD process and
+    # restart reports success having restarted nothing. Observed directly:
+    # a fresh agent pid alongside a python process minutes old.
+    #
+    # Stop it properly, then start.
+    cmd_stop
+    sleep 2
+    launchctl bootstrap "$DOMAIN" "$AGENT_PLIST" 2>/dev/null \
+        || launchctl load -w "$AGENT_PLIST" 2>/dev/null \
+        || { err "failed to load"; exit 1; }
+    ok "restarted in the Aqua session"
+    # Poll rather than guess. The tracker's camera-open retry can hold
+    # startup for ~30s, and a fixed sleep reported a false "no response
+    # on port" every time it ran long.
+    wait_for_health
     cmd_status
 }
 

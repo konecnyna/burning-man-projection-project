@@ -22,15 +22,28 @@
       the script directly makes that com.apple.python3, which holds no TCC
       grant and declares no NSCameraUsageDescription, so the camera request is
       denied silently and never prompts -- the kiosk boots but never sees a
-      hand. The bundle gives the kiosk its own TCC identity that can be
-      prompted for once and then persists.
+      hand. The bundle gives the kiosk an identity macOS will honour instead.
 
-      The bundle executable execs start-atlantis.sh, so everything downstream
-      (single-instance guard, venv, port, logging) is unchanged.
+      It has to go through `open`, and the executable has to be the bundle,
+      not a path inside it. Spawning the executable directly is what launchd
+      would do on its own, and that yields no app identity at all -- the same
+      dead end as launching the script. Only LaunchServices confers one.
+
+      `-W` makes open wait for the app to exit rather than returning at once,
+      which is what keeps KeepAlive meaningful: launchd sees a process that
+      lives exactly as long as the kiosk does, and relaunches when it dies.
+
+      Everything downstream (single-instance guard, venv, port, logging) is
+      unchanged -- the applet just runs start-atlantis.sh and waits.
+
+      Regenerate the bundle with deploy/build-app-bundle.sh; it is not a
+      hand-written file and install-kiosk.sh rebuilds it every run.
     -->
     <key>ProgramArguments</key>
     <array>
-        <string>__ATLANTIS_DIR__/deploy/ATLANTIS.app/Contents/MacOS/atlantis</string>
+        <string>/usr/bin/open</string>
+        <string>-W</string>
+        <string>__ATLANTIS_DIR__/deploy/ATLANTIS-Kiosk.app</string>
     </array>
 
     <key>WorkingDirectory</key>

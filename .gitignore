@@ -97,3 +97,8 @@ temp/
 tmp/
 # Kiosk runtime logs
 logs/
+
+# Generated at install time by deploy/build-app-bundle.sh.
+# Not committed: it contains a Mach-O, and its ad-hoc cdhash is what the
+# camera TCC grant is pinned to, so it is machine-local state.
+deploy/ATLANTIS-Kiosk.app/

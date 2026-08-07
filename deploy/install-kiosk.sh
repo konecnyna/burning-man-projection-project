@@ -96,21 +96,18 @@ fi
 # ------------------------------------------------------------- 2. app bundle
 step "Preparing the app bundle (TCC identity for camera access)"
 
-BUNDLE="$REPO_DIR/deploy/ATLANTIS.app"
-if [ -d "$BUNDLE" ]; then
-    ok "bundle present"
-    run chmod +x "$BUNDLE/Contents/MacOS/atlantis"
-    # Ad-hoc signature gives TCC a stable identity to attach the grant to.
-    # Re-sign every install: the cdhash changes whenever the bundle changes.
-    if [ "$DRY_RUN" = 1 ]; then
-        echo "      would ad-hoc sign $BUNDLE"
-    elif codesign --force --sign - --identifier xyz.atlantis.kiosk "$BUNDLE" 2>/dev/null; then
-        ok "ad-hoc signed as xyz.atlantis.kiosk"
-    else
-        warn "could not sign the bundle; camera prompting may not work"
-    fi
+# Generated, not committed: the bundle is an AppleScript applet built by
+# osacompile, because only a real Mach-O main executable gets an app identity
+# from LaunchServices, and only that identity can hold a camera grant. See the
+# header of build-app-bundle.sh for the full reasoning.
+BUNDLE="$REPO_DIR/deploy/ATLANTIS-Kiosk.app"
+if [ "$DRY_RUN" = 1 ]; then
+    echo "      would rebuild $BUNDLE (osacompile applet, ad-hoc signed)"
+elif out=$("$REPO_DIR/deploy/build-app-bundle.sh" 2>&1); then
+    ok "rebuilt and signed: ${out##*/}"
 else
-    err "missing $BUNDLE"
+    err "could not build the app bundle:"
+    printf '      %s\n' "$out"
     exit 1
 fi
 

@@ -267,9 +267,13 @@ process; that grant belongs to Terminal, not to python.
 
 | Path | Camera | Survives logout / restarts on crash | Use for |
 |---|---|---|---|
-| `kiosk-ctl.sh console` | ✅ **yes** | ❌ no | **development over SSH** |
-| `kiosk-ctl.sh start` (LaunchAgent) | ❌ no | ✅ yes | boot / unattended |
+| `kiosk-ctl.sh start` (LaunchAgent) | ✅ **yes** | ✅ yes | **boot / unattended** |
+| `kiosk-ctl.sh console` | ✅ yes, borrowed | ❌ no | development over SSH |
 | `kiosk-ctl.sh headless` | ❌ no | ❌ no | server-side testing |
+
+The LaunchAgent camera is the real one: it belongs to the app bundle and
+survives reboots. `console` **borrows** Terminal.app's grant for one run —
+useful for debugging, but it proves nothing about whether boot will work.
 
 None of them need sudo.
 
@@ -307,8 +311,9 @@ The LaunchAgent lives in `gui/<uid>`, which *is* the Aqua session, so this
 works over SSH with no sudo — you are targeting your own GUI domain. Verified:
 an agent bootstrapped from SSH reports `managername=Aqua`.
 
-It gets you `RunAtLoad` + `KeepAlive`, but **not** the camera, because launchd
-is the responsible process. Underneath:
+It gets you `RunAtLoad` + `KeepAlive` **and** the camera, because it launches
+through the app bundle rather than spawning python directly — see
+[Camera permissions](#6-camera-permissions). Underneath:
 
 ```bash
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.atlantis.kiosk.plist
@@ -370,43 +375,124 @@ Runs in the SSH session on purpose. No window, no camera — for exercising
 routes, the offline check and event plumbing. Hand tracking will not work and
 that is expected.
 
-### Known limitation: camera at boot
+### Camera at boot — solved
 
-The LaunchAgent path has no camera, so **a machine that boots straight into the
-app will not see hands** until someone starts it from the console. Approaches
-tried and rejected:
+This used to be the standing limitation: the LaunchAgent path had no camera, so
+a machine that booted straight into the app never saw hands. It is fixed. The
+machine now boots into a working camera with nobody present.
 
-- **App bundle wrapper** (`deploy/ATLANTIS.app`) — built with
-  `NSCameraUsageDescription` and ad-hoc signed, but its executable is a shell
-  script, so the kernel's code identity is bash, not the bundle. TCC never
-  created an entry for it. A real bundle identity needs a compiled executable,
-  which means a build step.
-- **PPPC configuration profile** — Apple excludes Camera and Microphone from
-  profile-based pre-authorization.
+What was wrong with the earlier attempt is worth keeping, because the diagnosis
+was right and the conclusion was wrong. `deploy/ATLANTIS-Kiosk.app` did declare
+`NSCameraUsageDescription` and was ad-hoc signed, but its `CFBundleExecutable`
+was a **shell script**, so:
 
-This is unresolved. Until it is, the reliable sequence for an event is: boot,
-then start once from the console (or over Screen Sharing) with
-`./deploy/kiosk-ctl.sh console`.
+- LaunchServices refuses to launch such a bundle at all — `open` fails with
+  `-10669`, at any path, `/Applications` included. No LaunchServices launch
+  means no app identity, so TCC had nothing to attach a grant to and never
+  created an entry.
+- It ended in `exec`, which replaces the process image. Even had it launched,
+  the bundle identity would have been discarded at that instant.
+
+The conclusion drawn at the time — "a real bundle identity needs a compiled
+executable, which means a build step" — is half right. It does need a compiled
+executable. It does **not** need a build step, because `osacompile` ships with
+macOS and emits an AppleScript applet whose executable is Apple's own signed
+applet stub. `deploy/build-app-bundle.sh` generates exactly that at install
+time; nothing is compiled and no toolchain is required.
+
+The applet runs `start-atlantis.sh` and **waits**, so python is its child and
+inherits the app's TCC identity — the same shape that makes a Terminal launch
+work, minus the Terminal.
+
+**PPPC configuration profile** remains unavailable: Apple excludes Camera and
+Microphone from profile-based pre-authorization. The one-time click in
+[§6](#6-camera-permissions) is unavoidable.
 
 
 ---
 
 ## 6. Camera permissions
 
-macOS grants camera access **per binary**, to whatever process launches Python.
-The grant follows `venv/bin/python3`.
-
-System Settings → Privacy & Security → Camera.
-
-Rebuilding the venv creates a new interpreter binary, so **the grant must be
-given again**. Unattended, that prompt never gets answered and the camera
-silently fails — the kiosk boots and cycles scenes with no hand input.
-
 A USB webcam is required; Mac minis have no built-in camera.
 
 ```bash
 system_profiler SPCameraDataType     # empty output = no camera detected
 ```
+
+### How the grant actually works
+
+macOS attributes camera access to the **responsible process**, not to the
+binary that calls `VideoCapture`. That distinction is the whole problem:
+
+- Launched from Terminal or iTerm, the responsible process is *the terminal*.
+  It holds the grant, python inherits it, the camera works — and the grant is
+  gone at the next boot, because no terminal is involved then. This is why the
+  camera could look fine all afternoon and be dead the next morning.
+- Launched by launchd, the responsible process is `com.apple.python3`. It
+  holds no grant, and Apple's `Python.app` declares no
+  `NSCameraUsageDescription`, so macOS denies **silently and never prompts**.
+
+The grant therefore has to belong to something of ours. That something is
+`deploy/ATLANTIS-Kiosk.app`, launched by the LaunchAgent through
+`/usr/bin/open`. It is an `osacompile` applet — a real Mach-O, which is what
+LaunchServices requires before it will confer an app identity — and it runs
+`start-atlantis.sh` as a **child**, so python inherits the app's identity.
+
+### Granting it, once
+
+The grant needs one human click and cannot be done unattended. On the console
+(screen sharing counts):
+
+```bash
+./deploy/grant-camera.sh
+```
+
+It stops the kiosk, relaunches the bundle **from Finder**, and waits for the
+camera to open. Finder matters: launching with `open` from a terminal that
+already holds a camera grant will appear to work and will teach TCC nothing,
+because the terminal stands in as the responsible process.
+
+Afterwards the grant persists across reboots and launchd launches, and the
+kiosk opens the camera on the first attempt. Confirm with:
+
+```bash
+./deploy/kiosk-ctl.sh status     # "camera opened on the current run"
+./deploy/verify-kiosk.sh         # also checks the bundle and the launch chain
+```
+
+### What voids the grant
+
+The bundle is **ad-hoc signed**, so TCC has no team identifier to anchor to and
+pins the grant to the **cdhash**. Anything that changes the bundle changes the
+cdhash and silently voids the grant — the kiosk comes back camera-blind with no
+error beyond `status 0` again.
+
+`deploy/build-app-bundle.sh` is therefore idempotent: it keeps an existing
+valid bundle and only builds when one is missing. `install-kiosk.sh` can be
+re-run freely. If you deliberately rebuild:
+
+```bash
+./deploy/build-app-bundle.sh --force
+./deploy/grant-camera.sh          # required afterwards
+```
+
+Rebuilding the **venv** no longer matters — the grant follows the bundle, not
+`venv/bin/python3`.
+
+### If it still will not open
+
+The tracker no longer gives up. A camera missing at startup leaves it running
+blind, retrying every 5 s, and it recovers on its own the moment the camera
+appears — so a slow USB enumeration or a late grant fixes itself. If it stays
+blind, check that ATLANTIS is listed and enabled in System Settings → Privacy
+& Security → Camera, then re-run `grant-camera.sh`.
+
+> **Do not rename the bundle back to `ATLANTIS.app`.** LaunchServices holds a
+> permanently poisoned record for that path on the deployment box, left from
+> when the bundle was script-based, and refuses it with `-10669` forever —
+> `lsregister -u`, `-f`, and a full `-kill -r` rebuild all fail to clear it,
+> while an identical copy under any other name launches. The name is
+> load-bearing.
 
 ---
 

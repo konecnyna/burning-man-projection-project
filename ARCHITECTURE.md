@@ -393,13 +393,24 @@ Practical consequences:
 ### Camera
 
 `cv2.VideoCapture(0)` — always index 0, not configurable by flag. Mac minis have
-no built-in camera, so a USB webcam must be attached. Without one,
-`HandTracker.start()` emits `camera_error` and returns: the web UI still comes
-up and cycles scenes, but no hands are ever detected.
+no built-in camera, so a USB webcam must be attached.
 
-Camera access is granted per-binary under System Settings → Privacy & Security →
-Camera, to whatever launches Python (Terminal, or the Python binary). Switching
-interpreters — system Python to venv Python — requires a fresh grant.
+`HandTracker.start()` retries the open for 30 s, because macOS authorises the
+camera asynchronously — the first attempt after a cold start fails while the
+grant is still resolving — and because a USB webcam may still be enumerating at
+login. If it still fails it emits `camera_error` and **starts anyway, blind**,
+retrying every 5 s from the tracking loop. It used to `return` instead, which
+meant the thread never started and no later reopen was ever attempted: a camera
+that appeared a second too late left the installation blind for days. Recovery
+logs `Camera acquired after starting blind` and emits `system_ready`.
+
+Camera access is **not** granted per-binary. macOS attributes it to the
+*responsible process*, which is why the grant belongs to
+`deploy/ATLANTIS-Kiosk.app` — an `osacompile` applet the LaunchAgent launches
+via `/usr/bin/open -W`, which runs `start-atlantis.sh` as a child so python
+inherits the app's identity. Rebuilding the venv no longer requires a fresh
+grant; rebuilding the *bundle* does, because the ad-hoc cdhash it is pinned to
+changes. See [DEPLOYMENT.md §6](DEPLOYMENT.md#6-camera-permissions).
 
 ### Display
 

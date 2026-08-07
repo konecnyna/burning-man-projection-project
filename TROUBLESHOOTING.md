@@ -129,7 +129,26 @@ system_profiler SPCameraDataType
 Empty output means macOS sees no camera. Mac minis have no built-in camera —
 check the USB webcam is plugged in and try a different port.
 
-**1a. Are you on SSH?** This is the single most common cause.
+**1a. Has the camera grant ever been given?** This is the single most common
+cause on a machine that boots into the app.
+
+The grant belongs to `deploy/ATLANTIS-Kiosk.app`, not to python, and it needs
+one human click that cannot happen unattended. On the console:
+
+```bash
+./deploy/grant-camera.sh         # relaunches from Finder; click Allow
+./deploy/kiosk-ctl.sh status     # says whether the camera actually opened
+```
+
+It is also voided by any rebuild of the bundle — the ad-hoc signature pins it
+to the cdhash. If the camera worked before an `install-kiosk.sh` run and not
+after, this is why; re-run `grant-camera.sh`.
+
+Note the tracker no longer gives up: a camera missing at startup leaves it
+running blind and retrying every 5 s, logging `Camera acquired after starting
+blind` if it recovers. So a camera that is merely slow fixes itself.
+
+**1b. Are you on SSH?**
 
 ```bash
 launchctl managername
@@ -152,12 +171,14 @@ grant, so the python child inherits it:
 ```
 
 Terminal.app must already be running on the console (it is, if you are screen
-sharing). `kiosk-ctl.sh start` uses the LaunchAgent instead — supervised and
-survives logout, but **no camera**, because launchd is the responsible process.
+sharing). Note this only **borrows** Terminal's grant for one run — it is a
+debugging aid and proves nothing about whether boot will work. The supported
+path, `kiosk-ctl.sh start`, goes through the app bundle and **does** have a
+camera.
 
-Full explanation in [DEPLOYMENT.md §5b](DEPLOYMENT.md#5b-working-over-ssh).
+Full explanation in [DEPLOYMENT.md §6](DEPLOYMENT.md#6-camera-permissions).
 
-**1b. Don't trust the OpenCV error message.**
+**1c. Don't trust the OpenCV error message.**
 
 ```
 OpenCV: not authorized to capture video (status 0), requesting...

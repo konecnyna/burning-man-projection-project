@@ -43,16 +43,52 @@ else
     fail "venv/ not found" "python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
 fi
 
+# ------------------------------------------------------------------- bundle
+sect "App bundle (camera identity)"
+
+BUNDLE="$REPO_DIR/deploy/ATLANTIS-Kiosk.app"
+if [ -d "$BUNDLE" ]; then
+    pass "bundle present"
+
+    # The whole point of the bundle. A script here cannot be launched by
+    # LaunchServices, gets no app identity, and so can hold no camera grant --
+    # which is exactly the bug this arrangement exists to prevent, and it is
+    # invisible at runtime apart from the camera never opening.
+    if file -b "$BUNDLE/Contents/MacOS/applet" 2>/dev/null | grep -q 'Mach-O'; then
+        pass "main executable is a Mach-O"
+    else
+        fail "main executable is not a Mach-O" \
+             "run ./deploy/build-app-bundle.sh --force, then ./deploy/grant-camera.sh"
+    fi
+
+    codesign --verify "$BUNDLE" 2>/dev/null \
+        && pass "signature valid" \
+        || fail "signature invalid" "./deploy/build-app-bundle.sh --force, then re-grant the camera"
+
+    if /usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' \
+         "$BUNDLE/Contents/Info.plist" >/dev/null 2>&1; then
+        pass "declares NSCameraUsageDescription"
+    else
+        fail "no NSCameraUsageDescription" "macOS will deny the camera without ever prompting"
+    fi
+else
+    fail "missing $BUNDLE" "run ./deploy/install-kiosk.sh"
+fi
+
 # --------------------------------------------------------------- launchagent
 sect "LaunchAgent"
 
 if [ -f "$AGENT_PLIST" ]; then
     pass "plist installed at $AGENT_PLIST"
 
-    if grep -q "$REPO_DIR/start-atlantis.sh" "$AGENT_PLIST"; then
-        pass "plist points at this repo"
+    # Must go through `open`, and must name the bundle rather than a path
+    # inside it: spawning the executable directly is what launchd would do
+    # anyway, and that yields no app identity and no camera.
+    if grep -q "$REPO_DIR/deploy/ATLANTIS-Kiosk.app<" "$AGENT_PLIST" \
+       && grep -q '<string>/usr/bin/open</string>' "$AGENT_PLIST"; then
+        pass "plist launches this repo's bundle via open"
     else
-        fail "plist points somewhere else" "re-run ./deploy/install-kiosk.sh"
+        fail "plist does not launch the bundle via open" "re-run ./deploy/install-kiosk.sh"
     fi
 
     grep -q '<key>KeepAlive</key>' "$AGENT_PLIST" \
@@ -202,6 +238,31 @@ if system_profiler SPCameraDataType 2>/dev/null | grep -q 'Model ID\|Unique ID';
     pass "camera detected"
 else
     fail "no camera detected" "a USB webcam is required; Mac minis have none built in"
+fi
+
+# Hardware being present says nothing about whether this run can *use* it --
+# the permission failure looks identical to a working camera from the outside.
+# Read the current run's own log instead of trusting the launch method.
+cam_log=$(awk '/Starting hand tracker/{buf=""} {buf=buf"\n"$0} END{print buf}' \
+          "$REPO_DIR/logs/atlantis.log" 2>/dev/null)
+if [ -z "$cam_log" ]; then
+    warn "no tracker start in the log yet"
+elif echo "$cam_log" | grep -q 'Camera .* opened\|Camera acquired after starting blind'; then
+    pass "camera is open on the current run — hand tracking is live"
+else
+    fail "camera is NOT open on the current run" \
+         "./deploy/grant-camera.sh (needs one click on the console)"
+fi
+
+# The bundle must be python's ancestor, or the grant belongs to whatever
+# terminal happened to launch it and will be gone at the next boot.
+if pgrep -f 'main\.py' >/dev/null 2>&1; then
+    if pgrep -f 'ATLANTIS-Kiosk.app/Contents/MacOS/applet' >/dev/null 2>&1; then
+        pass "running under the app bundle (camera grant survives reboot)"
+    else
+        warn "running outside the app bundle" \
+             "fine for a test, but the camera grant will not survive a reboot"
+    fi
 fi
 
 if curl -fsS -m 5 "http://localhost:$PORT/health" >/dev/null 2>&1; then

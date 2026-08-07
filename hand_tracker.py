@@ -58,55 +58,114 @@ class HandTracker:
         self.REOPEN_BACKOFF_SECONDS = 5
         self._last_reopen = 0
         self._camera_index = 0
-        
+
+        # How long start() keeps trying before giving up. See
+        # _open_camera_with_retry() for why a single attempt is not enough.
+        self.OPEN_RETRY_SECONDS = 30
+        self.OPEN_RETRY_INTERVAL = 2
+
+    def _open_camera_with_retry(self, camera_index: int):
+        """Open the camera, retrying for OPEN_RETRY_SECONDS before giving up.
+
+        One attempt is not enough, for two reasons that both bite at boot:
+
+          * macOS authorises the camera asynchronously. The first VideoCapture
+            after a cold start returns failure immediately -- "not authorized
+            to capture video (status 0), requesting..." -- while the grant is
+            still being resolved. Measured on the deployment box, a permitted
+            process succeeds on roughly the third attempt.
+          * At login the USB webcam may not have finished enumerating.
+
+        Failing here used to be permanent: start() returned without setting
+        running, so the tracking thread never began and no later reopen was
+        ever attempted. The kiosk then ran for days, cycling scenes, blind.
+        """
+        deadline = time.time() + self.OPEN_RETRY_SECONDS
+        attempt = 0
+        while True:
+            attempt += 1
+            cap = cv2.VideoCapture(camera_index)
+            if cap.isOpened():
+                if attempt > 1:
+                    logger.info("Camera %s opened on attempt %d",
+                                camera_index, attempt)
+                return cap
+            cap.release()
+            if time.time() >= deadline:
+                return None
+            logger.info("Camera %s not ready (attempt %d); retrying in %ss",
+                        camera_index, attempt, self.OPEN_RETRY_INTERVAL)
+            time.sleep(self.OPEN_RETRY_INTERVAL)
+
     def start(self, camera_index: int = 0):
         """Start the hand tracking system"""
         if self.running:
             return
             
         self._camera_index = camera_index
-        self.cap = cv2.VideoCapture(camera_index)
-        if not self.cap.isOpened():
+        self.cap = self._open_camera_with_retry(camera_index)
+        if self.cap is None or not self.cap.isOpened():
+            # Start anyway, camera-less. This used to `return`, which was the
+            # single worst failure mode the installation had: the tracking
+            # thread never began, so _reopen_camera() was never reached, and a
+            # camera that appeared one second later -- a webcam still
+            # enumerating, a TCC grant that landed late -- stayed unused until
+            # somebody flew to the desert and restarted the process.
+            #
+            # Running blind costs one VideoCapture attempt every
+            # REOPEN_BACKOFF_SECONDS and recovers by itself the moment the
+            # camera exists.
             logger.error(
-                "Could not open camera at index %s. On a Mac mini this usually "
-                "means no USB webcam is attached, or camera permission was "
-                "never granted to the launching process.", camera_index)
+                "Could not open camera at index %s after %ss. On a Mac mini this "
+                "usually means no USB webcam is attached, or camera permission "
+                "was never granted to the launching process.",
+                camera_index, self.OPEN_RETRY_SECONDS)
+            logger.warning(
+                "Starting blind; will keep retrying index %s every %ss",
+                camera_index, self.REOPEN_BACKOFF_SECONDS)
+            self.cap = None
             self.event_bus.emit(Event(
                 type=HandTrackingEvents.CAMERA_ERROR,
                 data={"error": "Could not open camera"},
                 timestamp=datetime.now(),
                 source="hand_tracker"
             ))
-            return
-
-        # Log what the camera actually negotiated. Nothing sets the capture size,
-        # so this is whatever the device defaults to -- and until now it was
-        # unknowable without attaching a debugger, which made "is the frame big
-        # enough to see a hand at six feet" an unanswerable question.
-        #
-        # Deliberately not forced to a smaller size. Less data over USB would be
-        # cheaper, but MediaPipe costs ~11ms/frame at any input resolution, and
-        # downscaling could cost detection range on the distant hands that are
-        # already marginal. Change it only with /calibrate measurements either
-        # side of the change.
-        logger.info(
-            "Camera %s opened: %dx%d @ %.0f fps (device default, not set by us)",
-            camera_index,
-            int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-            int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-            self.cap.get(cv2.CAP_PROP_FPS))
+        else:
+            self._log_camera_opened()
 
         self.running = True
         self.thread = threading.Thread(target=self._tracking_loop)
         self.thread.daemon = True
         self.thread.start()
-        
-        self.event_bus.emit(Event(
-            type=HandTrackingEvents.SYSTEM_READY,
-            data={"camera_index": camera_index},
-            timestamp=datetime.now(),
-            source="hand_tracker"
-        ))
+
+        if self.cap is not None:
+            self.event_bus.emit(Event(
+                type=HandTrackingEvents.SYSTEM_READY,
+                data={"camera_index": camera_index},
+                timestamp=datetime.now(),
+                source="hand_tracker"
+            ))
+
+    def _log_camera_opened(self):
+        """Log what the camera actually negotiated.
+
+        Nothing sets the capture size, so this is whatever the device defaults
+        to -- and until it was logged it was unknowable without attaching a
+        debugger, which made "is the frame big enough to see a hand at six
+        feet" an unanswerable question.
+
+        Deliberately not forced to a smaller size. Less data over USB would be
+        cheaper, but MediaPipe costs ~11ms/frame at any input resolution, and
+        downscaling could cost detection range on the distant hands that are
+        already marginal. Change it only with /calibrate measurements either
+        side of the change.
+        """
+        logger.info(
+            "Camera %s opened: %dx%d @ %.0f fps (device default, not set by us)",
+            self._camera_index,
+            int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            self.cap.get(cv2.CAP_PROP_FPS))
         
     def stop(self):
         """Stop the hand tracking system"""
@@ -119,6 +178,14 @@ class HandTracker:
     def _tracking_loop(self):
         """Main tracking loop running in separate thread"""
         while self.running:
+            # No handle at all: either start() came up blind, or a reopen
+            # failed. _reopen_camera() rate-limits itself, so this spins at
+            # REOPEN_BACKOFF_SECONDS rather than at frame rate.
+            if self.cap is None or not self.cap.isOpened():
+                self._reopen_camera()
+                time.sleep(0.5)
+                continue
+
             ret, frame = self.cap.read()
             if not ret:
                 if not self._read_failed:
@@ -224,8 +291,13 @@ class HandTracker:
             return
         self._last_reopen = now
 
-        logger.warning("Camera unresponsive after %d reads; reopening index %s",
-                       self._consecutive_failures, self._camera_index)
+        # Distinguish "it broke" from "we never had one", so the log of a
+        # blind installation does not read like a camera that keeps dying.
+        if self.cap is None:
+            logger.info("Retrying camera index %s", self._camera_index)
+        else:
+            logger.warning("Camera unresponsive after %d reads; reopening index %s",
+                           self._consecutive_failures, self._camera_index)
         try:
             if self.cap:
                 self.cap.release()
@@ -233,14 +305,36 @@ class HandTracker:
             logger.exception("Error releasing the camera handle")
 
         try:
+            was_blind = self.cap is None
             self.cap = cv2.VideoCapture(self._camera_index)
             if self.cap.isOpened():
-                logger.info("Camera reopened successfully")
                 self._consecutive_failures = 0
+                if was_blind:
+                    # Recovered from a camera-less start. Say so loudly and
+                    # announce readiness, which start() could not do earlier.
+                    logger.info("Camera acquired after starting blind")
+                    self._log_camera_opened()
+                    self.event_bus.emit(Event(
+                        type=HandTrackingEvents.SYSTEM_READY,
+                        data={"camera_index": self._camera_index},
+                        timestamp=datetime.now(),
+                        source="hand_tracker"
+                    ))
+                else:
+                    logger.info("Camera reopened successfully")
             else:
+                # Release the dead handle so the loop sees None and keeps
+                # treating this as "blind", rather than holding a closed
+                # capture object forever.
+                self.cap.release()
+                self.cap = None
                 logger.error("Camera reopen failed; will retry in %ss",
                              self.REOPEN_BACKOFF_SECONDS)
         except Exception:
+            # Leave no half-open handle behind: the loop keys off `cap is
+            # None` to decide it is blind, and a stale object here would make
+            # it read from a capture that can never produce a frame.
+            self.cap = None
             logger.exception("Camera reopen raised")
 
     def _prune_gesture_state(self, live_hand_ids: set):
